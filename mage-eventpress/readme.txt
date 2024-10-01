@@ -286,6 +286,10 @@ A. You can create a support ticket here with problem details with possible scree
 
 == Changelog ==
 
+= 4.2.6 =
+* Security Issue fixed.
+  01 Oct 2024*
+
 = 4.2.5 =
 * Responsive issue fixed.
   20 Sept 2024*
