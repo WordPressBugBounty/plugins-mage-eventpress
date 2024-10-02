@@ -106,7 +106,10 @@
 				wp_enqueue_style('mage-options-framework', MPWEM_PLUGIN_URL . '/assets/helper/pick_plugin/mage-options-framework.css');
 				wp_enqueue_script('magepeople-options-framework', MPWEM_PLUGIN_URL . '/assets/helper/pick_plugin/mage-options-framework.js', array('jquery'));
 				wp_localize_script('PickpluginsOptionsFramework', 'PickpluginsOptionsFramework_ajax', array('PickpluginsOptionsFramework_ajaxurl' => admin_url('admin-ajax.php')));
-				wp_enqueue_script('form-field-dependency', MPWEM_PLUGIN_URL . '/assets/helper/form-field-dependency.js', array('jquery'), null, false);
+				
+				if(!function_exists('TTO_activated')){
+					wp_enqueue_script('form-field-dependency', MPWEM_PLUGIN_URL . '/assets/helper/form-field-dependency.js', array('jquery'), null, false);
+				}
 				//loading modal
 				wp_enqueue_style('jquery.modal.min', MPWEM_PLUGIN_URL . '/assets/helper/jquery_modal/jquery.modal.min.css', array(), 1.0);
 				wp_enqueue_script('jquery.modal.min', MPWEM_PLUGIN_URL . '/assets/helper/jquery_modal/jquery.modal.min.js', array('jquery'), 1.0, true);
