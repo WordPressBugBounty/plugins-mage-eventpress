@@ -3,7 +3,7 @@
 	 * Plugin Name: Event Manager and Tickets Selling Plugin for WooCommerce - WpEvently - WordPress Plugin
 	 * Plugin URI: http://mage-people.com
 	 * Description: A Complete Event Solution for WordPress by MagePeople..
-	 * Version: 4.2.6
+	 * Version: 4.2.7
 	 * Author: MagePeople Team
 	 * Author URI: http://www.mage-people.com/
 	 * Text Domain: mage-eventpress
@@ -23,13 +23,13 @@
 		define('MPWEM_PLUGIN_URL', plugins_url() . '/' . plugin_basename(dirname(__FILE__)));
 	}
 	if (is_plugin_active('woocommerce/woocommerce.php')) {
-		function appsero_init_tracker_mage_eventpress() {
-			if (!class_exists('Appsero\Client')) {
-				require_once __DIR__ . '/lib/appsero/src/Client.php';
-			}
-			$client = new Appsero\Client('08cd627c-4ed9-49cf-a9b5-1536ec384a5a', 'Event Manager For Woocommerce ', __FILE__);
-			$client->insights()->init();
-		}
+		// function appsero_init_tracker_mage_eventpress() {
+		// 	if (!class_exists('Appsero\Client')) {
+		// 		require_once __DIR__ . '/lib/appsero/src/Client.php';
+		// 	}
+		// 	$client = new Appsero\Client('08cd627c-4ed9-49cf-a9b5-1536ec384a5a', 'Event Manager For Woocommerce ', __FILE__);
+		// 	$client->insights()->init();
+		// }
 		function mep_event_activation_redirect($plugin) {
 			$check_quick_setup = get_option('mep_quick_setup') ? get_option('mep_quick_setup') : 'no-done';
 			$slug = $check_quick_setup == 'done' ? 'edit.php?post_type=mep_events&page=mep_event_welcome_page' : 'edit.php?post_type=mep_events&page=mpwem_quick_setup';

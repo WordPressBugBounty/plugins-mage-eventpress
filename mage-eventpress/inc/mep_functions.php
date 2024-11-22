@@ -3,7 +3,7 @@ if (!defined('ABSPATH')) {
     die;
 }
 
-appsero_init_tracker_mage_eventpress();
+// appsero_init_tracker_mage_eventpress();
 
 
 

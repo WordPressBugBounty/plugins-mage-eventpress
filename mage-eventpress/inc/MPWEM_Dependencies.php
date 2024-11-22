@@ -10,6 +10,7 @@
 		class MPWEM_Dependencies {
 			public function __construct() {
 				add_action('init', array($this, 'language_load'));
+				$this->appsero_init_tracker_mage_eventpress();
 				$this->load_global_file();
 				$this->load_file();
 				add_action('admin_enqueue_scripts', array($this, 'admin_enqueue'), 90);
@@ -21,6 +22,13 @@
 				$plugin_dir = basename(dirname(__DIR__)) . "/languages/";
 				load_plugin_textdomain('mage-eventpress', false, $plugin_dir);
 			}
+			public function appsero_init_tracker_mage_eventpress() {
+				if (!class_exists('Appsero\Client')) {
+					require_once MPWEM_PLUGIN_DIR . '/lib/appsero/src/Client.php';
+				}
+				$client = new Appsero\Client('08cd627c-4ed9-49cf-a9b5-1536ec384a5a', 'Event Manager For Woocommerce ', __FILE__);
+				$client->insights()->init();
+			}			
 			public function load_global_file() {
 				require_once MPWEM_PLUGIN_DIR . '/inc/global/MP_Global_Function.php';
 				require_once MPWEM_PLUGIN_DIR . '/inc/global/MP_Global_Style.php';
@@ -254,4 +262,3 @@
 		}
 		new MPWEM_Dependencies();
 	}
-	
