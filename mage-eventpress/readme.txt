@@ -3,7 +3,7 @@ Contributors: magepeopleteam, aamahin
 Tags: event, woocomerce events manager, events manager, Wordpress Events plugin, Events plugin
 Requires at least: 5.3
 Stable tag: trunk
-Tested up to: 6.7
+Tested up to: 6.7.1
 WC requires at least: 3.0
 WC tested up to: 8.7
 Requires PHP: 7.4
@@ -285,6 +285,10 @@ A. You can create a support ticket here with problem details with possible scree
 
 
 == Changelog ==
+
+= 4.2.8 =
+* Quick Release with the fixing of Elementor Typography error issue.
+  22 Nov 2024*
 
 = 4.2.7 =
 * Quick Release for _load_textdomain_just_in_time warning issue fixed.
