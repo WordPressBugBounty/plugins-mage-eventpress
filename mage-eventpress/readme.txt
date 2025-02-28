@@ -285,6 +285,12 @@ A. You can create a support ticket here with problem details with possible scree
 
 == Changelog ==
 
+= 4.3.1 =
+* Toggle Button Not shoing issue fixed.
+* Register Button Translation issue fixed in smart theme
+* Registeration off ribbon removed from event list
+  28 Feb 2025*
+
 = 4.3.0 =
 * New Backend Design
 * New Theme (Smart) added
