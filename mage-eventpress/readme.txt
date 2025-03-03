@@ -285,6 +285,13 @@ A. You can create a support ticket here with problem details with possible scree
 
 == Changelog ==
 
+= 4.3.2 =
+* Notice removed for Reg Off events.
+* New Settings added to fix Seat Not Available Events after update.
+* Bristor, SpringField, Frnaklin Template Not saving issue fixed.
+* Hook Added in Minimal List Template
+  03 March 2025*
+
 = 4.3.1 =
 * Toggle Button Not shoing issue fixed.
 * Register Button Translation issue fixed in smart theme

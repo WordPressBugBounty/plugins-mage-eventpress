@@ -27,6 +27,7 @@
 			$event_expire_on = $event_expire_on_old == 'event_end_datetime' ? esc_html('event_expire_datetime') : $event_expire_on_old;
 			$event_expire_date = $event_meta[$event_expire_on][0];
 			// $event_sqi                  = array_key_exists('mep_sqi',$event_meta) ? $event_meta['mep_sqi'][0] : '';
+			
 			//==========
 			$mep_full_name = array_key_exists('mep_full_name', $event_meta) && $event_meta['mep_full_name'][0] ? MP_Global_Function::data_sanitize($event_meta['mep_full_name'][0]) : '';
 			$mep_reg_email = array_key_exists('mep_reg_email', $event_meta) && $event_meta['mep_reg_email'][0] ? MP_Global_Function::data_sanitize($event_meta['mep_reg_email'][0]) : '';
@@ -38,6 +39,7 @@
 			$mep_reg_company = array_key_exists('mep_reg_company', $event_meta) && $event_meta['mep_reg_company'][0] ? MP_Global_Function::data_sanitize($event_meta['mep_reg_company'][0]) : '';
 			$mep_reg_gender = array_key_exists('mep_reg_gender', $event_meta) && $event_meta['mep_reg_gender'][0] ? MP_Global_Function::data_sanitize($event_meta['mep_reg_gender'][0]) : '';
 			$mep_reg_tshirtsize = array_key_exists('mep_reg_tshirtsize', $event_meta) && $event_meta['mep_reg_tshirtsize'][0] ? MP_Global_Function::data_sanitize($event_meta['mep_reg_tshirtsize'][0]) : '';
+			
 			//==========
 			$time = strtotime($event_expire_date);
 			$newformat = date('Y-m-d H:i:s', $time);
@@ -49,8 +51,9 @@
 			$total_resv = apply_filters('mep_event_total_resv_seat_count', mep_event_total_seat($post_id, 'resv'), $post_id);
 			$recurring = get_post_meta($post_id, 'mep_enable_recurring', true) ? get_post_meta($post_id, 'mep_enable_recurring', true) : 'no';
 			$_upcoming_date = !empty(mep_get_event_upcoming_date($post_id)) ? mep_get_event_upcoming_date($post_id) : '';
-			$upcoming_date = $recurring == 'no' ? '' : $_upcoming_date;
-			$total_sold = mep_get_event_total_seat_left($post_id, $upcoming_date);
+			$mep_manual_seat_Left_fix = mep_get_option( 'mep_manual_seat_Left_fix', 'general_setting_sec', 'disable' );
+			$upcoming_date 		= ($recurring == 'no' && $mep_manual_seat_Left_fix == 'disable') ? '' : $_upcoming_date;
+			$total_sold 		= mep_get_event_total_seat_left($post_id, $upcoming_date);
 			$total_left = $total_seat - ($total_sold + $total_resv);
 			$total_left = $recurring == 'no' ? $total_left : 1;
 			$reg_status = get_post_meta($event_id, 'mep_reg_status', true) ? get_post_meta($event_id, 'mep_reg_status', true) : '';
