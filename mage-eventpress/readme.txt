@@ -285,6 +285,14 @@ A. You can create a support ticket here with problem details with possible scree
 
 == Changelog ==
 
+= 4.3.3 =
+* Email text format issue solved
+* Email Text Desapear after update issue fixed.
+* Event date Schedule list spcae between end time issue fixed.
+* In Repeated recurring event speaicl time list not showing issue fixed.
+* Rest API Settings added, Now user can enable Rest API support from the Event Settings page.
+  05 March 2025*
+
 = 4.3.2 =
 * Notice removed for Reg Off events.
 * New Settings added to fix Seat Not Available Events after update.

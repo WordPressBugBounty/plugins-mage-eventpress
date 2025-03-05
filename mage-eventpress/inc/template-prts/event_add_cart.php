@@ -27,7 +27,6 @@
 			$event_expire_on = $event_expire_on_old == 'event_end_datetime' ? esc_html('event_expire_datetime') : $event_expire_on_old;
 			$event_expire_date = $event_meta[$event_expire_on][0];
 			// $event_sqi                  = array_key_exists('mep_sqi',$event_meta) ? $event_meta['mep_sqi'][0] : '';
-			
 			//==========
 			$mep_full_name = array_key_exists('mep_full_name', $event_meta) && $event_meta['mep_full_name'][0] ? MP_Global_Function::data_sanitize($event_meta['mep_full_name'][0]) : '';
 			$mep_reg_email = array_key_exists('mep_reg_email', $event_meta) && $event_meta['mep_reg_email'][0] ? MP_Global_Function::data_sanitize($event_meta['mep_reg_email'][0]) : '';
