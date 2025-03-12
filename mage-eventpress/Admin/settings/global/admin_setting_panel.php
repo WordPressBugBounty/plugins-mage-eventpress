@@ -98,15 +98,26 @@
 							),
 							array(
 								'name' => 'mep_disable_block_editor',
-								'label' => __('On/Off Block/Gutenberg Editor', 'mage-eventpress'),
-								'desc' => __('Enable/Disable gutenburg editor.', 'mage-eventpress'),
+								'label' => 	__('Block/Gutenberg Editor In Event', 'mage-eventpress'),
+								'desc' => 	__('By default, the Gutenberg editor is disabled. To enable the Gutenberg editor, you need to activate this option and also ensure that the REST API is enabled in the settings below.', 'mage-eventpress'),
 								'type' => 'select',
 								'default' => 'yes',
 								'options' => array(
-									'yes' => 'Yes',
-									'no' => 'No'
+									'yes' 	=> 'Disable',
+									'no' 	=> 'Enable'
 								)
 							),
+							array(
+								'name' => 'mep_rest_api_status',
+								'label' => __('Enable Rest API?', 'mage-eventpress'),
+								'desc' => __('If you want to enable event data available in the Rest API Please enable this.', 'mage-eventpress'),
+								'type' => 'select',
+								'default' => 'disable',
+								'options' => array(
+									'enable' => 'Enable',
+									'disable' => 'Disable'
+								)
+							),							
 							array(
 								'name' => 'mep_multi_lang_plugin',
 								'label' => __('Choose Multilingual Plugin', 'mage-eventpress'),
@@ -401,17 +412,19 @@
 										'disable' => 'Disable'
 									)									
 								),
+
 								array(
-									'name' => 'mep_rest_api_status',
-									'label' => __('Enable Rest API?', 'mage-eventpress'),
-									'desc' => __('If you want to enable event data available in the Rest API Please enable this.', 'mage-eventpress'),
+									'name' => 'mep_fix_details_page_fatal_error',
+									'label' => __('Event Details Page Fatal Error Fix?', 'mage-eventpress'),
+									'desc' => __('If you encounter a Fatal Error message on the event details page, you can enable this patch and check if the error persists. However, if there is no error, we recommend keeping the patch disabled', 'mage-eventpress'),
 									'type' => 'select',
 									'default' => 'disable',
 									'options' => array(
 										'enable' => 'Enable',
 										'disable' => 'Disable'
 									)
-								)									 							
+								)								
+
 						)
 					),
 					'event_list_setting_sec' => apply_filters('mep_settings_event_list_arr', array(

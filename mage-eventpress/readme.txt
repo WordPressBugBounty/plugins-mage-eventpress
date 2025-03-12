@@ -285,6 +285,12 @@ A. You can create a support ticket here with problem details with possible scree
 
 == Changelog ==
 
+= 4.3.4 =
+* X icon issue sloved in smart theme
+* Gutenberg Enable/Disbale issue fixed.
+*Add to Calender Outlook button not working issue solved
+  12 March 2025*
+
 = 4.3.3 =
 * Email text format issue solved
 * Email Text Desapear after update issue fixed.
