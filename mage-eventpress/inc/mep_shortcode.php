@@ -52,20 +52,20 @@ function mep_event_calender()
                 $count      = $loop->post_count - 1;
                 while ($loop->have_posts()) {
                     $loop->the_post();
-                    $event_meta = get_post_custom(get_the_id());
-                    $event_dates = mep_get_event_dates_arr(get_the_id());
-                    $now 		= current_time('Y-m-d H:i:s');
+                    $event_meta     = get_post_custom(get_the_id());
+                    $event_dates    = mep_get_event_dates_arr(get_the_id());
+                    $now 		    = current_time('Y-m-d H:i:s');
 foreach ($event_dates as $_dates) {
 
 
 if($hide_expired == 'no'){
     ?>
-{
+                    {
                         start   : '<?php echo date_i18n('Y-m-d H:i', strtotime($_dates['start'])); ?>',
                         end     : '<?php echo date_i18n('Y-m-d H:i', strtotime($_dates['end'])); ?>',
                         title   : '<?php the_title(); ?>',
                         url     : '<?php the_permalink(); ?>',
-                        class   : '',
+                        class   : 'eventID-<?php echo get_the_id(); ?>',
                         color   : '#000',
                         data    : {}
                     },
@@ -75,12 +75,12 @@ if($hide_expired == 'no'){
 
     if(strtotime($now) < strtotime($_dates[$event_expire_on]) ){
     ?>
-{
+                    {
                         start   : '<?php echo date_i18n('Y-m-d H:i', strtotime($_dates['start'])); ?>',
                         end     : '<?php echo date_i18n('Y-m-d H:i', strtotime($_dates['end'])); ?>',
                         title   : '<?php the_title(); ?>',
                         url     : '<?php the_permalink(); ?>',
-                        class   : '',
+                        class   : 'eventID-<?php echo get_the_id(); ?>',
                         color   : '#000',
                         data    : {}
                     },
@@ -119,6 +119,7 @@ function mep_event_list($atts, $content = null)
         "pagination"    => "no",
         "pagination-style"    => "load_more",
         "city"          => "",
+        "state"         => "",
         "country"       => "",
         "carousal-nav"  => "no",
         "carousal-dots" => "yes",
@@ -131,6 +132,7 @@ function mep_event_list($atts, $content = null)
         'category-filter' => 'yes',
         'organizer-filter' => 'yes',
         'city-filter' => 'yes',
+        'state-filter' => 'yes',
         'date-filter' => 'yes'
     );
     $params         = shortcode_atts($defaults, $atts);
@@ -146,9 +148,10 @@ function mep_event_list($atts, $content = null)
     $nav            = $params['carousal-nav'] == 'yes' ? 1 : 0;
     $dot            = $params['carousal-dots'] == 'yes' ? 1 : 0;
     $city           = $params['city'];
+    $state          = $params['state'];
     $country        = $params['country'];
     $cid            = $params['carousal-id'];
-    $status            = $params['status'];
+    $status         = $params['status'];
 
     $filter = $params['search-filter'];
     $show = ($filter == 'yes' || $pagination == 'yes' && $style != 'timeline') ? -1 : $show;
@@ -233,6 +236,84 @@ function mep_event_list($atts, $content = null)
                 control: '[data-mixitup-control]'
             }
             });
+
+            // Handle title filter input
+            jQuery('input[name="filter_with_title"]').on('keyup', function() {
+                var searchText = jQuery(this).val().toLowerCase();
+                var items = jQuery('.mep-event-list-loop');
+                
+                items.each(function() {
+                    var itemTitle = jQuery(this).data('title').toLowerCase();
+                    if (itemTitle.indexOf(searchText) > -1) {
+                        jQuery(this).show();
+                    } else {
+                        jQuery(this).hide();
+                    }
+                });
+            });
+
+            // Handle date filter change
+            jQuery('input[name="filter_with_date"]').on('change', function() {
+                var selectedDate = jQuery(this).val();
+                var items = jQuery('.mep-event-list-loop');
+                
+                if (!selectedDate) {
+                    items.show();
+                } else {
+                    var filterDate = new Date(selectedDate);
+                    filterDate.setHours(0,0,0,0); // Reset time part for date comparison
+                    
+                    items.each(function() {
+                        var itemDate = new Date(jQuery(this).data('date'));
+                        itemDate.setHours(0,0,0,0); // Reset time part for date comparison
+                        
+                        if (itemDate.getTime() === filterDate.getTime()) {
+                            jQuery(this).show();
+                        } else {
+                            jQuery(this).hide();
+                        }
+                    });
+                }
+            });
+
+            // Handle state filter change
+            jQuery('select[name="filter_with_state"]').on('change', function() {
+                var state = jQuery(this).val();
+                var items = jQuery('.mep-event-list-loop');
+                
+                if (state === '') {
+                    items.show();
+                } else {
+                    items.each(function() {
+                        var itemState = jQuery(this).data('state');
+                        if (itemState === state) {
+                            jQuery(this).show();
+                        } else {
+                            jQuery(this).hide();
+                        }
+                    });
+                }
+            });
+
+            // Handle city filter change
+            jQuery('select[name="filter_with_city"]').on('change', function() {
+                var city = jQuery(this).val();
+                var items = jQuery('.mep-event-list-loop');
+                
+                if (city === '') {
+                    items.show();
+                } else {
+                    items.each(function() {
+                        var itemCity = jQuery(this).data('city-name');
+                        if (itemCity === city) {
+                            jQuery(this).show();
+                        } else {
+                            jQuery(this).hide();
+                        }
+                    });
+                }
+            });
+
             <?php if ($pagination == 'carousal') { ?>
                 jQuery('#mep-carousel<?php echo esc_attr($cid); ?>').owlCarousel({
                     autoplay:  <?php echo mep_get_option('mep_autoplay_carousal', 'carousel_setting_sec', 'true'); ?>,
