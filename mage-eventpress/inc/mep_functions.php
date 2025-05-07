@@ -69,6 +69,7 @@ if (!function_exists('mep_add_show_sku_post_id_in_event_list_dashboard')) {
     return preg_match($pattern, $filename) === 1;
 	}
 	}
+
 	if (!function_exists('mep_temp_attendee_create_for_cart_ticket_array')) {
 		function mep_temp_attendee_create_for_cart_ticket_array($event_id, $ticket_type){
 			foreach ($ticket_type as  $ticket) {
@@ -200,9 +201,22 @@ if (!function_exists('mep_add_show_sku_post_id_in_event_list_dashboard')) {
 				'posts_per_page' => -1
 			);
 			$loop = new WP_Query($args);
-			return $loop->post_count;
+			// return $loop->post_count;
+
+			// $loop = new WP_Query($args);
+			$qty = 0;
+			if($loop->post_count > 0){
+			foreach ($loop->posts as $ticket) {
+					$post_id = $ticket->ID;
+					$_qty = get_post_meta($post_id,'ticket_qty',true) ? get_post_meta($post_id,'ticket_qty',true) : 0;
+					$qty = $qty + $_qty;
+				
+			}
 		}
+		
+		return $qty;
 	}
+}
 	
 	if (!function_exists('mep_temp_attendee_count')) {
 	
@@ -465,16 +479,20 @@ if (!function_exists('mep_add_show_sku_post_id_in_event_list_dashboard')) {
 		function mep_email_dynamic_content( $email_body, $event_id, $order_id, $__attendee_id = 0 ) {
 			$event_name = get_the_title( $event_id );
 			$attendee_q = mep_get_attendee_info_query( $event_id, $order_id );
+			$_attendee_id = 0; // Initialize to avoid undefined variable warning
+		
 			foreach ( $attendee_q->posts as $_attendee_q ) {
 				$_attendee_id = $_attendee_q->ID;
 			}
+		
 			$attendee_id   = $__attendee_id > 0 ? $__attendee_id : $_attendee_id;
-			$attendee_name = get_post_meta( $attendee_id, 'ea_name', true ) ? get_post_meta( $attendee_id, 'ea_name', true ) : '';
-			$email         = get_post_meta( $attendee_id, 'ea_email', true ) ? get_post_meta( $attendee_id, 'ea_email', true ) : '';
+			$attendee_name = get_post_meta( $attendee_id, 'ea_name', true ) ?: '';
+			$email         = get_post_meta( $attendee_id, 'ea_email', true ) ?: '';
 			$date_time     = get_post_meta( $attendee_id, 'ea_event_date', true ) ? get_mep_datetime( get_post_meta( $attendee_id, 'ea_event_date', true ), 'date-time-text' ) : '';
 			$date          = get_post_meta( $attendee_id, 'ea_event_date', true ) ? get_mep_datetime( get_post_meta( $attendee_id, 'ea_event_date', true ), 'date-text' ) : '';
 			$time          = get_post_meta( $attendee_id, 'ea_event_date', true ) ? get_mep_datetime( get_post_meta( $attendee_id, 'ea_event_date', true ), 'time' ) : '';
-			$ticket_type   = get_post_meta( $attendee_id, 'ea_ticket_type', true ) ? get_post_meta( $attendee_id, 'ea_ticket_type', true ) : '';
+			$ticket_type   = get_post_meta( $attendee_id, 'ea_ticket_type', true ) ?: '';
+			
 			$email_body    = str_replace( "{name}", $attendee_name, $email_body );
 			$email_body    = str_replace( "{email}", $email, $email_body );
 			$email_body    = str_replace( "{event}", $event_name, $email_body );
@@ -482,48 +500,40 @@ if (!function_exists('mep_add_show_sku_post_id_in_event_list_dashboard')) {
 			$email_body    = str_replace( "{event_time}", $time, $email_body );
 			$email_body    = str_replace( "{event_datetime}", $date_time, $email_body );
 			$email_body    = str_replace( "{ticket_type}", $ticket_type, $email_body );
-
+		
 			return $email_body;
 		}
 	}
+
+
+
 // Send Confirmation email to customer
 	if ( ! function_exists( 'mep_event_confirmation_email_sent' ) ) {
+
 		function mep_event_confirmation_email_sent( $event_id, $sent_email, $order_id, $attendee_id = 0 ) {
-			$values                  = get_post_custom( $event_id );
 			$global_email_text       = mep_get_option( 'mep_confirmation_email_text', 'email_setting_sec', '' );
 			$global_email_form_email = mep_get_option( 'mep_email_form_email', 'email_setting_sec', '' );
-			$global_email_form       = mep_get_option( 'mep_email_form_name', 'email_setting_sec', '' );
-			$global_email_sub        = mep_get_option( 'mep_email_subject', 'email_setting_sec', '' );
-			$event_email_text        = $values['mep_event_cc_email_text'][0];
+			$global_email_form_name  = mep_get_option( 'mep_email_form_name', 'email_setting_sec', '' );
+			$global_email_subject    = mep_get_option( 'mep_email_subject', 'email_setting_sec', '' );
+		
 			$admin_email             = get_option( 'admin_email' );
 			$site_name               = get_option( 'blogname' );
-			if ( $global_email_sub ) {
-				$email_sub = $global_email_sub;
-			} else {
-				$email_sub = 'Confirmation Email';
-			}
-			if ( $global_email_form ) {
-				$form_name = $global_email_form;
-			} else {
-				$form_name = $site_name;
-			}
-			if ( $global_email_form_email ) {
-				$form_email = $global_email_form_email;
-			} else {
-				$form_email = $admin_email;
-			}
-			if ( $event_email_text ) {
-				$email_body = $event_email_text;
-			} else {
-				$email_body = $global_email_text;
-			}
+		
+			$form_email = !empty( $global_email_form_email ) ? $global_email_form_email : $admin_email;
+			$form_name  = !empty( $global_email_form_name ) ? $global_email_form_name : $site_name;
+			$email_sub  = !empty( $global_email_subject ) ? $global_email_subject : 'Confirmation Email';
+		
+			$event_email_text = get_post_meta( $event_id, 'mep_event_cc_email_text', true );
+			$email_body       = !empty( $event_email_text ) ? $event_email_text : $global_email_text;
+		
+			$email_body = mep_email_dynamic_content( $email_body, $event_id, $order_id, $attendee_id );
+			$email_body = apply_filters( 'mep_event_confirmation_text', $email_body, $event_id, $order_id );
+		
+			$headers = array();
 			$headers[] = "From: $form_name <$form_email>";
-			if ( $email_body ) {
-				$email_body              = mep_email_dynamic_content( $email_body, $event_id, $order_id, $attendee_id );
-				$confirmation_email_text = apply_filters( 'mep_event_confirmation_text', $email_body, $event_id, $order_id );
-				wp_mail( $sent_email, $email_sub, nl2br( $confirmation_email_text ), $headers );
-			}
+			wp_mail( $sent_email, $email_sub, nl2br( $email_body ), $headers );
 		}
+		
 	}
 	if ( ! function_exists( 'mep_event_get_order_meta' ) ) {
 		function mep_event_get_order_meta( $item_id, $key ) {
@@ -1169,6 +1179,9 @@ if (!function_exists('mep_add_show_sku_post_id_in_event_list_dashboard')) {
 					$org                   = get_the_terms( $event_id, 'mep_org' );
 					$term_id               = isset( $org[0]->term_id ) ? $org[0]->term_id : '';
 					$org_email             = get_term_meta( $term_id, 'org_email', true ) ? get_term_meta( $term_id, 'org_email', true ) : '';
+					
+					mep_event_confirmation_email_sent( $event_id, $email, $order_id );
+
 					if ( $order->has_status( 'processing' ) ) {
 						change_attandee_order_status( $order_id, 'publish', 'trash', 'processing' );
 						change_attandee_order_status( $order_id, 'publish', 'publish', 'processing' );
@@ -1901,121 +1914,120 @@ if (!function_exists('mep_add_show_sku_post_id_in_event_list_dashboard')) {
 	if ( ! function_exists( 'mep_esc_html' ) ) {
 		function mep_esc_html( $string ) {
 			$allow_attr = array(
-				'input'    => array(
-					'br'                 => [],
-					'type'               => [],
-					'class'              => [],
-					'id'                 => [],
-					'name'               => [],
-					'value'              => [],
-					'size'               => [],
-					'placeholder'        => [],
-					'min'                => [],
-					'max'                => [],
-					'checked'            => [],
-					'required'           => [],
-					'disabled'           => [],
-					'readonly'           => [],
-					'step'               => [],
-					'data-default-color' => [],
+				'input' => array(
+					'br'                    => [],
+					'type'                  => [],
+					'class'                 => [],
+					'id'                    => [],
+					'name'                  => [],
+					'value'                 => [],
+					'size'                  => [],
+					'placeholder'           => [],
+					'min'                   => [],
+					'max'                   => [],
+					'checked'               => [],
+					'required'              => [],
+					'disabled'              => [],
+					'readonly'              => [],
+					'step'                  => [],
+					'data-default-color'    => [],
 				),
-				'p'        => [
-					'class' => []
+				'p' => [
+					'class'     => []
 				],
-				'img'      => [
-					'class' => [],
-					'id'    => [],
-					'src'   => [],
-					'alt'   => [],
+				'img' => [
+					'class'     => [],
+					'id'        => [],
+					'src'       => [],
+					'alt'       => [],
 				],
 				'fieldset' => [
-					'class' => []
+					'class'     => []
 				],
-				'label'    => [
-					'for'   => [],
-					'class' => []
+				'label' => [
+					'for'       => [],
+					'class'     => []
 				],
-				'select'   => [
-					'class' => [],
-					'name'  => [],
-					'id'    => [],
+				'select' => [
+					'class'     => [],
+					'name'      => [],
+					'id'        => [],
 				],
-				'option'   => [
-					'class'    => [],
-					'value'    => [],
-					'id'       => [],
-					'selected' => [],
+				'option' => [
+					'class'     => [],
+					'value'     => [],
+					'id'        => [],
+					'selected'  => [],
 				],
 				'textarea' => [
-					'class' => [],
-					'rows'  => [],
-					'id'    => [],
-					'cols'  => [],
-					'name'  => [],
+					'class'     => [],
+					'rows'      => [],
+					'id'        => [],
+					'cols'      => [],
+					'name'      => [],
 				],
-				'h2'       => [ 'class' => [], 'id' => [], ],
-				'a'        => [ 'class' => [], 'id' => [], 'href' => [], ],
-				'div'      => [ 'class' => [], 'id' => [], 'data' => [], ],
-				'span'     => [
-					'class' => [],
-					'id'    => [],
-					'data'  => [],
+				'h2' => ['class'=> [],'id'=> [],],
+				'a' => ['class'=> [],'id'=> [],'href'=> [],],
+				'div' => ['class'=> [],'id'=> [],'data'=> [],],
+				'span' => [
+					'class'     => [],            
+					'id'        => [],
+					'data'      => [],
 				],
-				'i'        => [
-					'class' => [],
-					'id'    => [],
-					'data'  => [],
+				'i' => [
+					'class'     => [],            
+					'id'        => [],
+					'data'      => [],
 				],
-				'table'    => [
-					'class' => [],
-					'id'    => [],
-					'data'  => [],
+				'table' => [
+					'class'     => [],            
+					'id'        => [],
+					'data'      => [],
 				],
-				'tr'       => [
-					'class' => [],
-					'id'    => [],
-					'data'  => [],
+				'tr' => [
+					'class'     => [],            
+					'id'        => [],
+					'data'      => [],
 				],
-				'td'       => [
-					'class' => [],
-					'id'    => [],
-					'data'  => [],
+				'td' => [
+					'class'     => [],            
+					'id'        => [],
+					'data'      => [],
 				],
-				'thead'    => [
-					'class' => [],
-					'id'    => [],
-					'data'  => [],
+				'thead' => [
+					'class'     => [],            
+					'id'        => [],
+					'data'      => [],
 				],
-				'tbody'    => [
-					'class' => [],
-					'id'    => [],
-					'data'  => [],
+				'tbody' => [
+					'class'     => [],            
+					'id'        => [],
+					'data'      => [],
 				],
-				'th'       => [
-					'class' => [],
-					'id'    => [],
-					'data'  => [],
+				'th' => [
+					'class'     => [],            
+					'id'        => [],
+					'data'      => [],
 				],
-				'svg'      => [
-					'class'   => [],
-					'id'      => [],
-					'width'   => [],
-					'height'  => [],
-					'viewBox' => [],
-					'xmlns'   => [],
+				'svg' => [
+					'class'     => [],            
+					'id'        => [],
+					'width'     => [],
+					'height'    => [],
+					'viewBox'   => [],
+					'xmlns'     => [],
 				],
-				'g'        => [
-					'fill' => [],
+				'g' => [
+					'fill'      => [],            
 				],
-				'path'     => [
-					'd' => [],
+				'path' => [
+					'd'         => [],            
 				],
-				'br'       => array(),
-				'em'       => array(),
-				'strong'   => array(),
+				'br'            => array(),
+				'em'            => array(),
+				'strong'        => array(),        
 			);
-
-			return wp_kses( $string, $allow_attr );
+			return wp_kses($string,$allow_attr);
 		}
 	}
 	if ( ! function_exists( 'mep_title_cutoff_words' ) ) {
@@ -2563,6 +2575,7 @@ if (!function_exists('mep_add_show_sku_post_id_in_event_list_dashboard')) {
 			return ob_get_clean();
 		}
 	}
+
 	add_filter( 'manage_mep_events_posts_columns', 'mep_set_custom_mep_events_columns' );
 	if ( ! function_exists( 'mep_set_custom_mep_events_columns' ) ) {
 		function mep_set_custom_mep_events_columns( $columns ) {

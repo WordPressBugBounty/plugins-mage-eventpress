@@ -537,7 +537,9 @@ use Sabberworm\CSS\Value\Value;
 					display:<?php echo $css_value; ?>;
 				}
 			</style>
+			<?php do_action('mep_add_category_display',$post_id); ?>
             <section class="mp_ticket_type_table">
+                <div class="mp_ticket_type_table_auto">
 					<table id="repeatable-fieldset-one-t">
 						<thead>
 						<tr>
@@ -657,6 +659,7 @@ use Sabberworm\CSS\Value\Value;
 						</tr>
 						</tbody>
 					</table>
+                </div>
 					<br>
 					<button id="add-row-t" class="button" type="button"><i class="fas fa-plus-circle"></i> <?php esc_html_e('Add New Ticket Type', 'mage-eventpress'); ?></button>
             </section>
@@ -943,7 +946,7 @@ use Sabberworm\CSS\Value\Value;
 						<input type="checkbox" name="mep_available_seat" value="<?php echo esc_attr($seat_checked); ?>" <?php echo esc_attr(($seat_checked=='on')?'checked':''); ?> data-toggle-values="on,off">
 						<span class="mpev-slider"></span>
 					</label>
-				</label>
+				</div>
 			</section>
 			<?php
 		}
