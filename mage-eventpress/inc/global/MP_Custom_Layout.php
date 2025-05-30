@@ -185,6 +185,7 @@
 			}
 			/*****************************/
 			public static function qty_input($data = []) {
+				//echo '<pre>';print_r($data);echo '</pre>';
 				$input_name = array_key_exists('name', $data) ? $data['name'] : '';
 				$price = array_key_exists('price', $data) ? $data['price'] : 0;
 				$available_seat = array_key_exists('available', $data) ? $data['available'] : 1;
@@ -196,7 +197,7 @@
 				//$min_qty = max($default_qty, $min_qty);
 				$max_qty = $max_qty > 0 ? $max_qty : $available_seat;
 				$max_qty = min($available_seat, $max_qty);
-				if ($max_qty > $min_qty) {
+				if ($max_qty >= $min_qty && $max_qty>0) {
 					if ($input_type == 'dropdown') {
 						$text = array_key_exists('text', $data) ? $data['text'] : '';
 						?>
@@ -208,22 +209,22 @@
                             </select>
                         </label>
 					<?php } else { ?>
-                        <div class="groupContent qtyIncDec">
-                            <div class="decQty addonGroupContent">
-                                <span class="fas fa-minus"></span>
+                        <div class=" qtyIncDec">
+                            <div class="decQty">
+                                <i class="fas fa-minus"></i>
                             </div>
                             <label>
                                 <input type="text"
                                        class="formControl inputIncDec mp_number_validation"
                                        data-price="<?php echo esc_attr($price); ?>"
                                        name="<?php echo esc_attr($input_name); ?>"
-                                       value="<?php echo esc_attr(max(0, $default_qty)); ?>"
-                                       min="<?php echo esc_attr($min_qty); ?>"
+                                       value="<?php echo esc_attr(max(0, $default_qty,$min_qty)); ?>"
+                                       min="<?php echo esc_attr(max(0, $default_qty,$min_qty)); ?>"
                                        max="<?php echo esc_attr($max_qty); ?>"
                                 />
                             </label>
-                            <div class="incQty addonGroupContent">
-                                <span class="fas fa-plus"></span>
+                            <div class="incQty">
+                                <i class="fas fa-plus"></i>
                             </div>
                         </div>
 						<?php

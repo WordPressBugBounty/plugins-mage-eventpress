@@ -282,8 +282,22 @@ A. You can create a support ticket here with the features details that you need,
 = Q.How can I get the best support from the plugin Company   =
 A. You can create a support ticket here with problem details with possible screenshots that you have a problem, One of our support members will back to you shortly. [Support Ticket](https://mage-people.com/submit-ticket-2/)
 
+= Q.How can I report security bugs? =
+A. You can report security bugs through the Patchstack Vulnerability Disclosure
+Program. The Patchstack team helps validate, triage, and handle any security
+vulnerabilities.
+[Report a security vulnerability.](https://patchstack.com/database/vdp/mage-eventpress)
+
 
 == Changelog ==
+
+= 4.4.1 =
+* Double Email Sending issue fixed
+* FAQ, Email Text, Timeline not save issue fixed
+* UI & UX Improved
+* Recurring Stat page design optimized.
+  07 May 2025*
+
 = 4.3.9 =
 * Event Edit Not working issue fixed.
 * Virtual Event Info not sending to confirmation email issue fixed.

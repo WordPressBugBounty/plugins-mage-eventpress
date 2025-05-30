@@ -7,6 +7,7 @@
 		die;
 	} // Cannot access pages directly.
 	$event_id  = $event_id ?? 0;
+	//echo '<pre>';			print_r($event_id);			echo '</pre>';
 	$all_dates = $all_dates ?? MPWEM_Functions::get_dates( $event_id );
 	$all_times = $all_times ?? MPWEM_Functions::get_times( $event_id, $all_dates );
 	$date      = $date ?? MPWEM_Functions::get_upcoming_date_time( $event_id, $all_dates, $all_times );
@@ -20,14 +21,13 @@
 				$event_member_type = MP_Global_Function::get_post_info( $event_id, 'mep_member_only_event', 'for_all' );
 				$saved_user_role   = MP_Global_Function::get_post_info( $event_id, 'mep_member_only_user_role', [] );
 				if ( $event_member_type == 'for_all' || ( is_user_logged_in() && ( array_intersect( wp_get_current_user()->roles, $saved_user_role ) || in_array( 'all', $saved_user_role ) ) ) ) {
-					$full_location = MPWEM_Functions::get_location( $event_id );
+					//$full_location = MPWEM_Functions::get_location( $event_id );
 					?>
                     <div class="mpwem_registration_area">
-                        <h2 class="_mTB"><?php esc_html_e( 'Tickets and prices', 'mage-eventpress' ); ?></h2>
+                        <div class="section-title"><?php esc_html_e( 'Tickets and prices', 'mage-eventpress' ); ?></div>
 						<?php do_action( 'mpwem_date_select', $event_id, $all_dates, $all_times, $date ); ?>
                         <form action="" method='post' id="mpwem_registration" enctype="multipart/form-data">
 							<?php do_action( 'mpwem_registration_content', $event_id, $all_dates, $all_times, $date ); ?>
-							<?php require MPWEM_Functions::template_path( 'layout/add_to_cart.php' ); ?>
                         </form>
 						<?php do_action( 'mpwem_hidden_content', $event_id ); ?>
                     </div>

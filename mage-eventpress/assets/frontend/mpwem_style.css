@@ -1,4 +1,3 @@
-@charset "UTF-8";
 :root {
   --mpev-primary:#f12971;
   --mpev-dark:#303030;
@@ -48,21 +47,8 @@ div.item_hover_effect a:hover {
   background-color: #fff;
   border: 1px solid var(--mpev-base);
 }
-.mep-low-stock-warning {
-  background-color: var(--mpev-primary) !important;
-  color: var(--mpev-white) !important;
-  padding: 5px 10px;
-  border-radius: 4px;
-  margin: 5px 0;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  display: inline-block;
-  font-size: 13px;
-}
-.mep-low-stock-warning-text {
-  font-weight: 500;
-}
 
-.mep-default-sidrbar-events-schedule ul li i, .mep-ev-start-date, h3.mep_list_date i, .df-ico i, .mep-default-sidrbar-address ul li i, .mep-default-sidrbar-social ul li a, button.mep-cat-control, .pagination-sec a, .mep-tem3-title-sec.mep_single_date_btn {
+.mep-ev-start-date, h3.mep_list_date i, .df-ico i, button.mep-cat-control, .pagination-sec a, .mep-tem3-title-sec.mep_single_date_btn {
   background: var(--mpev-base);
   color: var(--mpev-base-txt);
 }
@@ -81,7 +67,7 @@ div.item_hover_effect a:hover {
   border-color: var(--mpev-base);
 }
 
-.mep-default-sidrbar-events-schedule h3 i, .mep_event_list .mep_list_date, .mep-event-theme-1 .mep-social-share li a, .mep-template-2-hamza .mep-social-share li a {
+.mep_event_list .mep_list_date, .mep-event-theme-1 .mep-social-share li a, .mep-template-2-hamza .mep-social-share li a {
   color: var(--mpev-base);
 }
 
@@ -159,14 +145,6 @@ ul#mep_add_calender_links li a {
 }
 
 /*****************************************************/
-#mep_event_date_sch li a {
-  display: -webkit-flex;
-  display: flex;
-  -webkit-flex-direction: column;
-  flex-direction: column;
-  color: inherit;
-}
-
 .mep-hidden {
   display: none !important;
 }
@@ -202,6 +180,13 @@ ul#mep_add_calender_links li a {
   padding: 20px;
   font-size: 14px;
   letter-spacing: inherit;
+  width: auto;
+}
+@media (min-width: 1320px) {
+  .mep-events-wrapper,
+  .mep_related_product_area {
+    width: 100%;
+  }
 }
 
 .mep-events-wrapper a {
@@ -262,8 +247,6 @@ div.mep_flex,
 .mep-default-theme div.mep-default-feature-location,
 .mep-default-theme i,
 div.mep-default-sidrbar-meta,
-.mep-default-sidrbar-address ul li,
-.mep-default-sidrbar-events-schedule h3,
 ul.mep-social-share,
 ul.mep-social-share a,
 #mep_add_calender_button.mep-add-calender,
@@ -297,8 +280,6 @@ button.single_add_to_cart_button,
 .mep-default-theme div.mep-default-feature-location,
 .mep-default-theme i,
 .mep-default-sidrbar-meta,
-.mep-default-sidrbar-address ul li,
-.mep-default-sidrbar-events-schedule h3,
 ul.mep-social-share a,
 #mep_add_calender_button.mep-add-calender,
 .bristol_center_box .mep-default-sidrbar-price-seat,
@@ -394,17 +375,6 @@ h3.ex-sec-title {
 }
 
 .mep-default-sidrbar-map h3,
-.mep-default-sidrbar-events-schedule h3 {
-  margin: 12px 0 10px 0;
-  font-size: 18px;
-  font-weight: bold;
-}
-
-.mep-default-sidrbar-events-schedule h3 {
-  margin: 0 0 10px 0;
-}
-
-/********Banner Image***********/
 .mep-default-feature-image img,
 .mep_event_list .mep_list_thumb img,
 .mep_list_thumb img {
@@ -501,21 +471,6 @@ span.mep_warning {
   cursor: pointer;
   max-width: 100%;
   border-radius: 10px;
-}
-
-ul#mep_event_date_sch li span {
-  display: -webkit-flex;
-  display: flex;
-  font-size: 13px;
-}
-
-span.mep-more-date {
-  -webkit-flex-wrap: wrap;
-  flex-wrap: wrap;
-}
-
-span.mep-more-date i {
-  margin: 0;
 }
 
 /******table*******/
@@ -666,7 +621,7 @@ button.single_add_to_cart_button[disabled]:hover {
 /********Total seat ***********/
 .mep-default-sidrbar-price-seat {
   text-align: center;
-  padding: 20px 15px;
+  padding: 15px;
 }
 
 .mep-default-sidrbar-price-seat h5 {
@@ -676,7 +631,7 @@ button.single_add_to_cart_button[disabled]:hover {
 
 /********Organizer ***********/
 .mep-default-sidrbar-meta {
-  padding: 20px 10px 0 10px;
+  padding: 20px 15px;
 }
 
 .mep-default-sidrbar-meta p {
@@ -692,25 +647,6 @@ button.single_add_to_cart_button[disabled]:hover {
 }
 
 /********venue place ***********/
-.mep-default-sidrbar-address {
-  padding: 20px 10px;
-}
-
-.mep-default-sidrbar-address ul {
-  font-size: 15px;
-  padding: 0 0 0 20px;
-}
-
-.mep-default-sidrbar-address ul li {
-  margin: 0 0 10px 0;
-}
-
-.mep-default-sidrbar-address ul li span {
-  width: calc(100% - 25px);
-  padding: 0 0 0 10px;
-  font-size: 14px;
-}
-
 /********circle icon box ***********/
 .mep-default-sidrbar-meta i,
 .df-ico i,
@@ -721,56 +657,22 @@ ul.mep-social-share a {
   height: 40px;
 }
 
-.mep-default-sidrbar-address ul li i,
-.mep-default-sidrbar-events-schedule ul li i,
 .mep-list-footer ul li i {
-  color: var(--mpev-base-txt);
-  width: 25px;
-  height: 25px;
+  background: var(--mpev-base-txt);
+  color: var(--mpev-base);
+  width: 36px;
+  height: 36px;
   font-size: 14px;
 }
 
 /********default background ***********/
-.mep-default-sidrbar-address ul li i,
 .mep-default-sidrbar-meta i,
 .df-ico i,
-.mep-default-sidrbar-events-schedule ul li i,
 .mep-social-share a {
   background: var(--mpev-base);
 }
 
 /********schedule ***********/
-.mep-default-sidrbar-events-schedule {
-  padding: 20px 10px;
-}
-
-.mep-default-sidrbar-events-schedule h3 {
-  text-transform: capitalize;
-  color: #6D7982;
-}
-
-.mep-default-sidrbar-events-schedule h3 i {
-  padding: 0 10px 0 0;
-}
-
-.mep-default-sidrbar-events-schedule ul li {
-  border-top: 1px dashed #DDD;
-  padding: 10px 0 10px 20px;
-}
-
-.mep-default-sidrbar-events-schedule ul li:first-child {
-  border: none;
-}
-
-.mep-default-sidrbar-events-schedule ul li:last-child {
-  padding: 10px 0 0 20px;
-}
-
-.mep-default-sidrbar-events-schedule ul li i {
-  display: -webkit-inline-flex;
-  display: inline-flex;
-}
-
 /********social share ***********/
 .mep-event-meta {
   font-size: 20px;
@@ -780,12 +682,84 @@ ul.mep-social-share a {
   line-height: 1;
 }
 
+.mep-share-btn-title {
+  margin-bottom: 20px;
+}
+
 ul.mep-social-share {
   padding: 15px 0 0 0;
 }
 
 ul.mep-social-share li {
   margin: 0 8px 0 0;
+}
+
+ul.mep-social-share li a {
+  background-color: #f7f7f7;
+}
+
+ul.mep-social-share li a.facebook i {
+  color: #3b5998;
+}
+
+ul.mep-social-share li a.facebook:hover {
+  background-color: #3b5998;
+}
+
+ul.mep-social-share li a.facebook:hover i {
+  color: #fff;
+}
+
+/* Twitter */
+ul.mep-social-share li a.twitter i {
+  color: #1da1f2;
+}
+
+ul.mep-social-share li a.twitter:hover {
+  background-color: #1da1f2;
+}
+
+ul.mep-social-share li a.twitter:hover i {
+  color: #fff;
+}
+
+/* LinkedIn */
+ul.mep-social-share li a.linkedin i {
+  color: #0077b5;
+}
+
+ul.mep-social-share li a.linkedin:hover {
+  background-color: #0077b5;
+}
+
+ul.mep-social-share li a.linkedin:hover i {
+  color: #fff;
+}
+
+/* WhatsApp */
+ul.mep-social-share li a.whatsapp i {
+  color: #25D366;
+}
+
+ul.mep-social-share li a.whatsapp:hover {
+  background-color: #25D366;
+}
+
+ul.mep-social-share li a.whatsapp:hover i {
+  color: #fff;
+}
+
+/* Email */
+ul.mep-social-share li a.email i {
+  color: #dd4b39;
+}
+
+ul.mep-social-share li a.email:hover {
+  background-color: #dd4b39;
+}
+
+ul.mep-social-share li a.email:hover i {
+  color: #fff;
 }
 
 /********Add to calender ***********/
@@ -848,9 +822,45 @@ ul#mep_add_calender_links li a {
 }
 
 .mep-default-sidebar .df-sidebar-part {
-  background: #F7F7F7;
-  padding: 0;
+  background: #fff;
   overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+}
+
+.mep-default-sidrbar-meta {
+  padding: 15px;
+  background: var(--mpev-base);
+  border-radius: 12px 12px 0 0;
+}
+
+.mep-default-theme .mep-org-details {
+  font-size: 18px;
+  font-weight: bold;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: start;
+}
+.mep-default-theme .mep-org-details .org-icon {
+  background-color: var(--mpev-base);
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  padding: 10px;
+  margin-right: 10px;
+}
+.mep-default-theme .mep-org-details .org-icon i {
+  color: var(--mpev-base-txt);
+  margin: 0;
+}
+.mep-default-theme .mep-org-details .org-name {
+  color: var(--mpev-base-txt);
+  font-weight: normal;
+}
+.mep-default-theme .mep-org-details .org-name a {
+  color: var(--mpev-base-txt);
+  font-weight: bold;
 }
 
 .mep-default-sidebar.margin {
@@ -858,21 +868,21 @@ ul#mep_add_calender_links li a {
 }
 
 .default_theme .mep-default-sidrbar-price-seat,
-.mep-default-sidrbar-address,
-.mep-default-sidrbar-events-schedule,
+.mep-default-sidebar-address,
 .mep-default-sidrbar-social {
-  border-bottom: 1px solid #DDD;
+  border-bottom: 1px solid #f0f2f5;
 }
 
-.default_theme .mep-default-sidrbar-price-seat .df-seat {
-  border: 1px solid var(--mpev-primary);
-  color: var(--mpev-primary);
-  border-radius: 50px;
-  font-weight: 500;
-  height: 35px;
-  line-height: 33px;
-  margin: auto;
-  width: auto;
+.default_theme .mep-default-sidrbar-price-seat .setas-info {
+  padding: 14px;
+  background-color: #f7f7f7;
+  border-radius: 10px;
+  display: flex;
+  justify-content: space-between;
+}
+.default_theme .mep-default-sidrbar-price-seat .setas-info .total-seats, .default_theme .mep-default-sidrbar-price-seat .setas-info .available-seats {
+  display: flex;
+  flex-direction: column;
 }
 
 .mep-theme1-faq-sec {
@@ -1384,17 +1394,6 @@ ul.event-custom-price li ul {
   background: rgba(255, 70, 70, 0.6666666667);
 }
 
-.mep_event_list .mepev-ribbon .ribbon.limited-availability {
-  background: rgba(255, 153, 0, 0.6666666667);
-}
-
-.mep_event_list .mepev-ribbon .ribbon.limited-availability:before {
-  content: '\f017';
-  font-family: 'Font Awesome 5 Free';
-  font-weight: 900;
-  margin-right: 5px;
-}
-
 .mp_event_more_date_list {
   list-style: none;
   padding: 5px;
@@ -1627,12 +1626,6 @@ button.mep-cat-control.mixitup-control-active {
   display: none;
 }
 
-#mep_event_date_sch {
-  height: 300px;
-  overflow: hidden;
-  margin-bottom: 20px;
-}
-
 .mep_view_all_date {
   overflow: scroll !important;
 }
@@ -1645,7 +1638,6 @@ span.mep_single_date_btn {
 
 .mep-tem3-title-sec.mep_single_date_btn {
   text-align: center;
-  color: #FFF;
   padding: 5px;
   cursor: pointer;
 }
@@ -1751,19 +1743,18 @@ span.mep-more-date {
   padding: 0;
 }
 
-.mep-default-theme .mep-more-time {
+.mep-default-theme .mep-more-date {
   display: flex;
   flex-direction: column;
   align-items: start;
   justify-content: start;
-  margin-left: 25px;
 }
-.mep-default-theme .mep-more-time span {
+.mep-default-theme .mep-more-date .mep-more-date {
   margin: 2px 5px;
   position: relative;
   padding-left: 14px;
 }
-.mep-default-theme .mep-more-time span::before {
+.mep-default-theme .mep-more-date .mep-more-date::before {
   content: "";
   width: 5px;
   height: 5px;
@@ -1852,7 +1843,11 @@ div.item_hover_effect a:hover {
 }
 
 /************************/
-.mep-day-details-section h4 {
+.mep-day-details-section {
+  margin-top: 20px;
+}
+
+div.mep-day-details-section h4 {
   font-size: 22px;
   font-weight: bold;
   margin-bottom: 10px;
@@ -1876,6 +1871,49 @@ div.item_hover_effect a:hover {
   background-color: #1D4A68;
   color: #FFF;
   font-size: 18px;
+}
+
+.mep-default-sidebar-address {
+  padding: 20px 15px;
+}
+.mep-default-sidebar-address .location-widgets {
+  display: flex;
+  flex-direction: row;
+}
+.mep-default-sidebar-address .location-widgets .location-icon i {
+  background-color: var(--mpev-base);
+  width: 18px;
+  height: 18px;
+  border-radius: 10px;
+  padding: 10px;
+  margin-right: 10px;
+  color: #fff;
+}
+.mep-default-sidebar-address .location-widgets .location-title {
+  font-size: 18px;
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+.mep-default-sidebar-address .mep-location-btn {
+  height: 35px;
+  line-height: 35px;
+  border: 0;
+  font-size: 15px;
+  padding: 0 15px;
+  margin: 10px auto;
+  margin-bottom: 5px;
+  border-radius: 50px;
+  max-width: max-content;
+  background: var(--mpev-calender-btn-bg);
+  color: var(--mpev-base-txt);
+  display: flex;
+  gap: 10px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.mep-default-sidebar-address .mep-location-btn:hover {
+  background: var(--mpev-calender-btn-bg);
+  color: var(--mpev-base-txt);
 }
 
 /******Responsive*******/
@@ -1911,17 +1949,10 @@ div.item_hover_effect a:hover {
     height: 40px;
     font-size: 20px;
   }
-  .mep-default-sidrbar-address ul li i,
-  .mep-default-sidrbar-events-schedule ul li i,
   .mep-list-footer ul li i {
     width: 20px;
     height: 20px;
     font-size: 11px;
-  }
-  .mep-default-sidrbar-address ul li span {
-    width: calc(100% - 20px);
-    padding: 0 0 0 5px;
-    font-size: 13px;
   }
   div.df-dtl {
     width: calc(100% - 40px);
@@ -1980,25 +2011,6 @@ div.item_hover_effect a:hover {
   .mep-default-theme div.mep-default-feature-location {
     padding: 5px;
   }
-  .mep-default-sidrbar-meta {
-    padding: 10px 10px 0 10px;
-  }
-  .mep-default-sidrbar-address {
-    padding: 10px 5px;
-  }
-  .mep-default-sidrbar-address ul li {
-    margin: 0 0 5px 0;
-  }
-  .mep-default-sidrbar-events-schedule {
-    padding: 10px;
-  }
-  .mep-default-sidrbar-events-schedule ul li {
-    padding: 5px 0 5px 10px;
-    line-height: 22px;
-  }
-  .mep-default-sidrbar-events-schedule ul li:last-child {
-    padding: 5px 0 0 10px;
-  }
   /*********springfield*****************/
   .spring_field div.mep_flex {
     display: block;
@@ -2014,9 +2026,6 @@ div.item_hover_effect a:hover {
     margin: 15px 0;
   }
   /********frinklin*********/
-  .mep-default-sidrbar-events-schedule h3 {
-    font-size: 15px;
-  }
   /************Related***********/
   h2.mep_list_title {
     font-size: 15px !important;
@@ -2413,8 +2422,16 @@ span.mep_date_scdl_start_datetime, span.mep_date_scdl_end_datetime {
   font-size: 13px;
 }
 
+span.mep_date_scdl_start_datetime {
+  color: #333;
+  font-size: 14px;
+  font-weight: bold;
+}
+
 span.mep_date_scdl_end_datetime {
-  margin-left: 32px;
+  margin-left: 44px;
+  color: #707070;
+  font-size: 14px;
 }
 
 span.mep-cal-icon {
@@ -2596,8 +2613,7 @@ div.three_column {
 }
 
 .mep-default-sidrbar-meta p,
-.mep-default-sidrbar-meta p a,
-.mep-default-sidrbar-events-schedule h3 {
+.mep-default-sidrbar-meta p a {
   font-weight: 600;
   color: #444444;
   font-size: 16px;
@@ -2644,11 +2660,6 @@ h3.mep_list_date i {
 .mep_event_list .owl-item .mep_more_date_btn {
   margin-top: 10px;
   margin-bottom: 10px;
-}
-
-.mep-default-theme.spring_field .mep-default-sidrbar-calender-btn {
-  margin: auto;
-  display: inline-block;
 }
 
 div.mep-default-feature-content p {
@@ -3307,12 +3318,6 @@ Mobile View css update by ariful | date: 19.10.2021
   .mep_everyday_date_secs ul li {
     margin-bottom: 10px;
   }
-  .mep-default-sidrbar-address ul {
-    padding: 0 0 0 15px;
-  }
-  .mep-default-sidrbar-address ul li {
-    line-height: 22px;
-  }
   .mep-event-review-list-wrapper {
     margin: 0;
   }
@@ -3368,11 +3373,9 @@ tr.mep_virtual_event_info_sec {
 
 .mep-event-faq-part .mep-event-faq-set > a {
   display: block;
-  padding: 10px 15px;
   text-decoration: none;
   color: #000;
   font-weight: 600;
-  border-bottom: 1px solid #DDD;
   -webkit-transition: all 0.2s linear;
   -moz-transition: all 0.2s linear;
   transition: all 0.2s linear;
@@ -4422,9 +4425,373 @@ input.mpe-new-input-group-field {
   display: flex;
   align-items: start;
   justify-content: space-between;
+  border-radius: 12px;
 }
 .mep-default-theme div.mep-default-feature-item h3 {
   margin: 10px 0;
+}
+
+.mep-default-sidrbar-events-schedule {
+  padding: 15px;
+}
+.mep-default-sidrbar-events-schedule .sidrbar-events-schedule-title {
+  font-size: 18px;
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+.mep-default-sidrbar-events-schedule ul#mep_event_date_sch {
+  margin-left: 10px;
+  max-height: 315px;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+.mep-default-sidrbar-events-schedule ul#mep_event_date_sch li {
+  border-top: 1px dashed #DDD;
+  padding: 10px 0;
+  display: flex;
+  flex-direction: row;
+  align-items: start;
+  position: relative;
+  padding-left: 15px;
+}
+.mep-default-sidrbar-events-schedule ul#mep_event_date_sch li::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50px;
+  position: absolute;
+  top: 14px;
+  left: 0;
+  background-color: var(--mpev-base);
+}
+.mep-default-sidrbar-events-schedule ul#mep_event_date_sch li a {
+  display: -webkit-flex;
+  display: flex;
+  -webkit-flex-direction: column;
+  flex-direction: column;
+  color: inherit;
+}
+.mep-default-sidrbar-events-schedule ul#mep_event_date_sch li span {
+  display: flex;
+}
+.mep-default-sidrbar-events-schedule ul#mep_event_date_sch li span.mep-more-date {
+  margin: 0;
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+.mep-default-sidrbar-events-schedule ul#mep_event_date_sch li span.mep-more-time {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.mep-default-sidrbar-events-schedule ul#mep_event_date_sch li .mep_date_scdl_start_datetime {
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+.mep-default-sidrbar-events-schedule ul#mep_event_date_sch li:first-child {
+  border: none;
+}
+.mep-default-sidrbar-events-schedule ul#mep_event_date_sch li i {
+  background: var(--mpev-base);
+  color: var(--mpev-base-txt);
+  background: var(--mpev-base-txt);
+  color: var(--mpev-base);
+  width: 36px;
+  height: 36px;
+  font-size: 14px;
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  font-size: 11px;
+}
+
+.mep-timeline {
+  margin-top: 30px;
+  margin-bottom: 50px;
+}
+.mep-timeline .section-title {
+  font-size: 25px;
+  font-weight: bold;
+  margin: 30px 0;
+}
+.mep-timeline .timeline {
+  position: relative;
+  padding-left: 50px;
+}
+.mep-timeline .timeline::before {
+  content: "";
+  position: absolute;
+  left: 21px;
+  top: 0;
+  height: 100%;
+  width: 2px;
+  background-color: #e0e0e0;
+}
+.mep-timeline .timeline .timeline-item {
+  position: relative;
+  padding-bottom: 20px;
+  transition: transform 0.3s ease;
+}
+.mep-timeline .timeline .timeline-item:hover {
+  transform: translateY(-5px);
+}
+.mep-timeline .timeline .timeline-item:last-child {
+  padding-bottom: 0;
+}
+.mep-timeline .timeline .timeline-item .timeline-point {
+  position: absolute;
+  left: -50px;
+  top: 0;
+  width: 42px;
+  height: 42px;
+  background-color: #ffffff;
+  border: 2px solid var(--mpev-primary);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: var(--mpev-primary);
+  font-size: 16px;
+  z-index: 2;
+}
+.mep-timeline .timeline .timeline-content {
+  background-color: #ffffff;
+  border-radius: 12px;
+  padding: 25px 30px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  transition: transform 0.3s ease;
+}
+.mep-timeline .timeline .timeline-content .timeline-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 15px;
+  color: #212121;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.mep-timeline .timeline .timeline-content .timeline-title .timeline-time {
+  font-size: 14px;
+  color: var(--mpev-primary);
+  font-weight: 500;
+  padding: 6px 12px;
+  background-color: var(--mpev-secondary);
+  border-radius: 20px;
+}
+.mep-timeline .timeline .timeline-content .timeline-details {
+  font-size: 14px;
+  color: #616161;
+}
+
+.mpwem_registration_area .section-title {
+  font-size: 25px;
+  font-weight: bold;
+  margin: 10px 0;
+}
+.mpwem_registration_area .date-time-header {
+  padding: 10px 25px;
+  background: var(--mpev-base);
+  border-radius: 12px 12px 0 0;
+  margin-bottom: -10px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  border: 1px solid var(--mpev-base);
+  position: relative;
+  z-index: 1;
+}
+.mpwem_registration_area .date-time-header .ticket-title {
+  margin: 0;
+  padding: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--mpev-base-txt);
+}
+.mpwem_registration_area .date-time-area {
+  display: flex;
+  justify-content: end;
+  align-items: center;
+  gap: 20px;
+}
+.mpwem_registration_area .date-time-area label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+}
+.mpwem_registration_area .date-time-area label span {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--mpev-base-txt);
+}
+.mpwem_registration_area .date-time-area label i {
+  color: var(--mpev-base-txt);
+}
+.mpwem_registration_area .date-time-area .formControl {
+  border-radius: 5px;
+  padding: 10px 15px;
+}
+.mpwem_registration_area .mpwem_booking_panel {
+  margin-bottom: 20px;
+}
+.mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+.mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-header, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-header {
+  background: linear-gradient(135deg, var(--mpev-base), var(--mpev-base));
+  color: var(--mpev-base-txt);
+  padding: 20px 25px;
+  font-size: 18px;
+  font-weight: 600;
+}
+.mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body {
+  padding: 20px 25px;
+}
+.mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item {
+  display: flex;
+  flex-direction: column;
+}
+.mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item:last-child, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item:last-child {
+  border-bottom: none;
+}
+.mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .ticket-data, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .ticket-data {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 0;
+  border-bottom: 1px solid #eaeaea;
+}
+@media (max-width: 1024px) {
+  .mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .ticket-data, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .ticket-data {
+    flex-direction: row;
+    align-items: start;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+}
+.mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .ticket-data .ticket-info, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .ticket-data .ticket-info {
+  flex: 0 0 49%;
+}
+.mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .ticket-data .ticket-info .ticket-name, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .ticket-data .ticket-info .ticket-name {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .ticket-data .ticket-info .ticket-description, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .ticket-data .ticket-info .ticket-description {
+  font-size: 14px;
+  color: #6c757d;
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+.mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .ticket-data .ticket-info .ticket-remaining, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .ticket-data .ticket-info .ticket-remaining {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  display: inline-block;
+}
+.mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .ticket-data .ticket-info .ticket-remaining.remaining-high, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .ticket-data .ticket-info .ticket-remaining.remaining-high {
+  background-color: #e6f4ea;
+  color: #137333;
+}
+.mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .ticket-data .ticket-info .ticket-remaining.remaining-low, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .ticket-data .ticket-info .ticket-remaining.remaining-low {
+  background-color: #fce8e6;
+  color: #c5221f;
+}
+.mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .ticket-data .quantity-control .qtyIncDec, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .ticket-data .quantity-control .qtyIncDec {
+  display: flex;
+  align-items: center;
+  margin: 0 30px;
+  max-width: 200px;
+}
+.mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .ticket-data .quantity-control .qtyIncDec .decQty, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .ticket-data .quantity-control .qtyIncDec .decQty {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background-color: #f0f2f5;
+  color: var(--mpev-base);
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  padding: 10px;
+}
+.mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .ticket-data .quantity-control .qtyIncDec .inputIncDec, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .ticket-data .quantity-control .qtyIncDec .inputIncDec {
+  width: 50px;
+  height: 36px;
+  border: none;
+  text-align: center;
+  font-size: 16px;
+  margin: 0 10px;
+}
+.mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .ticket-data .quantity-control .qtyIncDec .incQty, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .ticket-data .quantity-control .qtyIncDec .incQty {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background-color: #f0f2f5;
+  color: var(--mpev-base);
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  padding: 10px;
+}
+.mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .ticket-data .ticket-price, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .ticket-data .ticket-price {
+  font-size: 18px;
+  font-weight: 600;
+  color: #2b3a55;
+  text-align: right;
+  flex: 0 0 20%;
+}
+@media (max-width: 1024px) {
+  .mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .ticket-data .ticket-price, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .ticket-data .ticket-price {
+    text-align: left;
+    flex: 0 0 100%;
+  }
+}
+.mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .mep_attendee_info, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .mep_attendee_info {
+  background-color: #ececec;
+  border-radius: 0 0 12px 12px;
+}
+.mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .mep_attendee_info .mep_form_item, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .mep_attendee_info .mep_form_item {
+  padding: 10px;
+}
+.mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service {
+  margin-top: 30px;
+}
+.mpwem_registration_area .mpwem_booking_panel .mpwem_form_submit_area {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 25px;
+  background-color: #f8f9fa;
+  border-top: 1px solid #eaeaea;
+  margin-top: -20px;
+  margin-bottom: 50px;
+  border-radius: 0 0 12px 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+.mpwem_registration_area .mpwem_booking_panel .mpwem_form_submit_area .total {
+  font-size: 18px;
+  font-weight: 600;
+}
+.mpwem_registration_area .mpwem_booking_panel .mpwem_form_submit_area button[type=submit] {
+  background-color: var(--mpev-base);
+  border: 1px solid var(--mpev-base);
+  padding: 20px;
 }
 
 /*************************************************************
@@ -4511,11 +4878,10 @@ Royal theme css by ariful | Date: 19-10-2021
   display: flex;
 }
 
-.royal_theme .mep-default-sidrbar-meta p,
-.royal_theme .mep-default-sidrbar-meta p a,
-.royal_theme .mep-default-sidrbar-events-schedule h3 {
+.royal_theme .mep-default-sidrbar-meta,
+.royal_theme .mep-default-sidrbar-meta a {
   font-weight: 500;
-  color: #000000;
+  color: #fff;
   text-transform: uppercase;
   font-size: 14px;
 }
@@ -4680,6 +5046,14 @@ Royal theme css by ariful | Date: 19-10-2021
   color: var(--mpev-royal-txt);
 }
 
+.royal_theme .mep-default-sidrbar-events-schedule {
+  background: #fff;
+}
+
+.royal_theme .mep-default-sidrbar-price-seat {
+  background: #fff;
+}
+
 /********Spring Field Theme(theme - 1)**********************/
 .spring_field_banner {
   width: 60%;
@@ -4691,12 +5065,26 @@ Royal theme css by ariful | Date: 19-10-2021
 }
 
 .spring_field .mep-default-sidrbar-meta {
-  padding: 0;
+  padding: 20px;
 }
 
 .spring_field .mep-default-sidrbar-price-seat {
   text-align: left;
-  padding: 15px 0;
+  padding: 15px;
+  background-color: #f2f2f2;
+}
+
+.spring_field .mep-default-sidrbar-price-seat .setas-info {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 100px;
+  text-align: center;
+}
+
+.spring_field .mep-default-sidrbar-calender-btn {
+  width: 100%;
+  margin-top: 20px;
 }
 
 .spring_field ul#mep_add_calender_links {
@@ -5096,7 +5484,7 @@ Vanilla theme css by ariful
     flex-direction: column;
   }
 }
-@media only screen and (min-width: 10px) and (min-width: 540px) {
+@media only screen and (min-width: 10px) and (min-width: 1024px) {
   .mep_smart_theme .mpwem_content_area {
     margin: 40px 0 0 0;
     flex-direction: row;
@@ -5108,227 +5496,19 @@ Vanilla theme css by ariful
     width: 100%;
   }
 }
-@media only screen and (min-width: 10px) and (min-width: 540px) {
+@media only screen and (min-width: 10px) and (min-width: 1024px) {
   .mep_smart_theme .mpwem_left_content {
     max-width: 70%;
     margin-right: 2%;
   }
 }
 @media only screen and (min-width: 10px) {
-  .mep_smart_theme .mpwem_left_content .mep-timeline {
-    position: relative;
-    padding: 20px 0;
-    list-style: none;
-  }
-  .mep_smart_theme .mpwem_left_content .mep-timeline .item {
-    display: flex;
-    align-items: flex-start;
-    margin-bottom: 20px;
-    position: relative;
-    padding-left: 40px;
-  }
-  .mep_smart_theme .mpwem_left_content .mep-timeline .item:last-child {
-    margin-bottom: 0;
-  }
-  .mep_smart_theme .mpwem_left_content .mep-timeline .item:last-child .icon::after {
-    display: none;
-  }
-  .mep_smart_theme .mpwem_left_content .mep-timeline .item .icon {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background-color: #fff;
-    border: 1px solid var(--mpev-primary);
-    color: var(--mpev-primary);
-    font-weight: bold;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-size: var(--button_fs);
-    font-weight: var(--fw-medium);
-    z-index: 1;
-  }
-  .mep_smart_theme .mpwem_left_content .mep-timeline .item .icon::after {
-    content: "";
-    position: absolute;
-    left: 50%;
-    top: 100%;
-    width: 1px;
-    height: calc(100% + 50px);
-    background-color: var(--mpev-primary);
-    z-index: -1;
-    transform: translateX(-50%);
-  }
-  .mep_smart_theme .mpwem_left_content .mep-timeline .item .content {
-    padding-left: 10px;
-    position: relative;
-    margin-top: 3px;
-  }
-  .mep_smart_theme .mpwem_left_content .mep-timeline .item .content .title {
-    font-size: 16px;
-    font-weight: bold;
-    margin-bottom: 5px;
-    color: #333;
-  }
-  .mep_smart_theme .mpwem_left_content .mep-timeline .item .content .details {
-    font-size: 14px;
-    color: #666;
-  }
-  .mep_smart_theme .mpwem_left_content .date-time-area {
-    display: flex;
-    justify-content: space-around;
-    align-items: center;
-    flex-direction: column;
-    margin: 20px 0;
-    padding: 10px 0;
-    gap: 20px;
-  }
-  .mep_smart_theme .mpwem_left_content .date-time-area label, .mep_smart_theme .mpwem_left_content .date-time-area .mpwem_time_area {
-    width: 100%;
-    position: relative;
-  }
-  .mep_smart_theme .mpwem_left_content .date-time-area label input, .mep_smart_theme .mpwem_left_content .date-time-area label select, .mep_smart_theme .mpwem_left_content .date-time-area .mpwem_time_area input, .mep_smart_theme .mpwem_left_content .date-time-area .mpwem_time_area select {
-    border: 1px solid var(--mpev-primary);
-    padding: 15px;
-    padding-left: 30px;
-  }
-  .mep_smart_theme .mpwem_left_content .date-time-area label input:focus, .mep_smart_theme .mpwem_left_content .date-time-area label select:focus, .mep_smart_theme .mpwem_left_content .date-time-area .mpwem_time_area input:focus, .mep_smart_theme .mpwem_left_content .date-time-area .mpwem_time_area select:focus {
-    background-color: #fff;
-    box-shadow: 0 0 5px var(--mpev-primary);
-    color: var(--mpev-primary);
-  }
-  .mep_smart_theme .mpwem_left_content .date-time-area label select.formControl, .mep_smart_theme .mpwem_left_content .date-time-area .mpwem_time_area select.formControl {
-    background: none;
-  }
-  .mep_smart_theme .mpwem_left_content .date-time-area label span, .mep_smart_theme .mpwem_left_content .date-time-area .mpwem_time_area span {
-    display: none;
-  }
-  .mep_smart_theme .mpwem_left_content .date-time-area label i, .mep_smart_theme .mpwem_left_content .date-time-area .mpwem_time_area i {
-    position: absolute;
-    z-index: 1;
-    top: 50%;
-    left: 10px;
-    color: var(--mpev-primary);
-    transform: translateY(-50%);
-  }
-  .mep_smart_theme .mpwem_left_content .date-time-area label {
-    position: relative;
-    font-family: "Font Awesome 5 Free";
-  }
-  .mep_smart_theme .mpwem_left_content .date-time-area label::after {
-    content: "\f078";
-    position: absolute;
-    top: 50%;
-    right: 10px;
-    transform: translateY(-50%);
-    color: var(--mpev-primary);
-  }
-  .mep_smart_theme .mpwem_left_content .mpwem_booking_panel .mpwem_ticket_type {
-    border: 1px solid var(--mpev-primary);
-    padding: 15px;
-  }
-  .mep_smart_theme .mpwem_left_content .mpwem_booking_panel .mpwem_ticket_type ._divider {
-    margin: 5px;
-  }
-  .mep_smart_theme .mpwem_left_content .mpwem_booking_panel .mpwem_ticket_type .mep_ticket_item h6 {
-    font-size: 20px;
-    font-weight: 700px;
-    margin-bottom: 10px;
-  }
-  .mep_smart_theme .mpwem_left_content .mpwem_booking_panel .mpwem_ticket_type .mep_ticket_item .groupContent {
-    border: 0;
-    background-color: transparent;
-    max-width: 120px;
-  }
-  .mep_smart_theme .mpwem_left_content .mpwem_booking_panel .mpwem_ticket_type .mep_ticket_item .incQty {
-    background-color: var(--mpev-primary);
-    color: #fff;
-    border-radius: 5px;
-    margin-left: 2px;
-    min-width: 36px;
-  }
-  .mep_smart_theme .mpwem_left_content .mpwem_booking_panel .mpwem_ticket_type .mep_ticket_item .inputIncDec {
-    border-radius: 0;
-    background-color: var(--mpev-secondary);
-    box-shadow: 0 0 0;
-    border: 1px solid #dddddd;
-    padding: 0;
-  }
-  .mep_smart_theme .mpwem_left_content .mpwem_booking_panel .mpwem_ticket_type .mep_ticket_item .decQty {
-    background-color: #ff4242;
-    color: #fff;
-    border-radius: 5px;
-    margin-right: 2px;
-    min-width: 36px;
-  }
-  .mep_smart_theme .mpwem_left_content .mpwem_booking_panel .mpwem_ticket_type ._divider {
-    margin: 15px 0;
-  }
-  .mep_smart_theme .mpwem_left_content .mpwem_booking_panel .mpwem_ex_service h6 {
-    margin-bottom: 10px;
-    font-size: 20px;
-  }
-  .mep_smart_theme .mpwem_left_content .mpwem_booking_panel .mpwem_ex_service h4 {
-    margin-bottom: 10px;
-    font-size: var(--fs_h2);
-    font-weight: var(--fw-bold);
-  }
-  .mep_smart_theme .mpwem_left_content .mpwem_booking_panel .mpwem_ex_service [class*=_dLayout] {
-    border: 1px solid var(--mpev-primary);
-    padding: 15px;
-  }
-  .mep_smart_theme .mpwem_left_content .mpwem_booking_panel .mpwem_ex_service .incQty {
-    background-color: var(--mpev-primary);
-    color: #fff;
-    border-radius: 5px;
-    padding: 0;
-    margin-left: 2px;
-    min-width: 36px;
-  }
-  .mep_smart_theme .mpwem_left_content .mpwem_booking_panel .mpwem_ex_service .groupContent {
-    border: 0;
-    background-color: transparent;
-    max-width: 120px;
-  }
-  .mep_smart_theme .mpwem_left_content .mpwem_booking_panel .mpwem_ex_service .inputIncDec, .mep_smart_theme .mpwem_left_content .mpwem_booking_panel .mpwem_ex_service .formControl {
-    border-radius: 0;
-    background-color: var(--mpev-secondary);
-    box-shadow: 0 0 0;
-    border: 1px solid #dddddd;
-  }
-  .mep_smart_theme .mpwem_left_content .mpwem_booking_panel .mpwem_ex_service .decQty {
-    background-color: #ff4242;
-    color: #fff;
-    border-radius: 5px;
-    margin-right: 2px;
-    min-width: 36px;
-  }
-  .mep_smart_theme .mpwem_left_content .mpwem_form_submit_area ._mpBtn {
-    color: var(--mpev-primary);
-    border: 1px solid var(--mpev-primary);
-    border-radius: 5px;
-    padding: 13px 25px;
-    font-weight: bold;
-  }
-  .mep_smart_theme .mpwem_left_content .mpwem_form_submit_area ._mpBtn .mpwem_total {
-    color: var(--mpev-primary);
-  }
-  .mep_smart_theme .mpwem_left_content .mpwem_form_submit_area button[type=submit] {
-    background-color: var(--mpev-primary);
-    border: 1px solid var(--mpev-primary);
-  }
-  .mep_smart_theme .mpwem_left_content .mpwem_form_submit_area .mpStyle [class*=_themeButton] {
-    padding: 10px;
-  }
   .mep_smart_theme .mpwem_right_content {
     max-width: 100%;
     width: 100%;
   }
 }
-@media only screen and (min-width: 10px) and (min-width: 540px) {
+@media only screen and (min-width: 10px) and (min-width: 1024px) {
   .mep_smart_theme .mpwem_right_content {
     max-width: 30%;
     width: 100%;
@@ -5367,7 +5547,7 @@ Vanilla theme css by ariful
   }
   .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .date_widgets button, .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .location_widgets button {
     background-color: #fff;
-    padding: 15px;
+    padding: 13px 15px !important;
     border: 1px solid var(--mpev-primary);
     margin-top: 20px;
     color: var(--mpev-primary);
@@ -5388,6 +5568,8 @@ Vanilla theme css by ariful
     list-style-type: disc;
     padding-left: 22px;
     margin-bottom: 20px;
+    max-height: 315px;
+    overflow: hidden;
   }
   .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .date_widgets .date-lists ul li {
     margin-bottom: 20px;
@@ -5437,7 +5619,7 @@ Vanilla theme css by ariful
     background-color: #fff;
     color: var(--mpev-primary) !important;
     height: auto !important;
-    padding: 10px !important;
+    padding: 5px 10px !important;
     border-radius: var(--dBR) !important;
     border: 1px solid var(--mpev-primary);
     margin: 0 !important;
@@ -5459,16 +5641,15 @@ Vanilla theme css by ariful
   }
   .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .share_widgets {
     text-align: center;
-    padding: 30px;
+    padding: 15px;
   }
   .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .share_widgets .mep-social-share {
-    margin-top: 25px;
+    margin-top: 10px;
   }
   .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .share_widgets .mep-social-share li {
     margin: 7px;
   }
   .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .share_widgets .mep-social-share li a {
-    background-color: var(--mpev-primary);
     color: #fff;
   }
   .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .share_widgets .icons {
@@ -5496,10 +5677,10 @@ Vanilla theme css by ariful
     background-color: #fff;
     color: var(--mpev-primary) !important;
     height: auto !important;
-    padding: 15px !important;
+    padding: 13px 15px !important;
     border-radius: var(--dBR) !important;
     border: 1px solid var(--mpev-primary);
-    margin-top: 20px;
+    margin-top: 0;
     color: var(--mpev-primary);
     font-size: var(--button_fs);
     font-weight: var(--fw-medium);
@@ -5561,7 +5742,7 @@ Vanilla theme css by ariful
     border-radius: 10px;
   }
 }
-@media only screen and (min-width: 10px) and (min-width: 540px) {
+@media only screen and (min-width: 10px) and (min-width: 1024px) {
   .mep_smart_theme .faq_area {
     padding: 40px;
     margin: 40px auto;
@@ -5575,7 +5756,7 @@ Vanilla theme css by ariful
     line-height: 30px;
   }
 }
-@media only screen and (min-width: 10px) and (min-width: 540px) {
+@media only screen and (min-width: 10px) and (min-width: 1024px) {
   .mep_smart_theme .faq_area .desc {
     width: 36vw;
     margin: auto;
@@ -5592,7 +5773,7 @@ Vanilla theme css by ariful
     gap: 10px;
   }
 }
-@media only screen and (min-width: 10px) and (min-width: 540px) {
+@media only screen and (min-width: 10px) and (min-width: 1024px) {
   .mep_smart_theme .faq_area .faq_items {
     margin-top: 40px;
     flex-direction: row;
@@ -5607,7 +5788,7 @@ Vanilla theme css by ariful
     border-radius: 10px;
   }
 }
-@media only screen and (min-width: 10px) and (min-width: 540px) {
+@media only screen and (min-width: 10px) and (min-width: 1024px) {
   .mep_smart_theme .faq_area .faq_items .item {
     width: 49%;
   }
@@ -5889,188 +6070,67 @@ Vanilla theme css by ariful
     font-size: 25px;
   }
 }
-.mep-kera-theme .tabLists {
-  display: flex;
-  flex-wrap: wrap;
-  flex-direction: column;
-  justify-content: center;
-  margin: 20px auto;
-  gap: 20px;
+.mpwem_slider_area {
+  margin-top: 0;
 }
-@media (min-width: 768px) {
-  .mep-kera-theme .tabLists {
-    flex-direction: row;
-  }
-}
-.mep-kera-theme .tabLists .mep-pricing-card {
-  display: flex;
-  flex-direction: column;
-  border-radius: 10px;
-  width: 100%;
-}
-@media (min-width: 768px) {
-  .mep-kera-theme .tabLists .mep-pricing-card {
-    width: 32%;
-  }
-}
-.mep-kera-theme .tabLists .mep-pricing-card[data-tabs-target] {
-  display: block;
-  position: relative;
-  cursor: pointer;
-  padding: 20px;
-  background-color: #650c7a;
-  color: #fff;
-  font-weight: var(--fw-medium);
-  transition: 0.5ms ease-in-out;
-}
-.mep-kera-theme .tabLists .mep-pricing-card[data-tabs-target].active {
-  background-color: #ed2a92;
-}
-.mep-kera-theme .tabLists .mep-pricing-card .mep-pricing-header {
-  text-align: center;
-}
-.mep-kera-theme .tabLists .mep-pricing-card .mep-pricing-header h2 {
-  color: #fff;
-  font-size: 35px;
-}
-.mep-kera-theme .tabLists .mep-pricing-card .mep-pricing-header h3 {
-  color: #fff;
-}
-.mep-kera-theme .tabLists .mep-pricing-card .mep-ticket-type {
-  background-color: #4f0b5e;
-  padding: 20px 10px;
-  margin: 30px auto;
-  border-radius: 10px;
-}
-.mep-kera-theme .tabLists .mep-pricing-card .mep-ticket-type:last-child {
-  margin-bottom: 0;
-}
-.mep-kera-theme .tabLists .mep-pricing-card .mep-ticket-type h2 {
-  background-color: #ed2a92;
-  color: #fff;
-  text-align: center;
-  padding: 12px;
-  font-size: 18px;
-  font-weight: bold;
-  border-radius: 30px;
-  margin: 20px;
-}
-.mep-kera-theme .tabLists .mep-pricing-card .mep-ticket-type .label {
-  color: #ed2a92;
-  margin-bottom: 10px;
-}
-.mep-kera-theme .tabLists .mep-pricing-card .mep-ticket-type h3 {
-  margin: 20px;
-  text-align: center;
-  font-size: 16px;
-  color: #fff;
-}
-.mep-kera-theme .tabLists .mep-pricing-card .mep-ticket-type p {
-  text-align: center;
-  font-size: 14px;
-  margin: 15px 0;
-  color: #fff;
-}
-.mep-kera-theme .tabLists .mep-pricing-card .mep-ticket-type ul {
-  list-style-position: inside; /* Move bullets inside */
-  text-align: center; /* Center text and bullet together */
-  padding: 0; /* Remove left padding */
-  margin: 0; /* Remove default margin */
-}
-.mep-kera-theme .tabLists .mep-pricing-card .mep-ticket-type ul li {
-  margin: 10px 0;
-}
-.mep-kera-theme .tabLists .mep-pricing-card .mep-ticket-type ul li::before {
-  content: "•";
-  margin-right: 5px;
-}
-@media (min-width: 768px) {
-  .mep-kera-theme .tabLists .mep-pricing-card.active::after {
-    font-family: "Font Awesome 6 Free"; /* important */
-    content: "\f0d7";
-    font-size: 60px;
-    position: absolute;
-    bottom: -38px;
-    left: 50%;
-    transform: translateX(-50%);
-    margin-left: 8px;
-    color: #ed2a92;
-    transition: transform 0.3s ease;
-  }
-}
-.mep-kera-theme .tabsContent {
-  margin: 20px auto;
-  padding: 0px;
-  background-color: #660c7a;
-  border: 2px solid #ed2a92;
-}
-.mep-kera-theme .tabsContent h2 {
-  text-align: center;
+
+.mep-event-faq-part {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
   margin-bottom: 20px;
+  box-shadow: 0 0px 1px rgba(0, 0, 0, 0.08);
 }
-.mep-kera-theme .tabsContent .data-label {
+.mep-event-faq-part .faq-title-section {
+  background: linear-gradient(135deg, #f7f7f7, #f7f7f7);
+  color: #333;
+  padding: 20px 25px;
+  font-size: 18px;
+  font-weight: 600;
+}
+.mep-event-faq-part .faq-body .mep-event-faq-set {
+  margin-bottom: 10px;
+  border-radius: 8px;
+  overflow: hidden;
+  border-bottom: 1px solid #eaeaea;
+}
+.mep-event-faq-part .faq-body .mep-event-faq-set:last-child {
+  border-bottom: 0;
+}
+.mep-event-faq-part .faq-body .mep-event-faq-set .faq-question {
+  padding: 18px 25px;
+  background-color: white;
+  font-weight: 600;
+  cursor: pointer;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background-color: #ed2a92;
-  padding: 10px 20px;
-  border-bottom: 1px solid #ed2a92;
+  transition: all 0.3s ease;
+  color: #333;
 }
-.mep-kera-theme .tabsContent .data-label p {
-  color: #fff;
+.mep-event-faq-part .faq-body .mep-event-faq-set .faq-question i {
+  color: #3b5fe2;
+}
+.mep-event-faq-part .faq-body .mep-event-faq-set .mep-event-faq-content {
+  padding: 18px 25px;
+}
+
+.mep-default-map {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 0px 1px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+.mep-default-map .map-title {
+  background: linear-gradient(135deg, #f7f7f7, #f7f7f7);
+  color: #333;
+  padding: 20px 25px;
   font-size: 18px;
-  font-weight: bold;
+  font-weight: 600;
 }
-.mep-kera-theme .tabsContent .mpwem_ticket_type {
-  background-color: #fff;
-  padding: 20px;
-}
-.mep-kera-theme .tabsContent .mpwem_ticket_type h6 {
-  font-weight: bold;
-  margin-bottom: 10px;
+.mep-default-map .display-map {
+  padding: 20px 25px;
 }
 
 /*# sourceMappingURL=mpwem_style.css.map */
-
-.event-expire-btn {
-  background-color: #6046ff38;
-  color: rgba(0, 0, 0, 0.88);
-  text-align: center;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  border-radius: 8px;
-  font-size: 16px;
-  font-weight: 500;
-  margin: 20px 0;
-  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
-  position: relative;
-  overflow: hidden;
-  transition: all 0.3s ease;
-  border-left: 5px solid var(--mpev-red);
-}
-
-.event-expire-btn::before {
-  content: "\f06a";
-  font-family: "Font Awesome 5 Free";
-  font-weight: 900;
-  font-size: 20px;
-  margin-right: 10px;
-  opacity: 0.9;
-}
-
-.event-expire-btn::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(45deg, 
-    rgba(255, 255, 255, 0.1) 0%, 
-    rgba(255, 255, 255, 0) 60%);
-  z-index: 1;
-  pointer-events: none;
-}
-.mep-kera-theme .tabLists .mep-pricing-card{width: inherit !important;}

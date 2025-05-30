@@ -2,6 +2,7 @@
 // Template Name: Springfield
 
 // Settings Value :::::::::::::::::::::::::::::::::::::::;
+	$event_id           = empty( $event_id ) ? get_the_id() : $event_id;
 $hide_date_details          = mep_get_option('mep_event_hide_date_from_details', 'single_event_setting_sec', 'no');
 $hide_time_details          = mep_get_option('mep_event_hide_time_from_details', 'single_event_setting_sec', 'no');
 $hide_location_details      = mep_get_option('mep_event_hide_location_from_details', 'single_event_setting_sec', 'no');
@@ -14,33 +15,43 @@ $hide_calendar_details      = mep_get_option('mep_event_hide_calendar_details', 
 $speaker_status             = mep_get_option('mep_enable_speaker_list', 'single_event_setting_sec', 'no');
 $event_date_icon            = mep_get_option('mep_event_date_icon', 'icon_setting_sec', 'far fa-calendar-alt');
 $event_location_icon        = mep_get_option('mep_event_location_icon', 'icon_setting_sec', 'fas fa-map-marker-alt');
-$gallery_image_arr = get_post_meta($event_id,'mep_gallery_images',true) ? get_post_meta($event_id,'mep_gallery_images',true) : [];
 ?>
-<div class="mep-default-theme spring_field">
+<div class="mpStyle mep-default-theme spring_field">
     <div class="mep_flex">
         <div class="spring_field_banner">
-        <?php if(is_array($gallery_image_arr) && count($gallery_image_arr) > 1){ ?>
-            <div class="mpStyle">
-                    <?php            
-                        do_action( 'add_mp_custom_slider', $event_id, 'mep_gallery_images' );             
-                    ?>
-                </div>
-            <?php }else{ ?>
-            <div class="mep-default-feature-image">
-                    <?php 
-                        do_action('mep_event_thumbnail', $event_id); ?>
-                </div>
-            <?php } ?>
+            <div class="_mT mpwem_slider_area">
+		        <?php do_action( 'add_mp_custom_slider', $event_id, 'mep_gallery_images' ); ?>
+            </div>
         </div>
         <div class="spring_field_banner_right">
             <div class="mep-default-title">
                 <?php do_action('mep_event_title', $event_id); ?>
             </div>
-            <?php if ($hide_org_by_details == 'no') { ?>
+            <?php if ($hide_org_by_details == 'no' && has_term('','mep_org',$event_id)) : ?>
                 <div class="mep-default-sidrbar-meta">
-                    <?php do_action('mep_event_organizer', $event_id); ?>
+                    <?php 
+                    // Get organizer terms to identify primary organizer
+                    $org_terms = get_the_terms($event_id, 'mep_org');
+                    $links = array();
+                    if ($org_terms && !is_wp_error($org_terms) && count($org_terms) > 0) :?>
+                            <div class="mep-org-details">
+                                <div class="org-name">
+                                    <div><?php echo _e('Organized By:'); ?></div>
+                                    <?php foreach ($org_terms as $index => $org): ?>
+                                        <a href="<?php echo get_term_link($org->term_id); ?>">
+                                            <?php echo esc_html($org->name); ?>
+                                        </a><?php if ($index < count($org_terms) - 1): ?>|<?php endif; ?>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                        <?php else :
+                            // If no custom organizer display is needed, use the default
+                            do_action('mep_event_organizer', $event_id);
+                    endif;
+                    ?>
                 </div>
-            <?php } ?>
+            <?php endif; ?>
+            
             <?php if ($hide_total_seat_details == 'no') { ?>
                 <div class="mep-default-sidrbar-price-seat">
                     <div class="df-seat"><?php do_action('mep_event_seat', $event_id); ?></div>
@@ -99,7 +110,12 @@ $gallery_image_arr = get_post_meta($event_id,'mep_gallery_images',true) ? get_po
         </div>
     </div>
     <div class="mep-default-feature-cart-sec">
-        <?php do_action('mep_add_to_cart', $event_id) ?>
+	    <?php
+		    $all_dates          = MPWEM_Functions::get_dates( $event_id );
+		    $all_times          = MPWEM_Functions::get_times( $event_id, $all_dates );
+		    $upcoming_date      = MPWEM_Functions::get_upcoming_date_time( $event_id, $all_dates, $all_times );
+		    do_action( 'mpwem_registration', $event_id, $all_dates, $all_times, $upcoming_date );
+	    ?>
     </div>
 	<?php do_action( 'mpwem_template_footer', $event_id ); ?>
 </div>

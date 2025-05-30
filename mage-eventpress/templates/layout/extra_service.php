@@ -14,14 +14,15 @@
 	$total_ticket = MPWEM_Functions::get_total_ticket($event_id);
 	$total_reserve = MPWEM_Functions::get_reserve_ticket($event_id);
 	$total_available = $total_ticket - ($total_sold + $total_reserve);
+	$mep_available_seat = MP_Global_Function::get_post_info( $event_id, 'mep_available_seat', 'on' );
 	if ($total_available > 0) {
 		$ex_services = MP_Global_Function::get_post_info($event_id, 'mep_events_extra_prices', []);
 		//echo '<pre>'; print_r($ex_services); echo '</pre>';
 		$count = 0;
 		if (sizeof($ex_services) > 0) { ?>
             <div class="mpwem_ex_service ">
-                <h4><?php esc_html_e('Extra Service', 'mage-eventpress'); ?></h4>
-                <div class="_dLayout">
+				<div class="card-header"><?php esc_html_e('Extra Service', 'mage-eventpress'); ?></div>
+                <div class="card-body">
 					<?php foreach ($ex_services as $ticket_type) {
 						$ticket_name = array_key_exists('option_name', $ticket_type) ? $ticket_type['option_name'] : '';
 						$ticket_price = array_key_exists('option_price', $ticket_type) ? $ticket_type['option_price'] : 0;
@@ -30,23 +31,30 @@
 						$ticket_input_type = array_key_exists('option_qty_type', $ticket_type) ? $ticket_type['option_qty_type'] : 'inputbox';
 						$available = MPWEM_Functions::get_available_ex_service($event_id, $ticket_name, $date, $ticket_type);
 						if ($ticket_name && $ticket_qty > 0) {
+							$input_data=[];
 							$input_data['name'] = 'event_extra_service_qty[]';
 							$input_data['price'] = $ticket_price;
 							$input_data['available'] = $available;
 							$input_data['type'] = $ticket_input_type;
-							$count++;
-							if ($count > 1) { ?>
-                                <div class="_divider"></div>
-							<?php } ?>
-                            <div class="justifyBetween">
-                                <div class="">
-                                    <h6><?php echo esc_html($ticket_name); ?></h6>
-                                    <input type="hidden" name="event_extra_service_name[]" value="<?php echo esc_attr($ticket_name); ?>" />
-                                </div>
-                                <div class="">
-                                    <h6 class="_textCenter"><?php echo wc_price($ticket_price); ?></h6>
-									<?php MP_Custom_Layout::qty_input($input_data); ?>
-                                </div>
+							$count++;?>
+                            <div class="mep_ticket_item">
+								<div class="ticket-data">
+									<div class="ticket-info">
+										<div class="ticket-name"><?php echo esc_html($ticket_name); ?></div>
+										<input type="hidden" name="event_extra_service_name[]" value="<?php echo esc_attr($ticket_name); ?>" />
+										<?php if ( $mep_available_seat == 'on' ) { ?>
+											<div class="ticket-remaining xtra-item-left <?php echo $available <= 10 ? 'remaining-low' : 'remaining-high'; ?>">
+												<?php echo esc_html( max( $available, 0 ) ) . __( ' Tickets remaining' ); ?>
+											</div>
+										<?php } ?>
+									</div>
+									<div class="quantity-control">
+										<?php MP_Custom_Layout::qty_input($input_data); ?>
+									</div>
+									<div class="ticket-price">
+										<?php echo wc_price($ticket_price); ?>
+									</div>
+								</div>
                             </div>
 							<?php
 						}

@@ -17,13 +17,13 @@ if( ! class_exists('MPWEM_Faq_Settings')){
             add_action('admin_enqueue_scripts',  [$this, 'custom_editor_enqueue']);
             // save faq data
             add_action('wp_ajax_mep_faq_data_save', [$this, 'save_faq_data_settings']);
-            
+	        add_action('wp_ajax_nopriv_mep_faq_data_save', [$this, 'save_faq_data_settings']);
             // update faq data
             add_action('wp_ajax_mep_faq_data_update', [$this, 'faq_data_update']);
-            
+	        add_action('wp_ajax_nopriv_mep_faq_data_update', [$this, 'faq_data_update']);
             // mep_delete_faq_data
             add_action('wp_ajax_mep_faq_delete_item', [$this, 'faq_delete_item']);
-            // add_action('wp_ajax_nopriv_mep_faq_delete_item', [$this, 'faq_delete_item']);
+             add_action('wp_ajax_nopriv_mep_faq_delete_item', [$this, 'faq_delete_item']);
 
             add_action( 'save_post', [$this,'data_save'] );
         }
@@ -112,18 +112,18 @@ if( ! class_exists('MPWEM_Faq_Settings')){
                     <div class="mep-modal-content">
                         <span class="mep-modal-close"><i class="fas fa-times"></i></span>
                         <div class="title">
-                            <h3><?php _e('Add F.A.Q.','mage-eventpress'); ?></h3>
+                            <h3><?php _e('Frequently Asked Questions','mage-eventpress'); ?></h3>
                             <div id="mep-faq-msg"></div>
                         </div>
                         <div class="content">
                             <label>
-                                <?php _e('Add Title','mage-eventpress'); ?>
+                                <?php _e('Question','mage-eventpress'); ?>
                                 <input type="hidden" name="mep_post_id" value="<?php echo $post_id; ?>"> 
                                 <input type="text"   name="mep_faq_title"> 
                                 <input type="hidden" name="mep_faq_item_id">
                             </label>
                             <label>
-                                <?php _e('Add Content','mage-eventpress'); ?>
+                                <?php _e('Answere','mage-eventpress'); ?>
                             </label>
                             <?php 
                                 $content = ''; 
@@ -135,7 +135,7 @@ if( ! class_exists('MPWEM_Faq_Settings')){
                                 );
                                 wp_editor( $content, $editor_id, $settings );
                             ?>
-                            <div class="mT"></div>
+                            <div style="margin-top: 10px;"></div>
                             <div class="mep_faq_save_buttons">
                                 <p><button id="mep_faq_save" class="button button-primary button-large"><?php _e('Save','mage-eventpress'); ?></button> <button id="mep_faq_save_close" class="button button-primary button-large">save close</button><p>
                             </div>
@@ -157,7 +157,8 @@ if( ! class_exists('MPWEM_Faq_Settings')){
                         <div class="mep-faq-item mpStyle" data-id="<?php echo esc_attr($key); ?>">
                             <section class="faq-header" data-collapse-target="#faq-content-<?php echo esc_attr($key); ?>">
                                 <label class="mpev-label">
-                                    <p><?php echo esc_html($value['mep_faq_title']); ?></p>
+                                    <p><b><?php _e('Question:','mage-eventpress'); ?></b> <span class="question"><?php echo esc_html($value['mep_faq_title']); ?></span></p>
+                                    <input type="hidden" name='mep_faq_title_raw[]' value='<?php echo esc_html($value['mep_faq_title']); ?>' class="hidden">
                                     <div class="faq-action">
                                         <span class="" ><i class="fas fa-eye"></i></span>
                                         <span class="mep-faq-item-edit" data-modal="mep-faq-item-new" data-faq-id="<?php echo esc_attr($key); ?>" data-faq-title="<?php echo esc_attr($value['mep_faq_title']); ?>" data-faq-content="<?php echo esc_attr(htmlspecialchars_decode($value['mep_faq_content'])); ?>"><i class="fas fa-edit"></i></span>
@@ -168,6 +169,8 @@ if( ! class_exists('MPWEM_Faq_Settings')){
                             <section class="faq-content mB" data-collapse="#faq-content-<?php echo esc_attr($key); ?>">
                                 <?php echo wp_kses_post(wpautop(wp_kses_post($value['mep_faq_content']))); ?>
                             </section>
+                            <textarea style='display:none;' name="mep_faq_details_raw[]" id=""><?php echo wp_kses_post(wpautop(wp_kses_post($value['mep_faq_content']))); ?></textarea>
+
                         </div>
                     <?php
                 endforeach;
@@ -288,7 +291,37 @@ if( ! class_exists('MPWEM_Faq_Settings')){
 
         public function data_save( $post_id ) {
             global $wpdb;
+            if (
+                !isset($_POST['mep_event_ticket_type_nonce']) ||
+                !wp_verify_nonce($_POST['mep_event_ticket_type_nonce'], 'mep_event_ticket_type_nonce')
+            ) {
+                return;
+            }
+
+            if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) {
+                return;
+            }
+
+            if (!current_user_can('edit_post', $post_id)) {
+                return;
+            }
             if ( get_post_type( $post_id ) == 'mep_events' ) {
+
+                $title   = isset($_POST['mep_faq_title_raw']) ? (array) $_POST['mep_faq_title_raw'] : array();
+                $details = isset($_POST['mep_faq_details_raw']) ? (array) $_POST['mep_faq_details_raw'] : array();
+
+                $combined = array();
+
+                foreach ($title as $index => $value) {
+                    if (isset($details[$index]) && trim($value) !== '') {
+                        $combined[] = array(
+                            'mep_faq_title'   => sanitize_text_field($value),
+                            'mep_faq_content' => sanitize_textarea_field($details[$index])
+                        );
+                    }
+                }
+
+                update_post_meta($post_id, 'mep_event_faq', $combined);
                 $faq_description    = isset( $_POST['mep_faq_description'] ) ? sanitize_text_field($_POST['mep_faq_description']) : '';
                 update_post_meta( $post_id, 'mep_faq_description', $faq_description );
             }
