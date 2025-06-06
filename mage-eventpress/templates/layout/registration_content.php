@@ -26,7 +26,10 @@
 				<?php require apply_filters( 'mpwem_ticket_file', MPWEM_Functions::template_path( 'layout/ticket_type.php' ), $event_id ); ?>
 				<?php do_action( 'mpwem_single_attendee', $event_id ); ?>
 				<?php require MPWEM_Functions::template_path( 'layout/extra_service.php' ); ?>
-				<?php require MPWEM_Functions::template_path( 'layout/add_to_cart.php' ); ?>
+				<div class="mpwem_form_submit_area">
+					<?php do_action( 'mep_add_term_condition', $event_id ); ?>
+					<?php require MPWEM_Functions::template_path( 'layout/add_to_cart.php' ); ?>
+				</div>
             </div>
 			<?php
 		} else {

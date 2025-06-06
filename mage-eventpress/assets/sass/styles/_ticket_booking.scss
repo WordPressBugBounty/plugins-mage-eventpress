@@ -11,9 +11,7 @@
   font-size: 18px;
   font-weight: 600;
 }
-@mixin card-body {
-  padding: 20px 25px;
-}
+
 @mixin ticket-data{
   display: flex;
   justify-content: space-between;
@@ -63,9 +61,7 @@
 }
 
 @mixin summary{
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+   
     padding: 25px;
     background-color: #f8f9fa;
     border-top: 1px solid #eaeaea;
@@ -93,6 +89,10 @@
         border: 1px solid var(--mpev-base);
         position: relative;
         z-index: 1;
+        flex-direction: column;
+        @media (min-width:1024px) {
+            flex-direction: row;
+        }
         .ticket-title{
             margin: 0;
             padding: 0;
@@ -103,9 +103,14 @@
     }
     .date-time-area{
         display: flex;
-        justify-content: end;
-        align-items: center;
+        flex-direction: column;
+        align-items: start;
         gap: 20px;
+        @media (min-width:1024px) {
+            flex-direction: row;
+            justify-content: end;
+            align-items: center;
+        }
         label{
             display: flex;
             flex-direction: row;
@@ -124,6 +129,9 @@
         .formControl{
             border-radius: 5px;
             padding:10px 15px;
+            @media (max-width:600px) {
+                width: 100%;
+            }
         }
     }
     .mpwem_booking_panel{
@@ -134,7 +142,10 @@
                 @include card-header;
             }
             .card-body{
-                @include card-body;
+                padding: 10px;
+                @media (min-width:600px) {
+                    padding: 20px 25px;
+                }
                 .mep_ticket_item{
                     display: flex;
                     flex-direction: column;
@@ -150,7 +161,10 @@
                             gap: 10px;
                         }    
                         .ticket-info{
-                            flex: 0 0 49%;
+                            flex: 0 0 100%;
+                            @media (min-width:400px) {
+                                flex: 0 0 48%;
+                            }
                             .ticket-name {
                                 font-size: 16px;
                                 font-weight: 600;
@@ -183,6 +197,9 @@
                             .qtyIncDec{
                                 @include quantity-control;
                                 max-width: 200px;
+                                @media(max-width:1024px) {
+                                    margin:0;
+                                }
                                 .decQty{
                                     @include qty-btn;
                                 }
@@ -207,6 +224,29 @@
                         border-radius:0 0 12px 12px;
                         .mep_form_item{
                             padding: 10px;
+                            .mp_form_item {
+                                label{
+                                    flex-direction: column;
+                                    align-items: start;
+                                    span{
+                                            width: 100%;
+                                        }
+                                        .formControl{
+                                            width: 100%;
+                                            margin-top: 5px;
+                                        }
+                                    @media (min-width:600px) {
+                                        flex-direction: row;
+                                        span{
+                                            width: 50%;
+                                        }
+                                        .formControl{
+                                            width: 50%;
+                                        }
+                                    }
+                                    
+                                }
+                            }
                         }
                     } 
                 }
@@ -217,6 +257,18 @@
         }
         .mpwem_form_submit_area{
             @include summary;
+            .term_condition_area{
+                background:none;
+                a{
+                    color: #333;
+                    font-weight: normal;
+                }
+            }
+            .mpwem_summery{
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
             .total {
                 font-size: 18px;
                 font-weight: 600;

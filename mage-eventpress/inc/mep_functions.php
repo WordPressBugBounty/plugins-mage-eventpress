@@ -1436,6 +1436,19 @@
 			return $the_file_path;
 		}
 	}
+
+	if ( ! function_exists( 'mep_template_file_url' ) ) {
+		function mep_template_file_url( $file_name ) {
+			$template_path = get_stylesheet_directory() . '/mage-events/';
+			$default_path  = MEP_URL . 'templates/';
+			$thedir        = is_dir( $template_path ) ? $template_path : $default_path;
+			$themedir      = $thedir . $file_name;
+			$the_file_path = locate_template( array( 'mage-events/' . $file_name ) ) ? $themedir : $default_path . $file_name;
+
+			return $the_file_path;
+		}
+	}
+
 	if ( ! function_exists( 'mep_template_part_file_path' ) ) {
 		function mep_template_part_file_path( $file_name ) {
 			$the_file_path = plugin_dir_path( __DIR__ ) . 'inc/template-prts/' . $file_name;
@@ -1507,16 +1520,16 @@
 		function mep_add_to_google_calender_link( $pid ) {
 			$event       = get_post( $pid );
 			$event_meta  = get_post_custom( $pid );
-			$start_date  = ! empty( get_post_meta( $pid, 'event_start_date', true ) ) ? get_post_meta( $pid, 'event_start_date', true ) : "";
-			$start_time  = ! empty( get_post_meta( $pid, 'event_start_time', true ) ) ? get_post_meta( $pid, 'event_start_time', true ) : "";
-			$end_date    = ! empty( get_post_meta( $pid, 'event_end_date', true ) ) ? get_post_meta( $pid, 'event_end_date', true ) : "";
-			$end_time    = ! empty( get_post_meta( $pid, 'event_end_time', true ) ) ? get_post_meta( $pid, 'event_end_time', true ) : "";
-			$venue       = ! empty( get_post_meta( $pid, 'mep_location_venue', true ) ) ? get_post_meta( $pid, 'mep_location_venue', true ) : "";
-			$street      = ! empty( get_post_meta( $pid, 'mep_street', true ) ) ? get_post_meta( $pid, 'mep_street', true ) : "";
-			$city        = ! empty( get_post_meta( $pid, 'mep_city', true ) ) ? get_post_meta( $pid, 'mep_city', true ) : "";
-			$state       = ! empty( get_post_meta( $pid, 'mep_state', true ) ) ? get_post_meta( $pid, 'mep_state', true ) : "";
-			$postcode    = ! empty( get_post_meta( $pid, 'mep_postcode', true ) ) ? get_post_meta( $pid, 'mep_postcode', true ) : "";
-			$country     = ! empty( get_post_meta( $pid, 'mep_country', true ) ) ? get_post_meta( $pid, 'mep_country', true ) : "";
+			$start_date  = ! empty( get_post_meta( $pid, 'event_start_date', true ) ) ? esc_html(get_post_meta( $pid, 'event_start_date', true )) : "";
+			$start_time  = ! empty( get_post_meta( $pid, 'event_start_time', true ) ) ? esc_html(get_post_meta( $pid, 'event_start_time', true )) : "";
+			$end_date    = ! empty( get_post_meta( $pid, 'event_end_date', true ) ) ? esc_html(get_post_meta( $pid, 'event_end_date', true )) : "";
+			$end_time    = ! empty( get_post_meta( $pid, 'event_end_time', true ) ) ? esc_html(get_post_meta( $pid, 'event_end_time', true )) : "";
+			$venue       = ! empty( get_post_meta( $pid, 'mep_location_venue', true ) ) ? esc_html(get_post_meta( $pid, 'mep_location_venue', true )) : "";
+			$street      = ! empty( get_post_meta( $pid, 'mep_street', true ) ) ? esc_html(get_post_meta( $pid, 'mep_street', true )) : "";
+			$city        = ! empty( get_post_meta( $pid, 'mep_city', true ) ) ? esc_html(get_post_meta( $pid, 'mep_city', true )) : "";
+			$state       = ! empty( get_post_meta( $pid, 'mep_state', true ) ) ? esc_html(get_post_meta( $pid, 'mep_state', true )) : "";
+			$postcode    = ! empty( get_post_meta( $pid, 'mep_postcode', true ) ) ? esc_html(get_post_meta( $pid, 'mep_postcode', true )) : "";
+			$country     = ! empty( get_post_meta( $pid, 'mep_country', true ) ) ? esc_html(get_post_meta( $pid, 'mep_country', true )) : "";
 			$event_start = $start_date . ' ' . $start_time;
 			$event_end   = $end_date . ' ' . $end_time;
 			$location    = $venue . " " . $street . " " . $city . " " . $state . " " . $postcode . " " . $country;
@@ -1697,6 +1710,7 @@
 			return $theme;
 		}
 	}
+	// depricated event_single_template_list function
 	if ( ! function_exists( 'event_single_template_list' ) ) {
 			function event_single_template_list( $current_theme ) {
 				$themes = mep_event_template_name();
@@ -2080,19 +2094,19 @@
 			if ( $location_sts ) {
 				$org_arr  = get_the_terms( $event_id, 'mep_org' );
 				$org_id   = $org_arr[0]->term_id;
-				$location = get_term_meta( $org_id, 'org_location', true ) ? get_term_meta( $org_id, 'org_location', true ) : '';
-				$street   = get_term_meta( $org_id, 'org_street', true ) ? get_term_meta( $org_id, 'org_street', true ) : '';
-				$city     = get_term_meta( $org_id, 'org_city', true ) ? get_term_meta( $org_id, 'org_city', true ) : '';
-				$state    = get_term_meta( $org_id, 'org_state', true ) ? get_term_meta( $org_id, 'org_state', true ) : '';
-				$zip      = get_term_meta( $org_id, 'org_postcode', true ) ? get_term_meta( $org_id, 'org_postcode', true ) : '';
-				$country  = get_term_meta( $org_id, 'org_country', true ) ? get_term_meta( $org_id, 'org_country', true ) : '';
+				$location = get_term_meta( $org_id, 'org_location', true ) ? esc_html(get_term_meta( $org_id, 'org_location', true )) : '';
+				$street   = get_term_meta( $org_id, 'org_street', true ) ? esc_html(get_term_meta( $org_id, 'org_street', true )) : '';
+				$city     = get_term_meta( $org_id, 'org_city', true ) ? esc_html(get_term_meta( $org_id, 'org_city', true )) : '';
+				$state    = get_term_meta( $org_id, 'org_state', true ) ? esc_html(get_term_meta( $org_id, 'org_state', true )) : '';
+				$zip      = get_term_meta( $org_id, 'org_postcode', true ) ? esc_html(get_term_meta( $org_id, 'org_postcode', true )) : '';
+				$country  = get_term_meta( $org_id, 'org_country', true ) ? esc_html(get_term_meta( $org_id, 'org_country', true )) : '';
 			} else {
-				$location = get_post_meta( $event_id, 'mep_location_venue', true ) ? get_post_meta( $event_id, 'mep_location_venue', true ) : '';
-				$street   = get_post_meta( $event_id, 'mep_street', true ) ? get_post_meta( $event_id, 'mep_street', true ) : '';
-				$city     = get_post_meta( $event_id, 'mep_city', true ) ? get_post_meta( $event_id, 'mep_city', true ) : '';
-				$state    = get_post_meta( $event_id, 'mep_state', true ) ? get_post_meta( $event_id, 'mep_state', true ) : '';
-				$zip      = get_post_meta( $event_id, 'mep_postcode', true ) ? get_post_meta( $event_id, 'mep_postcode', true ) : '';
-				$country  = get_post_meta( $event_id, 'mep_country', true ) ? get_post_meta( $event_id, 'mep_country', true ) : '';
+				$location = get_post_meta( $event_id, 'mep_location_venue', true ) ? esc_html(get_post_meta( $event_id, 'mep_location_venue', true )) : '';
+				$street   = get_post_meta( $event_id, 'mep_street', true ) ? esc_html(get_post_meta( $event_id, 'mep_street', true )) : '';
+				$city     = get_post_meta( $event_id, 'mep_city', true ) ? esc_html(get_post_meta( $event_id, 'mep_city', true )) : '';
+				$state    = get_post_meta( $event_id, 'mep_state', true ) ? esc_html(get_post_meta( $event_id, 'mep_state', true )) : '';
+				$zip      = get_post_meta( $event_id, 'mep_postcode', true ) ? esc_html(get_post_meta( $event_id, 'mep_postcode', true )) : '';
+				$country  = get_post_meta( $event_id, 'mep_country', true ) ? esc_html(get_post_meta( $event_id, 'mep_country', true )) : '';
 			}
 			$location_arr = [ $location, $city ];
 			$content      = implode( ', ', array_filter( $location_arr ) );
@@ -2165,10 +2179,10 @@
 						if ( is_array( $org_arr ) && sizeof( $org_arr ) > 0 ) {
 							$org_id = $org_arr[0]->term_id;
 
-							return get_term_meta( $org_id, 'org_location', true );
+							return esc_html(get_term_meta( $org_id, 'org_location', true ));
 						}
 					} else {
-						return get_post_meta( $event_id, 'mep_location_venue', true );
+						return esc_html(get_post_meta( $event_id, 'mep_location_venue', true ));
 					}
 
 					return null;
@@ -2179,10 +2193,10 @@
 						if ( is_array( $org_arr ) && sizeof( $org_arr ) > 0 ) {
 							$org_id = $org_arr[0]->term_id;
 
-							return get_term_meta( $org_id, 'org_location', true );
+							return esc_html(get_term_meta( $org_id, 'org_location', true ));
 						}
 					} else {
-						return get_post_meta( $event_id, 'mep_location_venue', true );
+						return esc_html(get_post_meta( $event_id, 'mep_location_venue', true ));
 					}
 				}
 				if ( $item_name == 'mep_street' ) {
@@ -2191,10 +2205,10 @@
 						if ( is_array( $org_arr ) && sizeof( $org_arr ) > 0 ) {
 							$org_id = $org_arr[0]->term_id;
 
-							return get_term_meta( $org_id, 'org_street', true );
+							return esc_html(get_term_meta( $org_id, 'org_street', true ));
 						}
 					} else {
-						return get_post_meta( $event_id, 'mep_street', true );
+						return esc_html(get_post_meta( $event_id, 'mep_street', true ));
 					}
 				}
 				if ( $item_name == 'mep_city' ) {
@@ -2203,10 +2217,10 @@
 						if ( is_array( $org_arr ) && sizeof( $org_arr ) > 0 ) {
 							$org_id = $org_arr[0]->term_id;
 
-							return get_term_meta( $org_id, 'org_city', true );
+							return esc_html(get_term_meta( $org_id, 'org_city', true ));
 						}
 					} else {
-						return get_post_meta( $event_id, 'mep_city', true );
+						return esc_html(get_post_meta( $event_id, 'mep_city', true ));
 					}
 				}
 				if ( $item_name == 'mep_state' ) {
@@ -2215,10 +2229,10 @@
 						if ( is_array( $org_arr ) && sizeof( $org_arr ) > 0 ) {
 							$org_id = $org_arr[0]->term_id;
 
-							return get_term_meta( $org_id, 'org_state', true );
+							return esc_html(get_term_meta( $org_id, 'org_state', true ));
 						}
 					} else {
-						return get_post_meta( $event_id, 'mep_state', true );
+						return esc_html(get_post_meta( $event_id, 'mep_state', true ));
 					}
 				}
 				if ( $item_name == 'mep_postcode' ) {
@@ -2227,10 +2241,10 @@
 						if ( is_array( $org_arr ) && sizeof( $org_arr ) > 0 ) {
 							$org_id = $org_arr[0]->term_id;
 
-							return get_term_meta( $org_id, 'org_postcode', true );
+							return esc_html(get_term_meta( $org_id, 'org_postcode', true ));
 						}
 					} else {
-						return get_post_meta( $event_id, 'mep_postcode', true );
+						return esc_html(get_post_meta( $event_id, 'mep_postcode', true ));
 					}
 				}
 				if ( $item_name == 'mep_country' ) {
@@ -2239,10 +2253,10 @@
 						if ( is_array( $org_arr ) && sizeof( $org_arr ) > 0 ) {
 							$org_id = $org_arr[0]->term_id;
 
-							return get_term_meta( $org_id, 'org_country', true );
+							return esc_html(get_term_meta( $org_id, 'org_country', true ));
 						}
 					} else {
-						return get_post_meta( $event_id, 'mep_country', true );
+						return esc_html(get_post_meta( $event_id, 'mep_country', true ));
 					}
 				}
 			}
@@ -2344,7 +2358,7 @@
 			$upcoming_date = ! empty( $m ) && ! empty( mep_get_event_upcoming_date( $event_id ) ) ? mep_get_event_upcoming_date( $event_id ) : '';
 			$event_date = date( 'Y-m-d H:i', strtotime( mep_get_event_upcoming_date( $event_id ) ) );
 			$total_seat    = apply_filters( 'mep_event_total_seat_countsQ', mep_event_total_seat( $event_id, 'total' ), $event_id );
-			$total_resv    = apply_filters( 'mep_event_total_resv_seat_count', mep_event_total_seat( $event_id, 'resv' ), $event_id );
+			$total_resv    = apply_filters( 'mep_event_total_resv_seat_count', mep_event_total_seat( $event_id, 'resv' ), $event_id, $event_date );
 			$total_sold    = mep_get_event_total_seat_left( $event_id, $upcoming_date );
 			$total_sold = mep_ticket_type_sold($event_id,'',$event_date);
 			$recurring  = get_post_meta( $event_id, 'mep_enable_recurring', true ) ? get_post_meta( $event_id, 'mep_enable_recurring', true ) : 'no';
@@ -2370,7 +2384,7 @@
                 <span class="mep_seat_stat_info_<?php echo $event_id; ?>">
                     <?php
 	                    // $sold = ($total_seat - $total_left);
-	                    $seat_count_var = apply_filters( 'mep_event_total_seat_counts', $total_seat, $event_id ) . ' - ' . apply_filters( 'mep_event_total_seat_sold', $total_sold, $event_id, $event_date ) . ' = ' . apply_filters( 'mep_event_total_seat_left', $total_left, $event_id, '', $event_date );
+	                    $seat_count_var = apply_filters('mep_event_total_seat_counts', $total_seat, $event_id, $event_date) . ' - ' . apply_filters('mep_event_total_seat_sold', $total_sold, $event_id, $event_date) . ' = ' . apply_filters('mep_event_total_seat_left', $total_left, $event_id, '', $event_date);
 	                    echo apply_filters( 'mep_event_seat_status_text', $seat_count_var, $total_seat, $total_sold, $total_left );
                     ?>
                 </span>
@@ -3337,25 +3351,25 @@
 			$custom_forms_id = mep_get_user_custom_field_ids( $_event_id );
 			$event_id        = mep_fb_get_reg_form_id( $_event_id );
 			if ( $name == 'Name' ) {
-				return get_post_meta( $event_id, 'mep_name_label', true ) ? get_post_meta( $event_id, 'mep_name_label', true ) : esc_html__( 'Name', 'mage-eventpress' );
+				return get_post_meta( $event_id, 'mep_name_label', true ) ? esc_attr(get_post_meta( $event_id, 'mep_name_label', true )) : esc_html__( 'Name', 'mage-eventpress' );
 			} elseif ( $name == 'Email' ) {
-				return get_post_meta( $event_id, 'mep_email_label', true ) ? get_post_meta( $event_id, 'mep_email_label', true ) : esc_html__( 'Email', 'mage-eventpress' );
+				return get_post_meta( $event_id, 'mep_email_label', true ) ? esc_attr(get_post_meta( $event_id, 'mep_email_label', true )) : esc_html__( 'Email', 'mage-eventpress' );
 			} elseif ( $name == 'Phone' ) {
-				return get_post_meta( $event_id, 'mep_phone_label', true ) ? get_post_meta( $event_id, 'mep_phone_label', true ) : esc_html__( 'Phone', 'mage-eventpress' );
+				return get_post_meta( $event_id, 'mep_phone_label', true ) ? esc_attr(get_post_meta( $event_id, 'mep_phone_label', true )) : esc_html__( 'Phone', 'mage-eventpress' );
 			} elseif ( $name == 'Address' ) {
-				return get_post_meta( $event_id, 'mep_address_label', true ) ? get_post_meta( $event_id, 'mep_address_label', true ) : esc_html__( 'Address', 'mage-eventpress' );
+				return get_post_meta( $event_id, 'mep_address_label', true ) ? esc_attr(get_post_meta( $event_id, 'mep_address_label', true )) : esc_html__( 'Address', 'mage-eventpress' );
 			} elseif ( $name == 'T-Shirt Size' ) {
-				return get_post_meta( $event_id, 'mep_tshirt_label', true ) ? get_post_meta( $event_id, 'mep_tshirt_label', true ) : esc_html__( 'T-Shirt Size', 'mage-eventpress' );
+				return get_post_meta( $event_id, 'mep_tshirt_label', true ) ? esc_attr(get_post_meta( $event_id, 'mep_tshirt_label', true )) : esc_html__( 'T-Shirt Size', 'mage-eventpress' );
 			} elseif ( $name == 'Gender' ) {
-				return get_post_meta( $event_id, 'mep_gender_label', true ) ? get_post_meta( $event_id, 'mep_gender_label', true ) : esc_html__( 'Gender', 'mage-eventpress' );
+				return get_post_meta( $event_id, 'mep_gender_label', true ) ? esc_attr(get_post_meta( $event_id, 'mep_gender_label', true )) : esc_html__( 'Gender', 'mage-eventpress' );
 			} elseif ( $name == 'Company' ) {
-				return get_post_meta( $event_id, 'mep_company_label', true ) ? get_post_meta( $event_id, 'mep_company_label', true ) : esc_html__( 'Company', 'mage-eventpress' );
+				return get_post_meta( $event_id, 'mep_company_label', true ) ? esc_attr(get_post_meta( $event_id, 'mep_company_label', true )) : esc_html__( 'Company', 'mage-eventpress' );
 			} elseif ( $name == 'Designation' ) {
-				return get_post_meta( $event_id, 'mep_desg_label', true ) ? get_post_meta( $event_id, 'mep_desg_label', true ) : esc_html__( 'Designation', 'mage-eventpress' );
+				return get_post_meta( $event_id, 'mep_desg_label', true ) ? esc_attr(get_post_meta( $event_id, 'mep_desg_label', true )) : esc_html__( 'Designation', 'mage-eventpress' );
 			} elseif ( $name == 'Website' ) {
-				return get_post_meta( $event_id, 'mep_website_label', true ) ? get_post_meta( $event_id, 'mep_website_label', true ) : esc_html__( 'Website', 'mage-eventpress' );
+				return get_post_meta( $event_id, 'mep_website_label', true ) ? esc_attr(get_post_meta( $event_id, 'mep_website_label', true )) : esc_html__( 'Website', 'mage-eventpress' );
 			} elseif ( $name == 'Vegetarian' ) {
-				return get_post_meta( $event_id, 'mep_veg_label', true ) ? get_post_meta( $event_id, 'mep_veg_label', true ) : esc_html__( 'Vegetarian', 'mage-eventpress' );
+				return get_post_meta( $event_id, 'mep_veg_label', true ) ? esc_attr(get_post_meta( $event_id, 'mep_veg_label', true )) : esc_html__( 'Vegetarian', 'mage-eventpress' );
 			} else {
 				return null;
 			}
