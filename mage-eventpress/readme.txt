@@ -291,6 +291,13 @@ vulnerabilities.
 
 == Changelog ==
 
+= 4.4.4 =
+* Design responsive issue fixed
+* Email Text Not saving issue fixed.
+* Datepicker Year list issue fixed
+* Event Expired issue fixed
+  12 June 2025*
+
 = 4.4.3 =
 * Mobile responsive issue fixed
 * Removed org link from event list page
