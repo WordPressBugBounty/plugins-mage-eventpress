@@ -48,7 +48,7 @@
 				require_once(dirname(__DIR__) . "/inc/mep_query.php");
 				require_once(dirname(__DIR__) . "/inc/recurring/inc/functions.php");	
 				require_once(dirname(__DIR__) . "/inc/recurring/inc/recurring_attendee_stat.php");
-				require_once(dirname(__DIR__) . "/inc/email/low_stock_notification.php");		
+				require_once(dirname(__DIR__) . "/inc/email/low_stock_notification.php");	
 			}
 			public function global_enqueue() {
 				wp_enqueue_script('jquery');
@@ -106,7 +106,14 @@
 				wp_localize_script('mep_ajax', 'mep_ajax_var', array('url' => admin_url('admin-ajax.php'), 'nonce' => wp_create_nonce('mep-ajax-nonce')));
 				//loading pick plugin
 				wp_enqueue_style('mage-options-framework', MPWEM_PLUGIN_URL . '/assets/helper/pick_plugin/mage-options-framework.css');
-				wp_enqueue_script('magepeople-options-framework', MPWEM_PLUGIN_URL . '/assets/helper/pick_plugin/mage-options-framework.js', array('jquery'));
+				
+				// Ensure wp-color-picker is available in admin
+				if (is_admin()) {
+					wp_enqueue_style('wp-color-picker');
+					wp_enqueue_script('wp-color-picker');
+				}
+				
+				wp_enqueue_script('magepeople-options-framework', MPWEM_PLUGIN_URL . '/assets/helper/pick_plugin/mage-options-framework.js', array('jquery', 'wp-color-picker'));
 				wp_localize_script('PickpluginsOptionsFramework', 'PickpluginsOptionsFramework_ajax', array('PickpluginsOptionsFramework_ajaxurl' => admin_url('admin-ajax.php')));
 				wp_enqueue_script('form-field-dependency', MPWEM_PLUGIN_URL . '/assets/helper/form-field-dependency.js', array('jquery'), null, false);
 				//loading modal
@@ -116,7 +123,9 @@
 				wp_enqueue_style('mp_admin_settings', MPWEM_PLUGIN_URL . '/assets/admin/mp_admin_settings.css', array(), time());
 				// custom
 				wp_enqueue_script('mpwem_admin', MPWEM_PLUGIN_URL . '/assets/admin/mpwem_admin.js', array('jquery'), time(), true);
+				wp_enqueue_script('mpwem_event_lists', MPWEM_PLUGIN_URL . '/assets/admin/mpwem_event_lists.js', array('jquery'), time(), true);
 				wp_enqueue_style('mpwem_admin', MPWEM_PLUGIN_URL . '/assets/admin/mpwem_admin.css', array(), time());
+				wp_enqueue_style('mpwem_event_lists', MPWEM_PLUGIN_URL . '/assets/admin/mpwem_event_lists.css', array(), time());
 				do_action('add_mpwem_admin_script');
 			}
 			public function frontend_enqueue() {

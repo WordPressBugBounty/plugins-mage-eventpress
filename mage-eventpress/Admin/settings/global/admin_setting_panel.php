@@ -108,6 +108,17 @@
 								)
 							),
 							array(
+								'name' => 'mep_event_list_page_style',
+								'label' => 	__('Dashboard Event List Page Style', 'mage-eventpress'),
+								'desc' => 	__('You can choose the Event List Page Design in Dasboard', 'mage-eventpress'),
+								'type' => 'select',
+								'default' => 'new',
+								'options' => array(
+									'new' 	=> 'New Modern Style',
+									'wp' 	=> 'WordPress Default Post List Style'
+								)
+							),							
+							array(
 								'name' => 'mep_rest_api_status',
 								'label' => __('Enable Rest API?', 'mage-eventpress'),
 								'desc' => __('If you want to enable event data available in the Rest API Please enable this.', 'mage-eventpress'),
@@ -1090,14 +1101,14 @@
 								'label' => __('Primary Color', 'mage-eventpress'),
 								'desc' => __('Choose a basic color, it will change the icon background color & border color.', 'mage-eventpress'),
 								'type' => 'color',
-								'default' => ''
+								'default' => '#6046ff'
 							),
 							array(
 								'name' => 'mpev_secondary_color',
 								'label' => __('Secondary Color', 'mage-eventpress'),
 								'desc' => __('Choose a basic text color, it will change the text color.', 'mage-eventpress'),
 								'type' => 'color',
-								'default' => ''
+								'default' => '#f1f5ff'
 							),
 							// array(
 							// 	'name' => 'mep_base_color',
@@ -1170,38 +1181,38 @@
 							// 	'type' => 'color',
 							// 	'default' => '#fff'
 							// ),
-							array(
-								'name' => 'mep_royal_primary_bg_color',
-								'label' => __('Royal Template Primary Background Color', 'mage-eventpress'),
-								'desc' => __('Choose primary background color for royal template', 'mage-eventpress'),
-								'type' => 'color',
-							),
-							array(
-								'name' => 'mep_royal_secondary_bg_color',
-								'label' => __('Royal Template Secondary Background Color', 'mage-eventpress'),
-								'desc' => __('Choose secondary background color for royal template', 'mage-eventpress'),
-								'type' => 'color',
-							),
-							array(
-								'name' => 'mep_royal_icons_bg_color',
-								'label' => __('Royal Template Icons Background Color', 'mage-eventpress'),
-								'desc' => __('Choose icons background color for royal template', 'mage-eventpress'),
-								'type' => 'color',
-								'default' => '#ffbe30'
-							),
-							array(
-								'name' => 'mep_royal_border_color',
-								'label' => __('Royal Template Border Color', 'mage-eventpress'),
-								'desc' => __('Choose border color for royal template', 'mage-eventpress'),
-								'type' => 'color',
-							),
-							array(
-								'name' => 'mep_royal_text_color',
-								'label' => __('Royal Template Text Color', 'mage-eventpress'),
-								'desc' => __('Choose text color for royal template', 'mage-eventpress'),
-								'type' => 'color',
-								'default' => '#000'
-							),
+							// array(
+							// 	'name' => 'mep_royal_primary_bg_color',
+							// 	'label' => __('Royal Template Primary Background Color', 'mage-eventpress'),
+							// 	'desc' => __('Choose primary background color for royal template', 'mage-eventpress'),
+							// 	'type' => 'color',
+							// ),
+							// array(
+							// 	'name' => 'mep_royal_secondary_bg_color',
+							// 	'label' => __('Royal Template Secondary Background Color', 'mage-eventpress'),
+							// 	'desc' => __('Choose secondary background color for royal template', 'mage-eventpress'),
+							// 	'type' => 'color',
+							// ),
+							// array(
+							// 	'name' => 'mep_royal_icons_bg_color',
+							// 	'label' => __('Royal Template Icons Background Color', 'mage-eventpress'),
+							// 	'desc' => __('Choose icons background color for royal template', 'mage-eventpress'),
+							// 	'type' => 'color',
+							// 	'default' => '#ffbe30'
+							// ),
+							// array(
+							// 	'name' => 'mep_royal_border_color',
+							// 	'label' => __('Royal Template Border Color', 'mage-eventpress'),
+							// 	'desc' => __('Choose border color for royal template', 'mage-eventpress'),
+							// 	'type' => 'color',
+							// ),
+							// array(
+							// 	'name' => 'mep_royal_text_color',
+							// 	'label' => __('Royal Template Text Color', 'mage-eventpress'),
+							// 	'desc' => __('Choose text color for royal template', 'mage-eventpress'),
+							// 	'type' => 'color',
+							// 	'default' => '#000'
+							// ),
 						)
 					),
 					'icon_setting_sec' => apply_filters('mep_settings_icon_arr', array(

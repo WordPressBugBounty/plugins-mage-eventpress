@@ -6,11 +6,11 @@
 	if (!defined('ABSPATH')) {
 		die;
 	} // Cannot access pages directly.
-	if (!class_exists('MP_Custom_Layout')) {
-		class MP_Custom_Layout {
+	if (!class_exists('MPWEM_Custom_Layout')) {
+		class MPWEM_Custom_Layout {
 			public function __construct() {
-				add_action('add_mp_hidden_table', array($this, 'hidden_table'), 10, 2);
-				add_action('add_mp_pagination_section', array($this, 'pagination'), 10, 3);
+				add_action('add_mpwem_hidden_table', array($this, 'hidden_table'), 10, 2);
+				add_action('add_mpwem_pagination_section', array($this, 'pagination'), 10, 3);
 			}
 			public function hidden_table($hook_name, $data = array()) {
 				?>
@@ -159,7 +159,7 @@
 						?>
                     </div>
                     <div class="">
-						<?php MP_Custom_Layout::add_new_button(esc_html__('Add Image', 'mage-eventpress'), 'add_multi_image', '_dButton_xs_bgColor_1'); ?>
+						<?php MPWEM_Custom_Layout::add_new_button(esc_html__('Add Image', 'mage-eventpress'), 'add_multi_image', '_dButton_xs_bgColor_1'); ?>
                     </div>
                 </div>
 				<?php
@@ -203,7 +203,12 @@
 						?>
                         <label>
                             <select class="formControl" name="<?php echo esc_attr($input_name); ?>" data-price="<?php echo esc_attr($price); ?>">
-								<?php for ($i = $min_qty; $i <= $max_qty; $i++) { ?>
+								<?php 
+								// Include 0 option if min_qty > 0
+								if ($min_qty > 0) { ?>
+									<option value="0">0 <?php echo esc_html($text) ?></option>
+								<?php }
+								for ($i = max($min_qty, 1); $i <= $max_qty; $i++) { ?>
                                     <option value="<?php echo esc_attr($i); ?>" <?php echo esc_attr($i == $default_qty ? 'selected' : ''); ?>><?php echo esc_html($i . ' ' . $text) ?></option>
 								<?php } ?>
                             </select>
@@ -218,9 +223,10 @@
                                        class="formControl inputIncDec mp_number_validation"
                                        data-price="<?php echo esc_attr($price); ?>"
                                        name="<?php echo esc_attr($input_name); ?>"
-                                       value="<?php echo esc_attr(max(0, $default_qty,$min_qty)); ?>"
-                                       min="<?php echo esc_attr(max(0, $default_qty,$min_qty)); ?>"
+                                       value="<?php echo esc_attr($default_qty > 0 ? $default_qty : 0); ?>"
+                                       min="0"
                                        max="<?php echo esc_attr($max_qty); ?>"
+                                       data-min-qty="<?php echo esc_attr($min_qty); ?>"
                                 />
                             </label>
                             <div class="incQty">
@@ -235,5 +241,5 @@
                 }
 			}
 		}
-		new MP_Custom_Layout();
+		new MPWEM_Custom_Layout();
 	}

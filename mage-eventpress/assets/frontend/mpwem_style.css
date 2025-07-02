@@ -53,6 +53,10 @@ div.item_hover_effect a:hover {
   color: var(--mpev-base-txt);
 }
 
+.mep-tem3-title-sec.mep_single_date_btn {
+  padding: 10px 15px !important;
+}
+
 .mep-default-sidrbar-meta .fa-list-alt, .mep-list-footer ul li i {
   background: transparent;
   color: var(--mpev-base);
@@ -688,6 +692,7 @@ ul.mep-social-share a {
 
 .mep-share-btn-title {
   margin-bottom: 20px;
+  display: block;
 }
 
 ul.mep-social-share {
@@ -768,7 +773,7 @@ ul.mep-social-share li a.email:hover i {
 
 /********Add to calender ***********/
 .mep-default-sidrbar-calender-btn {
-  margin: 30px 10px;
+  margin: 20px 10px;
   position: relative;
 }
 
@@ -1542,7 +1547,6 @@ button.mep-cat-control.mixitup-control-active {
   display: block;
   overflow: hidden;
   padding: 10px;
-  margin-top: 20px;
   margin-bottom: 5px;
 }
 
@@ -1551,10 +1555,10 @@ button.mep-cat-control.mixitup-control-active {
   font-weight: 600;
   color: #444444;
   font-size: 16px;
-  border-top: 1px solid #DDD;
-  margin-bottom: 10px;
-  padding-bottom: 5px;
-  padding-top: 5px;
+}
+
+.mep-default-sidebar .mep-default-sidebar-speaker-list h3 {
+  padding: 15px 0;
 }
 
 .mep-default-sidebar-speaker-list h3 i {
@@ -1871,7 +1875,7 @@ div.mep-day-details-section h4 {
 }
 
 .mep-default-sidebar-address {
-  padding: 20px 15px;
+  padding: 15px;
 }
 .mep-default-sidebar-address .location-widgets {
   display: flex;
@@ -1897,7 +1901,7 @@ div.mep-day-details-section h4 {
   border: 0;
   font-size: 15px;
   padding: 0 15px;
-  margin: 10px auto;
+  margin: 20px auto;
   margin-bottom: 5px;
   border-radius: 50px;
   max-width: max-content;
@@ -2573,8 +2577,6 @@ div.three_column {
 }
 
 .mep_single_date_btn {
-  height: 35px;
-  line-height: 35px !important;
   font-size: 15px;
   width: max-content;
   padding: 0 15px 0 15px !important;
@@ -4363,6 +4365,30 @@ input.mpe-new-input-group-field {
   margin: 10px 0;
 }
 
+.mep-default-theme .mep_checkbox_item ._fs_label {
+  margin-bottom: 15px;
+  display: block;
+}
+
+.mep-default-theme .groupRadioCheck {
+  margin-top: 5px;
+}
+
+.groupRadioCheck [data-radio-check].mpActive {
+  border-color: var(--mpev-base);
+  background-color: var(--mpev-base);
+  color: var(--mpev-base-txt);
+}
+
+.groupRadioCheck [data-radio-check]:hover {
+  border-color: var(--mpev-base);
+  background-color: var(--mpev-base);
+}
+
+.mpStyle .customCheckbox::before {
+  border: 2px solid var(--mpev-base);
+}
+
 .mep-default-sidrbar-events-schedule {
   padding: 15px;
 }
@@ -4371,59 +4397,67 @@ input.mpe-new-input-group-field {
   font-weight: bold;
   margin-bottom: 10px;
 }
-.mep-default-sidrbar-events-schedule ul#mep_event_date_sch {
+.mep-default-sidrbar-events-schedule #mep_event_date_sch {
+  margin-bottom: 20px;
+}
+.mep-default-sidrbar-events-schedule ul.mep_event_date_sch {
   margin-left: 10px;
   max-height: 315px;
   overflow: hidden;
-  margin-bottom: 20px;
 }
-.mep-default-sidrbar-events-schedule ul#mep_event_date_sch li {
-  border-top: 1px dashed #DDD;
-  padding: 10px 0;
+.mep-default-sidrbar-events-schedule ul.mep_event_date_sch li {
+  border: 1px solid #ccd6e2;
+  background-color: #f8fafc;
+  padding: 15px;
   display: flex;
   flex-direction: row;
   align-items: start;
   position: relative;
-  padding-left: 15px;
+  padding-left: 25px;
+  margin-bottom: 10px;
+  border-radius: 12px;
+  transition: all 0.3s ease;
 }
-.mep-default-sidrbar-events-schedule ul#mep_event_date_sch li::before {
+.mep-default-sidrbar-events-schedule ul.mep_event_date_sch li::before {
   content: "";
   width: 8px;
   height: 8px;
   border-radius: 50px;
   position: absolute;
-  top: 14px;
-  left: 0;
+  top: 18px;
+  left: 10px;
   background-color: var(--mpev-base);
 }
-.mep-default-sidrbar-events-schedule ul#mep_event_date_sch li a {
+.mep-default-sidrbar-events-schedule ul.mep_event_date_sch li:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  transform: translateY(1px);
+}
+.mep-default-sidrbar-events-schedule ul.mep_event_date_sch li a {
   display: -webkit-flex;
   display: flex;
   -webkit-flex-direction: column;
   flex-direction: column;
   color: inherit;
 }
-.mep-default-sidrbar-events-schedule ul#mep_event_date_sch li span {
+.mep-default-sidrbar-events-schedule ul.mep_event_date_sch li span {
   display: flex;
 }
-.mep-default-sidrbar-events-schedule ul#mep_event_date_sch li span.mep-more-date {
+.mep-default-sidrbar-events-schedule ul.mep_event_date_sch li span.mep-more-date {
   margin: 0;
   font-weight: bold;
   margin-bottom: 5px;
 }
-.mep-default-sidrbar-events-schedule ul#mep_event_date_sch li span.mep-more-time {
+.mep-default-sidrbar-events-schedule ul.mep_event_date_sch li span.mep-more-time {
   display: flex;
   flex-direction: column;
   gap: 5px;
 }
-.mep-default-sidrbar-events-schedule ul#mep_event_date_sch li .mep_date_scdl_start_datetime {
+.mep-default-sidrbar-events-schedule ul.mep_event_date_sch li .mep_date_scdl_start_datetime {
   font-weight: bold;
   margin-bottom: 10px;
 }
-.mep-default-sidrbar-events-schedule ul#mep_event_date_sch li:first-child {
-  border: none;
-}
-.mep-default-sidrbar-events-schedule ul#mep_event_date_sch li i {
+.mep-default-sidrbar-events-schedule ul.mep_event_date_sch li i {
   background: var(--mpev-base);
   color: var(--mpev-base-txt);
   background: var(--mpev-base-txt);
@@ -4442,7 +4476,7 @@ input.mpe-new-input-group-field {
   margin-bottom: 50px;
 }
 .mep-timeline .section-title {
-  font-size: 25px;
+  font-size: 24px;
   font-weight: bold;
   margin: 30px 0;
 }
@@ -4458,6 +4492,7 @@ input.mpe-new-input-group-field {
   height: 100%;
   width: 2px;
   background-color: #e0e0e0;
+  z-index: 0;
 }
 .mep-timeline .timeline .timeline-item {
   position: relative;
@@ -4490,14 +4525,14 @@ input.mpe-new-input-group-field {
 .mep-timeline .timeline .timeline-content {
   background-color: #ffffff;
   border-radius: 12px;
-  padding: 25px 30px;
+  padding: 15px 20px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
   transition: transform 0.3s ease;
 }
 .mep-timeline .timeline .timeline-content .timeline-title {
   font-size: 18px;
   font-weight: 600;
-  margin-bottom: 15px;
+  margin-bottom: 5px;
   color: #212121;
   display: flex;
   align-items: center;
@@ -4569,8 +4604,8 @@ input.mpe-new-input-group-field {
   gap: 15px;
 }
 .mpwem_registration_area .date-time-area label span {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: normal;
   color: var(--mpev-base-txt);
 }
 .mpwem_registration_area .date-time-area label i {
@@ -4727,34 +4762,41 @@ input.mpe-new-input-group-field {
     flex: 0 0 100%;
   }
 }
-.mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .mep_attendee_info, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .mep_attendee_info {
-  background-color: #ececec;
-  border-radius: 0 0 12px 12px;
-}
 .mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .mep_attendee_info .mep_form_item, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .mep_attendee_info .mep_form_item {
   padding: 10px;
+  margin-top: 5px;
+  background-color: #ececec;
+  border-radius: 12px;
+}
+.mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .mep_attendee_info .mep_form_item h6, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .mep_attendee_info .mep_form_item h6 {
+  padding: 10px 10px;
 }
 .mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .mep_attendee_info .mep_form_item .mp_form_item label, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .mep_attendee_info .mep_form_item .mp_form_item label {
   flex-direction: column;
   align-items: start;
+  width: 100%;
 }
 .mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .mep_attendee_info .mep_form_item .mp_form_item label span, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .mep_attendee_info .mep_form_item .mp_form_item label span {
   width: 100%;
+  font-weight: normal;
 }
 .mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .mep_attendee_info .mep_form_item .mp_form_item label .formControl, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .mep_attendee_info .mep_form_item .mp_form_item label .formControl {
   width: 100%;
   margin-top: 5px;
+}
+.mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .mep_attendee_info .mep_form_item .mp_form_item label select.formControl, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .mep_attendee_info .mep_form_item .mp_form_item label select.formControl {
+  width: 100%;
+  max-width: 100%;
 }
 @media (min-width: 600px) {
   .mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .mep_attendee_info .mep_form_item .mp_form_item label, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .mep_attendee_info .mep_form_item .mp_form_item label {
     flex-direction: row;
   }
   .mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .mep_attendee_info .mep_form_item .mp_form_item label span, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .mep_attendee_info .mep_form_item .mp_form_item label span {
-    width: 50%;
     text-wrap: wrap;
   }
   .mpwem_registration_area .mpwem_booking_panel .mpwem_ticket_type .card-body .mep_ticket_item .mep_attendee_info .mep_form_item .mp_form_item label .formControl, .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service .card-body .mep_ticket_item .mep_attendee_info .mep_form_item .mp_form_item label .formControl {
-    width: 50%;
+    width: 100%;
   }
 }
 .mpwem_registration_area .mpwem_booking_panel .mpwem_ex_service {
@@ -5163,6 +5205,15 @@ Royal theme css by ariful | Date: 19-10-2021
 }
 
 /********Bristol Theme(theme - 3)**********************/
+.bristol .mep-default-sidrbar-meta {
+  background: none;
+  display: block;
+}
+
+.bristol .mep-default-sidrbar-meta i {
+  display: none;
+}
+
 .bristol .mep-default-title h2 {
   margin: 15px 0;
 }
@@ -5170,6 +5221,7 @@ Royal theme css by ariful | Date: 19-10-2021
 .bristol .mep-event-meta {
   padding: 10px;
   font-size: 16px;
+  padding-top: 0;
 }
 
 .bristol .mep-event-meta ul.mep-social-share {
@@ -5189,6 +5241,11 @@ Royal theme css by ariful | Date: 19-10-2021
 .bristol div.mep-default-feature-date,
 .bristol div.mep-default-feature-location {
   background-color: transparent;
+}
+
+div.bristol div.bristol_divided div.mep-default-feature-location {
+  display: flex;
+  align-items: start;
 }
 
 .bristol_center_box {
@@ -5221,6 +5278,10 @@ Royal theme css by ariful | Date: 19-10-2021
 
 .bristol ul#mep_add_calender_links li a.mep-add-calender:hover {
   color: #888;
+}
+
+.bristol .mep-default-sidrbar-social .mep-share-btn-title {
+  margin-bottom: 0;
 }
 
 /*************************************************************
@@ -5408,7 +5469,7 @@ Vanilla theme css by ariful
 @media only screen and (min-width: 10px) {
   .mep_smart_theme .mpwem_tile {
     color: #000;
-    font-size: 40px;
+    font-size: 32px;
   }
   .mep_smart_theme .mpwem_organizer {
     margin: 5px 0;
@@ -5417,6 +5478,7 @@ Vanilla theme css by ariful
     display: flex;
     flex-direction: column;
     justify-content: start;
+    gap: 10px;
   }
   /*****************************/
   /***************************************************/
@@ -5433,13 +5495,13 @@ Vanilla theme css by ariful
   .mep_smart_theme .mpwem_location_time .mpwem_location i, .mep_smart_theme .mpwem_location_time .mpwem_time i {
     width: 55px;
     height: 55px;
-    background-color: var(--mpev-secondary);
     color: var(--mpev-primary);
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 25px;
     border-radius: 5px;
+    margin-right: 5px;
   }
   .mep_smart_theme .mpwem_location_time .mpwem_location {
     align-items: start;
@@ -5453,7 +5515,6 @@ Vanilla theme css by ariful
 @media only screen and (min-width: 10px) {
   .mep_smart_theme .mpwem_location_time .mpwem_location div {
     width: 80%;
-    margin-left: 5px;
   }
 }
 @media only screen and (min-width: 10px) and (min-width: 1024px) {
@@ -5491,6 +5552,9 @@ Vanilla theme css by ariful
     max-width: 100%;
     width: 100%;
   }
+  .mep_smart_theme .mpwem_left_content h2 {
+    font-size: 24px;
+  }
 }
 @media only screen and (min-width: 10px) and (min-width: 1024px) {
   .mep_smart_theme .mpwem_left_content {
@@ -5511,24 +5575,27 @@ Vanilla theme css by ariful
   }
 }
 @media only screen and (min-width: 10px) {
+  .mep_smart_theme .mpwem_right_content h2 {
+    font-size: 24px;
+  }
   .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content {
     background-color: #fff;
     border-radius: 20px;
     box-shadow: 0 0 5px #ddd;
-    padding: 30px 0;
+    padding-bottom: 20px;
   }
   .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .date_widgets, .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .location_widgets {
     display: flex;
     justify-content: start;
     align-items: start;
-    gap: 20px;
-    padding: 15px;
+    gap: 10px;
+    padding: 25px 15px;
+    padding-bottom: 10px;
     border-bottom: 1px solid #ddd;
   }
   .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .date_widgets i, .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .location_widgets i {
-    font-size: 30px;
-    padding: 15px;
-    background-color: var(--mpev-secondary);
+    font-size: 25px;
+    padding: 0;
     color: var(--mpev-primary);
     border-radius: 10px;
   }
@@ -5543,9 +5610,9 @@ Vanilla theme css by ariful
   }
   .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .date_widgets button, .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .location_widgets button {
     background-color: #fff;
-    padding: 13px 15px !important;
+    padding: 7px 10px !important;
     border: 1px solid var(--mpev-primary);
-    margin-top: 20px;
+    margin: 15px 0;
     color: var(--mpev-primary);
   }
   .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .date_widgets button:hover, .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .location_widgets button:hover {
@@ -5555,24 +5622,43 @@ Vanilla theme css by ariful
     font-size: 16px;
     padding: 0;
     background: none;
-    margin-right: 15px;
+    margin-right: 6px;
   }
   .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .date_widgets [data-read] {
     color: var(--mpev-primary);
   }
   .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .date_widgets .date-lists ul {
-    list-style-type: disc;
-    padding-left: 22px;
-    margin-bottom: 20px;
+    list-style-type: none;
     max-height: 315px;
     overflow: hidden;
   }
   .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .date_widgets .date-lists ul li {
-    margin-bottom: 20px;
+    border: 1px solid #ccd6e2;
+    background-color: #f8fafc;
+    padding: 15px;
+    display: flex;
+    flex-direction: row;
+    align-items: start;
+    position: relative;
+    padding-left: 25px;
+    margin-bottom: 10px;
+    border-radius: 12px;
+    transition: all 0.3s ease;
   }
-  .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .date_widgets .date-lists ul li::marker {
-    color: var(--mpev-primary);
-    font-size: 1.5em;
+  .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .date_widgets .date-lists ul li::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50px;
+    position: absolute;
+    top: 18px;
+    left: 10px;
+    background-color: var(--mpev-base);
+  }
+  .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .date_widgets .date-lists ul li:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    transform: translateY(1px);
   }
   .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .date_widgets .date-lists ul li span {
     display: block;
@@ -5618,8 +5704,8 @@ Vanilla theme css by ariful
     padding: 5px 10px !important;
     border-radius: var(--dBR) !important;
     border: 1px solid var(--mpev-primary);
-    margin: 0 !important;
-    margin-top: 20px;
+    margin: 20px 0 !important;
+    margin-bottom: 10px !important;
     color: var(--mpev-primary);
     font-size: var(--button_fs);
     font-weight: var(--fw-medium);
@@ -5632,12 +5718,16 @@ Vanilla theme css by ariful
     font-size: 16px;
     padding: 0;
     background: none;
-    margin-right: 15px;
+    margin-right: 6px;
     display: inline-block;
   }
   .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .share_widgets {
     text-align: center;
     padding: 15px;
+  }
+  .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .share_widgets h2.share-widget-title {
+    font-size: 19px;
+    letter-spacing: 2px;
   }
   .mep_smart_theme .mpwem_right_content .mpwem_sidebar_content .share_widgets .mep-social-share {
     margin-top: 10px;
@@ -5673,7 +5763,7 @@ Vanilla theme css by ariful
     background-color: #fff;
     color: var(--mpev-primary) !important;
     height: auto !important;
-    padding: 13px 15px !important;
+    padding: 5px 10px !important;
     border-radius: var(--dBR) !important;
     border: 1px solid var(--mpev-primary);
     margin-top: 0;
@@ -5689,10 +5779,10 @@ Vanilla theme css by ariful
     font-size: 16px;
     padding: 0;
     background: none;
-    margin-right: 15px;
+    margin-right: 6px;
   }
   .mep_smart_theme .mpwem_right_content .speaker-widget {
-    margin-top: 50px;
+    margin-top: 10px;
   }
   .mep_smart_theme .mpwem_right_content .speaker-widget h2 {
     text-transform: capitalize;
@@ -5725,6 +5815,9 @@ Vanilla theme css by ariful
   .mep_smart_theme .map_location {
     margin: 50px 0;
   }
+  .mep_smart_theme .map_location h2 {
+    font-size: 24px;
+  }
   .mep_smart_theme .map_location iframe {
     margin-top: 20px;
     border-radius: 15px;
@@ -5745,6 +5838,9 @@ Vanilla theme css by ariful
   }
 }
 @media only screen and (min-width: 10px) {
+  .mep_smart_theme .faq_area h2 {
+    font-size: 24px;
+  }
   .mep_smart_theme .faq_area .desc {
     width: auto;
     color: #666;
@@ -5887,6 +5983,9 @@ Vanilla theme css by ariful
     margin: 20px 0;
     position: relative;
   }
+  .mep-related-events h2 {
+    font-size: 24px;
+  }
   .mep-related-events .related-events-header {
     display: flex;
     justify-content: space-between;
@@ -5919,7 +6018,7 @@ Vanilla theme css by ariful
   .mep-related-events .mep-related-events-items .item {
     width: 100%;
     background-color: #fff;
-    padding: 20PX;
+    padding: 0;
     border-radius: 10px;
     box-shadow: 0 0 5px #ddd;
   }
@@ -5938,6 +6037,7 @@ Vanilla theme css by ariful
     width: 100%;
     height: 200px;
     object-fit: cover;
+    border-radius: 10px 10px 0 0;
   }
   .mep-related-events .mep-related-events-items .item .mep-ev-start-date {
     position: absolute;
@@ -5959,7 +6059,8 @@ Vanilla theme css by ariful
   .mep-related-events .mep-related-events-items .item .item-info {
     display: flex;
     justify-content: space-between;
-    margin-top: 20px;
+    padding: 0 20px;
+    margin: 10px 0;
   }
   .mep-related-events .mep-related-events-items .item .item-info .title {
     text-align: left;
@@ -6023,6 +6124,7 @@ Vanilla theme css by ariful
   .mep_attendee_info .mp_form_item.mep_file_item > span,
   .mep_attendee_info .mp_form_item > label > span {
     min-width: 200px;
+    font-weight: normal;
   }
   div.mpwem_organizer {
     display: -webkit-flex;
@@ -6031,16 +6133,13 @@ Vanilla theme css by ariful
   div.mpwem_organizer,
   div.mpwem_organizer a {
     font-size: 24px;
-    margin: var(--dMP_xs) 0 0 0;
     color: #878787 !important;
     font-weight: 400;
   }
   div.mpwem_location,
   div.mpwem_time {
     color: #393332;
-    font-size: 18px;
-    margin: var(--dMP_xs) var(--dMP) 0 0;
-    display: -webkit-flex;
+    font-size: 16px;
     display: flex;
     -webkit-align-items: center;
     align-items: center;

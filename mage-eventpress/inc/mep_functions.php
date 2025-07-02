@@ -5,6 +5,21 @@
 	appsero_init_tracker_mage_eventpress();
 	define( 'MEP_URL', plugin_dir_url( __DIR__ ) );
 	define( 'MEP_PATH', plugin_dir_path( __DIR__ ) );
+	add_action('mep_dashboard_event_list_after_event_title','mep_add_show_sku_post_id_in_new_event_list_dashboard');
+	if ( ! function_exists( 'mep_add_show_sku_post_id_in_new_event_list_dashboard' ) ) {
+		function mep_add_show_sku_post_id_in_new_event_list_dashboard($event_id) {
+			
+				$custom_meta_value = get_post_meta( $event_id, '_sku', true ) ? 'SKU: ' . get_post_meta( $event_id, '_sku', true ) : 'ID: ' . $event_id;
+				if ( ! empty( $custom_meta_value ) ) {
+					$custom_action = [
+						'custom_meta' => '<span style="color:rgb(117, 111, 111); font-weight: bold;font-size: 12px;">' . esc_html( $custom_meta_value ) . '</span>'
+					];
+					// $actions       = array_merge( $custom_action, $actions );
+				}		
+			echo $custom_action['custom_meta'];
+		}
+	}
+
 	if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 		function mep_add_show_sku_post_id_in_event_list_dashboard( $actions, $post ) {
 			if ( $post->post_type === 'mep_events' ) {
@@ -1723,29 +1738,6 @@ add_filter( 'request', 'mep_add_event_into_feed_request' );
 			return $theme;
 		}
 	}
-	// depricated event_single_template_list function
-	if ( ! function_exists( 'event_single_template_list' ) ) {
-			function event_single_template_list( $current_theme ) {
-				$themes = mep_event_template_name();
-				$deprecated_themes = ['royal.php', 'theme-1.php', 'theme-2.php', 'theme-3.php', 'vanilla.php'];
-				$buffer = '<select name="mep_event_template">';
-				foreach ( $themes as $theme_file => $theme_name ) {
-					$selected = ($current_theme === $theme_file) ? 'selected' : '';
-
-					// Only allow deprecated themes if they're currently selected
-					if ( in_array( $theme_file, $deprecated_themes ) && $current_theme !== $theme_file ) {
-						continue;
-					}
-
-					$buffer .= "<option value=\"$theme_file\" $selected>$theme_name</option>";
-				}
-				$buffer .= '</select>';
-				echo wp_kses( $buffer, [
-					'select' => [ 'name' => [] ],
-					'option' => [ 'value' => [], 'selected' => [] ]
-				] );
-			}
-	}
 	if ( ! function_exists( 'mep_field_generator' ) ) {
 		function mep_field_generator( $type, $option ) {
 			$FormFieldsGenerator = new FormFieldsGenerator();
@@ -2294,7 +2286,7 @@ add_filter( 'request', 'mep_add_event_into_feed_request' );
 			$reg_form_id           = mep_fb_get_reg_form_id( $product_id );
 			$mep_form_builder_data = get_post_meta( $reg_form_id, 'mep_form_builder_data', true );
 			$iu                    = 0;
-			if ( isset( $_POST['user_name'] ) || isset( $_POST['user_email'] ) || isset( $_POST['user_phone'] ) || isset( $_POST['gender'] ) || isset( $_POST['tshirtsize'] ) || isset( $_POST['user_company'] ) || isset( $_POST['user_designation'] ) || isset( $_POST['user_website'] ) || isset( $_POST['vegetarian'] ) ) {
+			//if ( isset( $_POST['user_name'] ) || isset( $_POST['user_email'] ) || isset( $_POST['user_phone'] ) || isset( $_POST['gender'] ) || isset( $_POST['tshirtsize'] ) || isset( $_POST['user_company'] ) || isset( $_POST['user_designation'] ) || isset( $_POST['user_website'] ) || isset( $_POST['vegetarian'] ) ) {
 				if ( sizeof( $names ) > 0 ) {
 					$same_attendee     = MP_Global_Function::get_settings( 'general_setting_sec', 'mep_enable_same_attendee', 'no' );
 					$current_template  = MP_Global_Function::get_post_info( $product_id, 'mep_event_template' );
@@ -2360,7 +2352,7 @@ add_filter( 'request', 'mep_add_event_into_feed_request' );
 						}
 					}
 				}
-			}
+			//}
 
 			return apply_filters( 'mep_cart_user_data_prepare', $user, $product_id );
 		}
@@ -4623,117 +4615,6 @@ add_filter( 'request', 'mep_add_event_into_feed_request' );
 			return $date_format;
 		}
 	}
-	add_action( 'mp_event_recurring_every_day_setting', 'mep_event_recurring_purchase_notice', 90 );
-	function mep_event_recurring_purchase_notice() {
-		$event_id                          = get_the_id();
-		$event_label                       = mep_get_option( 'mep_event_label', 'general_setting_sec', 'Event' );
-		$date_format                       = get_option( 'date_format' );
-		$time_format                       = get_option( 'time_format' );
-		$date_format_arr                   = mep_date_format_list();
-		$time_format_arr                   = mep_time_format_list();
-		$current_date_format               = mep_get_option( 'mep_global_date_format', 'datetime_setting_sec', $date_format );
-		$current_time_format               = mep_get_option( 'mep_global_time_format', 'datetime_setting_sec', $time_format );
-		$current_global_custom_date_format = mep_get_option( 'mep_global_custom_date_format', 'datetime_setting_sec', $date_format );
-		$current_global_custom_time_format = mep_get_option( 'mep_global_custom_time_format', 'datetime_setting_sec', $time_format );
-		$current_global_timezone_display   = mep_get_option( 'mep_global_timezone_display', 'datetime_setting_sec', 'no' );
-		$saved_date_format                 = get_post_meta( $event_id, 'mep_event_date_format', true ) ? get_post_meta( $event_id, 'mep_event_date_format', true ) : $current_date_format;
-		$saved_custom_date_format          = get_post_meta( $event_id, 'mep_event_custom_date_format', true ) ? get_post_meta( $event_id, 'mep_event_custom_date_format', true ) : $current_global_custom_date_format;
-		$saved_time_format                 = get_post_meta( $event_id, 'mep_event_time_format', true ) ? get_post_meta( $event_id, 'mep_event_time_format', true ) : $current_time_format;
-		$saved_custom_time_format          = get_post_meta( $event_id, 'mep_custom_event_time_format', true ) ? get_post_meta( $event_id, 'mep_custom_event_time_format', true ) : $current_global_custom_time_format;
-		$saved_time_zone_display           = get_post_meta( $event_id, 'mep_time_zone_display', true ) ? get_post_meta( $event_id, 'mep_time_zone_display', true ) : $current_global_timezone_display;
-		$date_format                       = get_post_meta( $event_id, 'mep_enable_custom_dt_format', true );
-		$values                            = get_post_custom( $event_id );
-		$mep_enable_custom_dt_format       = '';
-		if ( array_key_exists( 'mep_enable_custom_dt_format', $values ) ) {
-			if ( $values['mep_enable_custom_dt_format'][0] == 'on' ) {
-				$mep_enable_custom_dt_format = 'checked';
-			}
-		} else {
-			$mep_enable_custom_dt_format = '';
-		}
-		?>
-        <section>
-            <div class="mpev-label">
-                <div>
-                    <h2><span><?php esc_html_e( 'Date Time format Settings', 'mage-eventpress' ); ?></span></h2>
-                    <span><?php _e( 'You can change the date and time format by going to the settings', 'mage-eventpress' ); ?></span>
-                </div>
-                <label class="mpev-switch">
-                    <input type="checkbox" name="mep_enable_custom_dt_format" value="<?php echo esc_attr( $date_format ); ?>" <?php echo esc_attr( ( $date_format == 'on' ) ? 'checked' : '' ); ?> data-collapse-target="#mep_custom_timezone_setting" data-toggle-values="on,off">
-                    <span class="mpev-slider"></span>
-                </label>
-            </div>
-        </section>
-        <div id='mep_custom_timezone_setting' style="display:<?php echo ( $date_format == 'on' ) ? esc_attr( 'block' ) : esc_attr( 'none' ); ?>">
-            <section>
-                <label class="mpev-label">
-                    <div>
-                        <h2><?php esc_html_e( 'Date Format', 'mage-eventpress' ); ?></h2>
-                        <span><?php _e( 'Please select your preferred date format from the options below. If you wish to use a custom date format, select the Custom option and enter your desired date format. Please note that this date format will only apply to events.', 'mage-eventpress' ); ?></span>
-                    </div>
-                    <select class="regular mep_global_date_format" name="mep_event_date_format" id="datetime_setting_sec[mep_global_date_format]">
-						<?php
-							foreach ( $date_format_arr as $key => $date ) { ?>
-                                <option value='<?php echo $key; ?>' <?php if ( $saved_date_format == $key ) {
-									echo 'Selected';
-								} ?>><?php echo $date; ?></option>
-							<?php } ?>
-                    </select>
-                </label>
-            </section>
-            <section class="mep_global_custom_date_format">
-                <label class="mpev-label">
-                    <div>
-                        <h2><?php esc_html_e( 'Custom Date Format', 'mage-eventpress' ); ?></h2>
-                        <span><a href="https://wordpress.org/support/article/formatting-date-and-time/"><?php _e( 'Documentation on date and time formatting.', 'mage-eventpress' ); ?></a></span>
-                    </div>
-                    <input type="text" class="regular-text" id="datetime_setting_sec[mep_global_custom_date_format]" name="mep_event_custom_date_format" value="<?php echo $saved_custom_date_format; ?>">
-                </label>
-            </section>
-            <section class="mep_global_time_format">
-                <label class="mpev-label">
-                    <div>
-                        <h2><?php esc_html_e( 'Time Format', 'mage-eventpress' ); ?></h2>
-                        <span><?php _e( 'Please select the time format from the list. If you want to use a custom time format, select Custom and write your desired time format. This time format will only apply to events. ', 'mage-eventpress' ); ?></span>
-                    </div>
-                    <select class="regular mep_global_time_format" name="mep_event_time_format" id="datetime_setting_sec[mep_global_time_format]">
-						<?php
-							foreach ( $time_format_arr as $key => $date ) { ?>
-                                <option value='<?php echo $key; ?>' <?php if ( $saved_time_format == $key ) {
-									echo 'Selected';
-								} ?>><?php echo $date; ?></option>
-							<?php } ?>
-                    </select>
-                </label>
-            </section>
-            <section class="mep_global_custom_time_format">
-                <label class="mpev-label">
-                    <div>
-                        <h2><?php esc_html_e( 'Custom Time Format', 'mage-eventpress' ); ?></h2>
-                        <span><a href="https://wordpress.org/support/article/formatting-date-and-time/"><?php _e( 'Documentation on date and time formatting.', 'mage-eventpress' ); ?></a></span>
-                    </div>
-                    <input type="text" class="regular-text" id="datetime_setting_sec[mep_global_custom_time_format]" name="mep_custom_event_time_format" value="<?php echo $saved_custom_time_format; ?>">
-                </label>
-            </section>
-            <section class="mep_global_timezone_display">
-                <label class="mpev-label">
-                    <div>
-                        <h2><?php esc_html_e( 'Show Timezone', 'mage-eventpress' ); ?></h2>
-                        <span><?php _e( 'If you want to show the date and time in your local timezone, please select Yes.', 'mage-eventpress' ); ?></span>
-                    </div>
-                    <select class="regular mep_global_timezone_display" name="mep_time_zone_display" id="datetime_setting_sec[mep_global_timezone_display]">
-                        <option value="yes" <?php if ( $saved_time_zone_display == 'yes' ) {
-							echo 'Selected';
-						} ?>><?php _e( 'Yes', 'mage-eventpress' ); ?></option>
-                        <option value="no" <?php if ( $saved_time_zone_display == 'no' ) {
-							echo 'Selected';
-						} ?>><?php _e( 'No', 'mage-eventpress' ); ?></option>
-                    </select>
-                </label>
-            </section>
-        </div>
-		<?php
-	}
 	function mep_date_format_list() {
 		$format = [
 			'F j, Y'    => date( 'F j, Y' ),
@@ -4823,4 +4704,33 @@ add_filter( 'request', 'mep_add_event_into_feed_request' );
 	function mep_add_cart_btn_icon( $event_id ) {
 		$button = apply_filters( 'mep_cart_icon', "<i class='fa fa-shopping-cart'></i>", $event_id );
 		echo '<span class="mep-cart-btn-icon">' . $button . '</span>';
+	}
+
+
+
+	add_action('admin_menu', 'mep_remove_cpt_list_page');
+	function mep_remove_cpt_list_page() {
+		$user_choose_list_style= mep_get_option( 'mep_event_list_page_style', 'general_setting_sec', 'new' );
+		if($user_choose_list_style == 'new'){
+			remove_submenu_page('edit.php?post_type=mep_events', 'edit.php?post_type=mep_events');
+		}else{
+			remove_submenu_page('edit.php?post_type=mep_events','mep_event_lists' );
+		}
+
+	}
+
+	add_action('admin_menu', 'mep_move_event_list_to_top', 999);
+	function mep_move_event_list_to_top() {
+		global $submenu;
+		$parent_slug = 'edit.php?post_type=mep_events';
+		if (isset($submenu[$parent_slug])) {
+			foreach ($submenu[$parent_slug] as $key => $item) {
+				if ($item[2] === 'mep_event_lists') {
+					$event_list_item = $item;
+					unset($submenu[$parent_slug][$key]);
+					array_unshift($submenu[$parent_slug], $event_list_item);
+					break;
+				}
+			}
+		}
 	}
