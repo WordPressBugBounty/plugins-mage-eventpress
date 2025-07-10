@@ -258,6 +258,13 @@ vulnerabilities.
 
 
 == Changelog ==
+
+= 4.4.6 =
+* Design responsive issue fixed
+* Carousal Not working in block theme issue fixed
+  02 July 2025*
+
+
 = 4.4.5 =
 * Design responsive issue fixed
 * Yoast & UpdraftPlus warning issue fixed.
