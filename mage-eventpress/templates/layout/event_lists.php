@@ -4,13 +4,14 @@ $counts = wp_count_posts('mep_events');
 $post_counts = array(
     'publish' => isset($counts->publish) ? $counts->publish : 0,
     'draft'   => isset($counts->draft) ? $counts->draft : 0,
+    'private' => isset($counts->private) ? $counts->private : 0,
     'trash'   => isset($counts->trash) ? $counts->trash : 0,
 );
 
-$total_event = $post_counts['publish'] + $post_counts['draft']  + $post_counts['trash'] ;
+$total_event = $post_counts['publish'] + $post_counts['draft'] + $post_counts['private'] + $post_counts['trash'] ;
 
 //$statuses = ['publish', 'draft', 'trash'];
-$statuses = ['publish', 'draft'];
+$statuses = ['publish', 'draft', 'private'];
 $events = get_posts(array(
     'post_type'   => 'mep_events',
     'post_status' => $statuses,
@@ -196,27 +197,36 @@ $reg_percent_change= get_change_in_percent( $current_month_registration, $prev_m
 
 $get_all_categories = get_all_event_taxonomy( 'mep_cat' );
 
-function get_time_remaining( $future_datetime, $end_date ) {
-    $now = new DateTime();
-    $future = new DateTime( $future_datetime );
-    $end_date = new DateTime( $end_date );
-
-    if ( $future <= $now ) {
-        return 'Expired!';
+function get_time_remaining_fixed( $event_id, $end_date ) {
+    $all_dates = MPWEM_Functions::get_dates( $event_id );
+    $all_times = MPWEM_Functions::get_times( $event_id, $all_dates );
+    $now = time();
+    $future_found = false;
+    $closest_future = null;
+    foreach ($all_dates as $date_info) {
+        $date_str = is_array($date_info) && isset($date_info['time']) ? $date_info['time'] : $date_info;
+        $date_ts = strtotime($date_str);
+        if ($date_ts > $now && (!$closest_future || $date_ts < $closest_future)) {
+            $closest_future = $date_ts;
+            $future_found = true;
+        }
     }
-
-    /*if ( $now >= $future && $now <= $end_date ) {
-        return 'Running!';
-    }*/
-
-    $interval = $now->diff( $future );
-
-    return sprintf(
-        '%d days, %d hours, %d minutes remaining',
-        $interval->days,
-        $interval->h,
-        $interval->i
-    );
+    if ($future_found && $closest_future) {
+        $interval = $closest_future - $now;
+        $days = floor($interval / 86400);
+        $hours = floor(($interval % 86400) / 3600);
+        $minutes = floor(($interval % 3600) / 60);
+        return sprintf('%d days, %d hours, %d minutes remaining', $days, $hours, $minutes);
+    }
+    // fallback: check end_date
+    if (strtotime($end_date) > $now) {
+        $interval = strtotime($end_date) - $now;
+        $days = floor($interval / 86400);
+        $hours = floor(($interval % 86400) / 3600);
+        $minutes = floor(($interval % 3600) / 60);
+        return sprintf('%d days, %d hours, %d minutes remaining', $days, $hours, $minutes);
+    }
+    return 'Expired!';
 }
 function render_mep_events_by_status( $posts ) {
     ob_start();
@@ -237,7 +247,7 @@ function render_mep_events_by_status( $posts ) {
                 $ticket_type    = get_post_meta($id, 'mep_event_ticket_type', true);
                 $location       = get_post_meta($id, 'mep_location_venue', true);
 
-                $time_remaining = get_time_remaining( $remaining_date, $end_date );
+                $time_remaining = get_time_remaining_fixed( $id, $end_date );
 
                 $event_type = MP_Global_Function::get_post_info( $id, 'mep_enable_recurring', 'no' );
 
@@ -262,12 +272,12 @@ function render_mep_events_by_status( $posts ) {
                 $total_sold         = mep_get_event_total_seat_left( $id );
 
                 if( $event_type === 'everyday' ){
-                    $time_remaining = get_time_remaining( $date, $end_date );
+                    $time_remaining = get_time_remaining_fixed( $id, $end_date );
                     $start_date = date('F j, Y', strtotime( $date ));
                     $event_type_status = 'Recurring Event (Repeated)';
                     $total_sold         = mep_get_event_total_seat_left( $id, $date );
                 }else if( $event_type === 'yes' ){
-                    $time_remaining = get_time_remaining( $date, $end_date );
+                    $time_remaining = get_time_remaining_fixed( $id, $end_date );
                     $start_date = date('F j, Y', strtotime( $date ));
                     $event_type_status = 'Recurring Event (Selected Dates)';
                     $total_sold         = mep_get_event_total_seat_left( $id, $date );
@@ -315,9 +325,15 @@ function render_mep_events_by_status( $posts ) {
                 $ticket_type_count = 0;
                 ?>
 
-                <tr class="mpwem_event_list_card" data-event-status="<?php echo esc_attr( $status );?>" data-event-active-status="<?php echo esc_attr( $event_status );?>" data-filter-by-category="<?php echo esc_attr( $event_category );?>"
+                <tr class="mpwem_event_list_card" 
+                    data-event-status="<?php echo esc_attr( $status );?>" 
+                    data-event-active-status="<?php echo esc_attr( $event_status );?>" 
+                    data-filter-by-category="<?php echo esc_attr( $event_category );?>"
                     data-filter-by-event-name="<?php echo esc_attr( $title );?>"
                     data-filter-by-event-organiser="<?php echo esc_attr( $event_organiser );?>"
+                    data-event-date="<?php echo esc_attr( strtotime($start_date) );?>"
+                    data-event-title="<?php echo esc_attr( $title );?>"
+                    data-event-id="<?php echo esc_attr( $id );?>"
                 >
                     <td data-event-id="<?php echo esc_attr( $id );?>"> 
                         <input type="checkbox" class="checkbox mpwem_select_single_post" id="mpwem_select_single_post_<?php echo esc_attr( $id );?>" name="mpwem_checkbox_post_id[]">
@@ -329,7 +345,9 @@ function render_mep_events_by_status( $posts ) {
                     </td>
                     <td class="mpwem_event_title">
                         <div class="event-name">
-                            <a href="<?php echo esc_url( $edit_link );?>"><?php echo esc_attr($title .' '.$event_type_status );?></a>
+                            <strong class="row-title">
+                                <a href="<?php echo esc_url( $edit_link );?>" class="row-title-link"><?php echo esc_attr($title .' '.$event_type_status );?></a>
+                            </strong>
                             <div class="event-status-inline">
                                 <?php if( $status === 'publish'){?>
                                 <div class="status-live-inline">
@@ -340,14 +358,17 @@ function render_mep_events_by_status( $posts ) {
                                     <div class="event-status-inline">
                                         <div class="status-draft-inline"><?php _e('Draft','mage-eventpress'); ?></div>
                                     </div>
+                                <?php } else if($status === 'private'){?>
+                                <div class="status-private-inline">
+                                    <div class="private-indicator-inline"></div>
+                                    <?php _e('Private','mage-eventpress'); ?>
+                                </div>
                                 <?php } else{?>
                                     <div class="event-status-inline">
                                         <div class="status-draft-inline"><?php _e('Trash','mage-eventpress'); ?></div>
                                     </div>
                                 <?php } ?>
-
                             </div>
-                           
                         </div>
                          <div class='mep_after_event_title'>
                                 <?php do_action('mep_dashboard_event_list_after_event_title',$id); ?>
@@ -407,11 +428,94 @@ function render_mep_events_by_status( $posts ) {
                         <div class="actions">
                         <?php do_action('mep_before_dashboard_event_list',$id); ?>
                             <a href="<?php echo esc_url( $view_link );?>"><button class="action-btn view" title="View Event"><span class="dashicons dashicons-visibility"></span></button></a>
+                            <a href="#"><button class="action-btn quick-edit" title="Quick Edit" data-event-id="<?php echo esc_attr($id); ?>"><span class="dashicons dashicons-edit-page"></span></button></a>
                             <a href="<?php echo esc_url( $edit_link );?>"><button class="action-btn edit" title="Edit Event"><span class="dashicons dashicons-edit"></span></button></a>
                             <a href="<?php echo esc_url( $delete_link );?>"><button class="action-btn delete" title="Delete Event"><span class="dashicons dashicons-trash"></span></button></a>
                             <!--<a href="--><?php //echo esc_url( $duplicate_link )?><!--"><button class="action-btn duplicate" title="Duplicate Event">📋</button></a>-->
                             <!-- <a title="<?php //echo esc_attr__('Duplicate Hotel ', 'tour-booking-manager') . ' : ' . get_the_title($id); ?>"  href="<?php //echo wp_nonce_url(admin_url('admin.php?action=mpwem_duplicate_post&post_id=' . $id),'mpwem_duplicate_post_' . $id; ?>"><button class="action-btn duplicate" title="Duplicate Event">📋</button></a> -->
                         <?php do_action('mep_after_dashboard_event_list',$id); ?>
+                        </div>
+                    </td>
+                </tr>
+                
+                <!-- Quick Edit Row -->
+                <tr class="quick-edit-row quick-edit-row-post inline-edit-row" style="display: none;" data-event-id="<?php echo esc_attr( $id );?>">
+                    <td colspan="9" class="colspanchange">
+                        <fieldset class="inline-edit-col-left">
+                            <legend class="inline-edit-legend"><?php _e('Quick Edit', 'mage-eventpress'); ?></legend>
+                            <div class="inline-edit-col">
+                                <label>
+                                    <span class="title"><?php _e('Title', 'mage-eventpress'); ?></span>
+                                    <span class="input-text-wrap">
+                                        <input type="text" name="post_title" class="ptitle" value="<?php echo esc_attr( $title ); ?>">
+                                    </span>
+                                </label>
+                                <label>
+                                    <span class="title"><?php _e('Event Start Date', 'mage-eventpress'); ?></span>
+                                    <span class="input-text-wrap">
+                                        <input type="datetime-local" name="event_start_datetime" class="event-start-date" value="<?php echo esc_attr( date('Y-m-d\TH:i', strtotime($start_date . ' ' . $start_time)) ); ?>">
+                                    </span>
+                                </label>
+                                <label>
+                                    <span class="title"><?php _e('Event End Date', 'mage-eventpress'); ?></span>
+                                    <span class="input-text-wrap">
+                                        <input type="datetime-local" name="event_end_datetime" class="event-end-date" value="<?php echo esc_attr( date('Y-m-d\TH:i', strtotime($end_date)) ); ?>">
+                                    </span>
+                                </label>
+                                <label>
+                                    <span class="title"><?php _e('Location', 'mage-eventpress'); ?></span>
+                                    <span class="input-text-wrap">
+                                        <input type="text" name="mep_location_venue" class="event-location" value="<?php echo esc_attr( $location ); ?>">
+                                    </span>
+                                </label>
+                            </div>
+                        </fieldset>
+                        <fieldset class="inline-edit-col-right">
+                            <div class="inline-edit-col">
+                                <label class="inline-edit-status">
+                                    <span class="title"><?php _e('Status', 'mage-eventpress'); ?></span>
+                                    <select name="_status">
+                                        <?php $current_status = get_post_status($id); ?>
+                                        <option value="publish" <?php selected( $current_status, 'publish' ); ?>><?php _e('Published', 'mage-eventpress'); ?></option>
+                                        <option value="draft" <?php selected( $current_status, 'draft' ); ?>><?php _e('Draft', 'mage-eventpress'); ?></option>
+                                        <option value="private" <?php selected( $current_status, 'private' ); ?>><?php _e('Private', 'mage-eventpress'); ?></option>
+                                    </select>
+                                </label>
+                                <label>
+                                    <span class="title"><?php _e('Categories', 'mage-eventpress'); ?></span>
+                                    <select name="mep_cat[]" multiple class="event-categories">
+                                        <?php
+                                        $event_categories = get_the_terms( $id, 'mep_cat' );
+                                        $selected_cats = array();
+                                        if( $event_categories && !is_wp_error($event_categories) ) {
+                                            foreach( $event_categories as $cat ) {
+                                                $selected_cats[] = $cat->term_id;
+                                            }
+                                        }
+                                        
+                                        // Get all categories
+                                        $all_categories = get_terms(array(
+                                            'taxonomy' => 'mep_cat',
+                                            'hide_empty' => false,
+                                        ));
+                                        
+                                        if( $all_categories && !is_wp_error($all_categories) ) {
+                                            foreach( $all_categories as $cat_term ) {
+                                                $selected = in_array( $cat_term->term_id, $selected_cats ) ? 'selected' : '';
+                                                echo '<option value="' . esc_attr($cat_term->term_id) . '" ' . $selected . '>' . esc_html($cat_term->name) . '</option>';
+                                            }
+                                        }
+                                        ?>
+                                    </select>
+                                </label>
+                            </div>
+                        </fieldset>
+                        <input type="hidden" class="mep-quick-edit-nonce" value="<?php echo esc_attr( wp_create_nonce('mep_nonce') ); ?>" />
+                        <div class="submit inline-edit-save">
+                            <button type="button" class="button cancel alignleft"><?php _e('Cancel', 'mage-eventpress'); ?></button>
+                            <button type="button" class="button button-primary save alignright"><?php _e('Update', 'mage-eventpress'); ?></button>
+                            <span class="spinner"></span>
+                            <br class="clear">
                         </div>
                     </td>
                 </tr>
@@ -480,6 +584,10 @@ function render_mep_events_by_status( $posts ) {
                         <span><?php esc_attr_e( 'Draft', 'mage-eventpress' );?></span>
                         <span class="stat-number">(<?php echo esc_attr( $post_counts['draft'] );?>)</span>
                     </div>
+                    <div class="stat-item mpwem_filter_by_status" data-by-filter="private">
+                        <span><?php esc_attr_e( 'Private', 'mage-eventpress' );?></span>
+                        <span class="stat-number">(<?php echo esc_attr( $post_counts['private'] );?>)</span>
+                    </div>
                     <div class="stat-item mpwem_filter_by_active_status" data-by-filter="active">
                         <span><?php esc_attr_e( 'Active', 'mage-eventpress' );?></span>
                         <span class="stat-number">(<?php echo esc_attr( $event_status_count['active_count'] );?>)</span>
@@ -501,7 +609,8 @@ function render_mep_events_by_status( $posts ) {
 
             <div class="controls">
                 <div class="mpwem_multiple_trash_holder" id="mpwem_multiple_trash_holder" style="display: none">
-                    <button class="mpwem_multiple_trash_btn" id="mpwem_multiple_trash_btn">Trash</button>
+                    <button class="mpwem_multiple_trash_btn" id="mpwem_multiple_trash_btn">Trash</button> 
+                    <input type="hidden" id='mpwem_multiple_trash_nonce' value="<?php echo esc_attr( wp_create_nonce( 'mpwem_multiple_trash_nonce' ) );?>">
                 </div>
                 <div class="search-box">
                     <div class="search-icon">🔍</div>
@@ -518,6 +627,13 @@ function render_mep_events_by_status( $posts ) {
                     }
                     ?>
                 </select>
+                <div class="date-filter-container">
+                    <label for="mpwem_date_from"><?php esc_attr_e( 'From:', 'mage-eventpress' );?></label>
+                    <input type="date" id="mpwem_date_from" class="date-filter">
+                    <label for="mpwem_date_to"><?php esc_attr_e( 'To:', 'mage-eventpress' );?></label>
+                    <input type="date" id="mpwem_date_to" class="date-filter">
+                    <button type="button" id="mpwem_clear_date_filter" class="clear-date-btn"><?php esc_attr_e( 'Clear', 'mage-eventpress' );?></button>
+                </div>
 <!--                <button class="filter-btn">--><?php //esc_attr_e( 'Filter', 'mage-eventpress' );?><!--</button>-->
 <!--                <button class="filter-btn">Export</button>-->
             </div>
@@ -530,9 +646,15 @@ function render_mep_events_by_status( $posts ) {
                             <input type="checkbox" class="checkbox" id="mpwem_select_all_post">
                         </th>
                         <th><?php esc_attr_e( 'Image', 'mage-eventpress' );?></th>
-                        <th><?php esc_attr_e( 'Event Name', 'mage-eventpress' );?></th>
+                        <th class="sortable" data-sort="title">
+                            <?php esc_attr_e( 'Event Name', 'mage-eventpress' );?>
+                            <span class="sort-indicator"></span>
+                        </th>
                         <th><?php esc_attr_e( 'Location', 'mage-eventpress' );?></th>
-                        <th><?php esc_attr_e( 'Event Date', 'mage-eventpress' );?></th>
+                        <th class="sortable" data-sort="date">
+                            <?php esc_attr_e( 'Event Date', 'mage-eventpress' );?>
+                            <span class="sort-indicator"></span>
+                        </th>
                         <th><?php esc_attr_e( 'Event Starts In', 'mage-eventpress' );?></th>
                         <th><?php esc_attr_e( 'Ticket Types', 'mage-eventpress' );?></th>
                         <th><?php esc_attr_e( 'Capacity', 'mage-eventpress' );?></th>

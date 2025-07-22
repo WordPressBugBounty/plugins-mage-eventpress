@@ -1,9 +1,9 @@
-=== Event Booking & Management Plugin for WooCommerce – WpEvently - WordPress Plugin ===
+=== Event Booking Manager for WooCommerce – WpEvently ===
 Contributors: magepeopleteam, aamahin
 Tags: event, WooCommerce events manager, event booking, WordPress Events plugin, event calendar
 Requires at least: 5.3
 Stable tag: trunk
-Tested up to: 6.8.1
+Tested up to: 6.8
 WC requires at least: 3.0
 WC tested up to: 8.7
 Requires PHP: 7.4
@@ -23,7 +23,7 @@ Whether you're hosting conferences, classes, concerts, or workshops, WpEvently i
 https://www.youtube.com/watch?v=zP2ADxzUrYw
 
 
-## Event Manager: #1 WooCommerce Event Management Plugin
+## Event Manager: #1 Event Management Plugin for WooCommerce
 Accelerate your physical or virtual event management and offer attendees a smooth ticketing experience with WooCommerce Event Manager.
 Whether you are a small event organizer or a large one, we have thousands of trusted businesses.
 ###  Explore The Demo:
@@ -258,6 +258,10 @@ vulnerabilities.
 
 
 == Changelog ==
+
+= 4.4.7 =
+* Email Not saving issue fixed.
+  22 July 2025*
 
 = 4.4.6 =
 * Design responsive issue fixed
