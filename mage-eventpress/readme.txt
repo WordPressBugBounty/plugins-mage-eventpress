@@ -259,6 +259,10 @@ vulnerabilities.
 
 == Changelog ==
 
+= 4.4.8 =
+* Grid List view column broken issue fixed.
+  24 July 2025*
+
 = 4.4.7 =
 * Email Not saving issue fixed.
   22 July 2025*
