@@ -58,14 +58,40 @@
 			return preg_match( $pattern, $filename ) === 1;
 		}
 	}
-	if ( ! function_exists( 'mep_temp_attendee_create_for_cart_ticket_array' ) ) {
-		function mep_temp_attendee_create_for_cart_ticket_array( $event_id, $ticket_type ) {
-			foreach ( $ticket_type as $ticket ) {
-				mep_temp_attendee_create_for_cart( $event_id, $ticket['ticket_name'], $ticket['ticket_qty'], $ticket['event_date'] );
-			}
+
+	// Helper function to detect serialized PHP objects
+	if ( ! function_exists( 'mep_contains_serialized_object' ) ) {
+		function mep_contains_serialized_object($value) {
+			return is_string($value) && preg_match('/^O:\d+:"[^"]+":\d+:{/', $value);
 		}
 	}
 
+	// Helper function: Detect if input is a serialized PHP object
+	function mep_is_serialized_object($value) {
+		if (!is_string($value)) {
+			return false;
+		}
+
+		// Suppress errors during unserialize
+		$unserialized = @unserialize($value);
+
+		// If the result is an object, block it
+		return is_object($unserialized);
+	}
+
+	// Prevent saving serialized objects
+	function mep_is_malicious_value( $value ) {
+		if ( is_array( $value ) || is_object( $value ) ) {
+			return true;
+		}
+		
+		// Serialized object pattern (e.g., O:4:"Evil":0:{})
+		if ( is_string( $value ) && preg_match( '/^O:\d+:"[a-zA-Z0-9_]+":\d+:{/s', trim( $value ) ) ) {
+			return true;
+		}
+		
+		return false;
+	}
 
 	function mep_letters_numbers_spaces_only( $value ) {
 		// Set encoding explicitly
@@ -75,6 +101,13 @@
 	}
 
 
+	if ( ! function_exists( 'mep_temp_attendee_create_for_cart_ticket_array' ) ) {
+		function mep_temp_attendee_create_for_cart_ticket_array( $event_id, $ticket_type ) {
+			foreach ( $ticket_type as $ticket ) {
+				mep_temp_attendee_create_for_cart( $event_id, $ticket['ticket_name'], $ticket['ticket_qty'], $ticket['event_date'] );
+			}
+		}
+	}
 	if ( ! function_exists( 'mep_temp_attendee_create_for_cart' ) ) {
 		function mep_temp_attendee_create_for_cart( $event_id, $ticket_type, $ticket_qty, $event_date ) {
 			$new_post = array(
@@ -1286,7 +1319,8 @@
 				$selected      = isset( $_GET[ $taxonomy ] ) ? mage_array_strip( $_GET[ $taxonomy ] ) : '';
 				$info_taxonomy = get_taxonomy( $taxonomy );
 				wp_dropdown_categories( array(
-					'show_option_all' => __( "Show All {$info_taxonomy->label}" ),
+					// translators: %s is the taxonomy label.
+					'show_option_all' => sprintf( __( 'Show All %s', 'mage-eventpress' ), $info_taxonomy->label ),
 					'taxonomy'        => $taxonomy,
 					'name'            => $taxonomy,
 					'orderby'         => 'name',
@@ -3066,6 +3100,11 @@
 			return $array_or_string;
 		}
 	}
+if ( ! function_exists( 'mep_letters_numbers_spaces_only' ) ) {
+		function mep_letters_numbers_spaces_only( $string ) {
+			return preg_replace( '/[^a-zA-Z0-9\s]/', '', $string );
+		}
+	}
 	/**
 	 * The Giant SEO Plugin Yoast PRO doing some weird thing and that is its auto create a 301 redirect url when delete a post its causing our event some issue Thats why i disable those part for our event post type with the below filter hoook which is provide by Yoast.
 	 */
@@ -3323,8 +3362,11 @@
 					<?php if ( sizeof( $custom_forms_id ) > 0 ) {
 						foreach ( $custom_forms_id as $key => $value ) {
 							?>
-                            <li><?php esc_html_e( $key, 'mage-eventpress' );
-									echo ": " . esc_attr( $userinf[ $value ] ); ?></li>
+                            <li><?php 
+									echo esc_html( $key );
+									echo ": " . esc_attr( $userinf[ $value ] ); 
+								?>
+							</li>
 							<?php
 						}
 					} ?>
@@ -3439,20 +3481,6 @@
                         jQuery('#rowtotal').val(total);
                     }
                     //Bind the change event
-                    // jQuery(".extra-qty-box").on('change', function () {
-                    //     var sum = 0;
-                    //     var total = 0;						
-                    //     jQuery('.price_jq').each(function () {
-                    //         var price = jQuery(this);
-                    //         var count = price.closest('tr').find('.extra-qty-box');						
-                    //         sum = (parseFloat(price.html().match(/-?(?:\d+(?:\.\d*)?|\.\d+)/)) * count.val());
-                    //         total = total + sum;
-                    //         // price.closest('tr').find('.cart_total_price').html(sum + "â‚´");
-                    //     });
-                    //     //Fix 27.10.2020 Tony
-                    //     jQuery('#rowtotal').val(total);
-                    //     jQuery('#usertotal').html(mp_event_wo_commerce_price_format(total));
-                    // }).change(); //trigger change event on page load
                     jQuery(".extra-qty-box").on('change', function () {
                         var total = 0;
                         jQuery('.price_jq').each(function () {
@@ -3674,7 +3702,7 @@
 				'taxonomy'   => $tax,
 				'hide_empty' => false,
 			) );
-			$list  = array( '0' => __( 'Show All', '' ) );
+			$list  = array( '0' => __( 'Show All', 'mage-eventpress' ) );
 			foreach ( $terms as $_term ) {
 				$list[ $_term->term_id ] = $_term->name;
 			}
@@ -4020,28 +4048,33 @@
 			switch ( $license_data->error ) {
 				case 'expired':
 					$message = sprintf(
-						__( 'Your license key expired on %s.' ),
+						// translators: %1$s is the license expiration date.
+						__( 'Your license key expired on %1$s.', 'mage-eventpress' ),
 						date_i18n( get_option( 'date_format' ), strtotime( $license_data->expires, current_time( 'timestamp' ) ) )
 					);
 					break;
 				case 'revoked':
-					$message = __( 'Your license key has been disabled.' );
+					$message = __( 'Your license key has been disabled.','mage-eventpress' );
 					break;
 				case 'missing':
-					$message = __( 'Invalid license.' );
+					$message = __( 'Invalid license.','mage-eventpress' );
 					break;
 				case 'invalid':
 				case 'site_inactive':
-					$message = __( 'Your license is not active for this URL.' );
+					$message = __( 'Your license is not active for this URL.','mage-eventpress' );
 					break;
-				case 'item_name_mismatch':
-					$message = sprintf( __( 'This appears to be an invalid license key for %s.' ), $item_name );
+				case 'item_name_mismatch':					
+					$message = sprintf(
+						// translators: %1$s is the item name.
+						__( 'This appears to be an invalid license key for %1$s.', 'mage-eventpress' ),
+						$item_name
+					);
 					break;
 				case 'no_activations_left':
-					$message = __( 'Your license key has reached its activation limit.' );
+					$message = __( 'Your license key has reached its activation limit.', 'mage-eventpress' );
 					break;
 				default:
-					$message = __( 'An error occurred, please try again.' );
+					$message = __( 'An error occurred, please try again.', 'mage-eventpress' );
 					break;
 			}
 

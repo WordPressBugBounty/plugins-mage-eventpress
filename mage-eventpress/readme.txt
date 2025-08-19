@@ -259,6 +259,14 @@ vulnerabilities.
 
 == Changelog ==
 
+= 5.0.0 =
+* New Event List not showing for shop_manager user role issue fixed.
+* Google MAP API Not working issue fixed
+* Low stock issue fixed
+* Security issue fixed
+* Translation issue fixed
+  19 Aug 2025*
+
 = 4.4.8 =
 * Grid List view column broken issue fixed.
   24 July 2025*
