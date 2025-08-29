@@ -259,6 +259,11 @@ vulnerabilities.
 
 == Changelog ==
 
+= 5.0.1 =
+* Event Detais not showing issue fixed
+* Google MAP API Not working issue fixed
+  29 Aug 2025*
+
 = 5.0.0 =
 * New Event List not showing for shop_manager user role issue fixed.
 * Google MAP API Not working issue fixed
