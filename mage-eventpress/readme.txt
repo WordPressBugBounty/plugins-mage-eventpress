@@ -1,9 +1,9 @@
-=== Event Booking Manager for WooCommerce – WpEvently ===
+=== Event Booking Manager for WooCommerce  ===
 Contributors: magepeopleteam, aamahin
 Tags: event, WooCommerce events manager, event booking, WordPress Events plugin, event calendar
 Requires at least: 5.3
 Stable tag: trunk
-Tested up to: 6.8
+Tested up to: 6.9
 WC requires at least: 3.0
 WC tested up to: 8.7
 Requires PHP: 7.4
@@ -15,12 +15,12 @@ Flexible WooCommerce plugin for event booking, attendee management, and responsi
 
 == Description ==
 
-The Event Manager plugin for WooCommerce simplifies the complicated event registration process. **WpEvently** is a complete [event booking and event manager plugin](https://mage-people.com/product/mage-woo-event-booking-manager-pro/) for WordPress users who need a reliable way to **sell tickets**, **register attendees**, and **manage events**. Built to work seamlessly with **WooCommerce**, it gives you full control over pricing, ticket types, and attendee data collection.
+The Event Manager plugin for WooCommerce simplifies the complicated event registration process. **Evently** is a complete [event booking and event manager plugin](https://mage-people.com/product/mage-woo-event-booking-manager-pro/) for WordPress users who need a reliable way to **sell tickets**, **register attendees**, and **manage events**. Built to work seamlessly with **WooCommerce**, it gives you full control over pricing, ticket types, and attendee data collection.
 
-Whether you're hosting conferences, classes, concerts, or workshops, WpEvently is your all-in-one **WordPress event solution**.
+Whether you're hosting conferences, classes, concerts, or workshops, Evently is your all-in-one **WordPress event solution**.
 
 ## LET'S SEE HOW YOU CAN CREATE AN EVENT WITHIN 10 MINUTES
-https://www.youtube.com/watch?v=zP2ADxzUrYw
+https://www.youtube.com/watch?v=6eu3MowK8CQ
 
 
 ## Event Manager: #1 Event Management Plugin for WooCommerce
@@ -28,6 +28,7 @@ Accelerate your physical or virtual event management and offer attendees a smoot
 Whether you are a small event organizer or a large one, we have thousands of trusted businesses.
 ###  Explore The Demo:
 🌐 [Live Demo](https://wpevently.com/)
+🌐 [Backend Demo](https://app.instawp.io/launch?s=eventadmindemo&d=v2)
 📘 [Online Documentation](https://docs.mage-people.com/woocommerce-event-manager/)
 ❄️ [Available Shortcode List](https://docs.mage-people.com/woocommerce-event-manager/events-list-style-shortcode/)
 🛍️ [Buy Event Booking & Management Plugin for WooCommerce – WpEvently Pro](https://mage-people.com/product/mage-woo-event-booking-manager-pro/)
@@ -36,12 +37,12 @@ Whether you are a small event organizer or a large one, we have thousands of tru
 Creating an event and managing it in one place has never been easier, faster, organized, or smoother. Multiple Ticketing and Sales report features put the task at your fingertips. These features are available in the Event Manager Pro Version.
 We are not limiting you here; the free version features most of the basic event management activity.
 ### 🔁 Create and Manage Recurring Events now more easily
-Effortlessly set up repeating events—daily, weekly, or custom schedules. Whether you're running tours, appointments, or classes, WPEvently helps you sell tickets for recurring dates smoothly.
+Effortlessly set up repeating events—daily, weekly, or custom schedules. Whether you're running tours, appointments, or classes, Evently helps you sell tickets for recurring dates smoothly.
 ### 📅 Sell Tickets for Multiple Fixed Dates from a Single Event
-With WPEvently, you can add multiple specific dates to a single event and let your customers select their preferred date/time before booking. Perfect for sessions, workshops, or performances with set schedules.
+With Evently, you can add multiple specific dates to a single event and let your customers select their preferred date/time before booking. Perfect for sessions, workshops, or performances with set schedules.
 ### 📝 Build a Professional Event Registration Form
 Stand out with a customizable and dynamic attendee registration form. Apply conditional logic, such as showing a school name field only when the ticket type is “Child”. Designed for both flexibility and professionalism, even under tight deadlines.
-When you need to create something highly effective but have limited time available, [WordPress Event Manager - WpEvently](https://mage-people.com/product/mage-woo-event-booking-manager-pro/) is the solution you've been looking for. With the Event Manager, you can implement these features and make your event a success.
+When you need to create something highly effective but have limited time available, [Evently](https://mage-people.com/product/mage-woo-event-booking-manager-pro/) is the solution you've been looking for. With the Evently, you can implement these features and make your event a success.
 
 ### 🆓 Features are Available With Free Version
 
@@ -258,6 +259,99 @@ vulnerabilities.
 
 
 == Changelog ==
+
+= 5.1.6 =
+* Design Broken Issue Fixed
+* Memberonly Event Not Showing Issue Fixed
+* PHP Fatal Error Issue Fixed
+* Expired Event Not Showing Issue Fixed
+* Code Optimization
+  30 Jan 2026*
+
+= 5.1.5 =
+* Code Optimized
+  28 Jan 2026*
+
+= 5.1.4 =
+* Quick Release: Solved the Sidebar & Only showing text issue
+  23 Jan 2026*
+
+= 5.1.3 =
+* Quick Release after solve some bug
+* Google Map Wrong location showing issue fixed
+* Code Optimization
+* Slow Loading issue fixed
+  22 Jan 2026*
+
+= 5.1.2 =
+* Event List Design Broken Issue Fixed
+* PHP Fatal Error Issue Fixed
+* FAQ & Timeline Not Saving Issue Fixed
+* Code Optimization
+* Slow Loading issue fixed
+  19 Jan 2026*
+
+= 5.1.1 =
+* Multiday Ribbon Showing issue fixed
+  7 Jan 2026*
+
+= 5.1.0 =
+* FAQ Fatal Error issue fixed
+* Event Edit page tab not loading issue fixed.
+  5 Jan 2026*
+
+= 5.0.8 =
+* FAQ Error issue fixed
+* Event Edit page tab not loading issue fixed.
+  8 Dec 2025*
+
+= 5.0.7 =
+* FAQ Popup design issue fixed
+* FAQ HTML Tags Not saving Issue fixed
+* Timeline not saving issue fixed
+* New Dashboard design added in the My Account page 
+  5 Dec 2025*
+
+= 5.0.6 =
+* Category Filter not working issue solved in the event list page 
+* Event Schedule not showing in sidebar for normal multidate event issue fixed
+* Sale end date issue not working issue fixed
+* Expired event not showing issue fixed in event list shortcode
+* Seat count issue fixed in default event list style
+* Location & Image issue fixed in Minimal list style
+* Template Override issue fixed.  
+  20 Nov 2025*
+
+= 5.0.5 =
+* Quick Release after solve some bug
+* Seat Count wrong issue solved.
+* Single Page Error issue fixed
+  12 Nov 2025*
+
+
+= 5.0.4 =
+* Quick Release after solve some bug
+* Event Details Page White/Fatal Error issue fixed.
+* Duplicator Event Feature not working issue solved.
+* Google Map Not showing issue solved
+* No Event Available label text added in the event list page
+* 0 Capacity Ticket type not saving issue solved
+* Category Filter not working issue solved in the event list page 
+  30 Oct 2025*
+
+
+= 5.0.3 =
+* Quick Release after solve some bug
+* Attendee Count in front-end issue fixed.
+* Fatal Error and conflit between another plugin issue fixed
+* Recurring Datepicker console error issue fixed. 
+  29 Oct 2025*
+
+= 5.0.2 =
+* Email Text Format Issue fixed
+* New UI Design Applied
+* Templates optimized
+  23 Oct 2025*
 
 = 5.0.1 =
 * Event Detais not showing issue fixed

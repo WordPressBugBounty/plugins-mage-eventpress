@@ -249,7 +249,7 @@ function render_mep_events_by_status( $posts ) {
 
                 $time_remaining = get_time_remaining_fixed( $id, $end_date );
 
-                $event_type = MP_Global_Function::get_post_info( $id, 'mep_enable_recurring', 'no' );
+                $event_type = MPWEM_Global_Function::get_post_info( $id, 'mep_enable_recurring', 'no' );
 
                 $event_id           = $id ?? 0;
                 $all_dates          =  MPWEM_Functions::get_dates( $event_id );
@@ -378,7 +378,7 @@ function render_mep_events_by_status( $posts ) {
 
                     <td>
                         <div class="location">
-                            📍 <?php echo esc_attr( $location );?>
+                            <i class="mi mi-marker"></i> <?php echo esc_attr( $location );?>
                         </div>
                     </td>
                     <td>
@@ -427,10 +427,10 @@ function render_mep_events_by_status( $posts ) {
                     <td>
                         <div class="actions">
                         <?php do_action('mep_before_dashboard_event_list',$id); ?>
-                            <a href="<?php echo esc_url( $view_link );?>"><button class="action-btn view" title="View Event"><span class="dashicons dashicons-visibility"></span></button></a>
-                            <a href="#"><button class="action-btn quick-edit" title="Quick Edit" data-event-id="<?php echo esc_attr($id); ?>"><span class="dashicons dashicons-edit-page"></span></button></a>
-                            <a href="<?php echo esc_url( $edit_link );?>"><button class="action-btn edit" title="Edit Event"><span class="dashicons dashicons-edit"></span></button></a>
-                            <a href="<?php echo esc_url( $delete_link );?>"><button class="action-btn delete" title="Delete Event"><span class="dashicons dashicons-trash"></span></button></a>
+                            <a href="<?php echo esc_url( $view_link );?>"><button class="action-btn view" title="View Event"><span class="mi mi-eye"></span></button></a>
+                            <a href="#"><button class="action-btn quick-edit" title="Quick Edit" data-event-id="<?php echo esc_attr($id); ?>"><span class="mi mi-file-edit"></span></button></a>
+                            <a href="<?php echo esc_url( $edit_link );?>"><button class="action-btn edit" title="Edit Event"><span class="mi mi-pencil"></span></button></a>
+                            <a href="<?php echo esc_url( $delete_link );?>"><button class="action-btn delete" title="Delete Event"><span class="mi mi-trash"></span></button></a>
                             <?php do_action('mep_after_dashboard_event_list',$id); ?>
                         </div>
                     </td>
@@ -528,9 +528,8 @@ function render_mep_events_by_status( $posts ) {
 
 
 ?>
-<div class="wrap"></div>
-<div class="mpwem_event_list mpStyle mpwem_welcome_page">
-    <div class='padding'>
+<div class="wrap">
+    <div class="mpwem_event_list mpwem_style mpwem_welcome_page">
         <div class="container">
             <div class="header">
                 <div class="header-top">
@@ -619,7 +618,7 @@ function render_mep_events_by_status( $posts ) {
                     if( is_array( $get_all_categories ) && !empty( $get_all_categories ) ){
                         foreach ( $get_all_categories as $key => $event_categories ){ ?>
                             <option><?php echo esc_attr( $event_categories );?></option>
-                       <?php }
+                    <?php }
 
                     }
                     ?>
@@ -657,9 +656,9 @@ function render_mep_events_by_status( $posts ) {
                     </tr>
                     </thead>
                     <tbody>
-                       <?php
+                    <?php
                         echo render_mep_events_by_status( $events );
-                       ?>
+                    ?>
                     </tbody>
                 </table>
             </div>

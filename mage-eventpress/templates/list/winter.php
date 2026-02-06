@@ -1,87 +1,57 @@
 <?php
-$event_type = get_post_meta(get_the_id(), 'mep_event_type', true) ? get_post_meta(get_the_id(), 'mep_event_type', true) : 'offline';
-
-$taxonomy_category = MPWEM_Helper::all_taxonomy_as_text($event_id, 'mep_cat');
-$taxonomy_organizer = MPWEM_Helper::all_taxonomy_as_text($event_id, 'mep_org');
-// $date = mep_get_event_upcomming_date($event_id, 'date');
-$date = get_post_meta($event_id, 'event_upcoming_datetime', true);
-$event_date_icon            = mep_get_option('mep_event_date_icon', 'icon_setting_sec', 'far fa-calendar-alt');
-$event_time_icon            = mep_get_option('mep_event_time_icon', 'icon_setting_sec', 'fas fa-clock');
-$event_location_icon        = mep_get_option('mep_event_location_icon', 'icon_setting_sec', 'fas fa-map-marker-alt');
-$event_organizer_icon       = mep_get_option('mep_event_organizer_icon', 'icon_setting_sec', 'far fa-list-alt');
-
-// mep_get_event_upcomming_date($event_id, 'day');
-
-
-// echo get_mep_datetime(get_post_meta($event_id,'event_upcoming_datetime',true),'day');
-
+	/*
+* @Author 		engr.sumonazma@gmail.com
+* Copyright: 	mage-people.com
+*/
+	if ( ! defined( 'ABSPATH' ) ) {
+		die;
+	} // Cannot access pages directly.
+	$event_id = $event_id ?? 0;
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound
+	$event_infos = $event_infos ?? [];
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound
+	$event_infos        = sizeof( $event_infos ) > 0 ? $event_infos : MPWEM_Functions::get_all_info( $event_id );
+	$upcoming_date      = array_key_exists( 'upcoming_date', $event_infos ) ? $event_infos['upcoming_date'] : '';
+	$available_seat     = array_key_exists( 'available_seat', $event_infos ) ? $event_infos['available_seat'] : 0;
+	$taxonomy_category  = array_key_exists( 'category_tax', $event_infos ) ? $event_infos['category_tax'] : '';
+	$taxonomy_organizer = array_key_exists( 'organizer_tax', $event_infos ) ? $event_infos['organizer_tax'] : '';
+	$title              = get_the_title( $event_id );
+	$org_class          = array_key_exists( 'org_class', $event_infos ) ? $event_infos['org_class'] : '';
+	$cat_class          = array_key_exists( 'cat_class', $event_infos ) ? $event_infos['cat_class'] : '';
 ?>
-<div class='filter_item mep-event-list-loop  mep_event_list_item mep_event_winter_list mix <?php echo esc_attr($org_class) . ' ' . esc_attr($cat_class); ?>'
-     data-title="<?php echo esc_attr(get_the_title($event_id)); ?>"
-     data-city-name="<?php echo esc_attr(get_post_meta($event_id, 'mep_city', true)); ?>"
-     data-category="<?php echo esc_attr($taxonomy_category); ?>"
-     data-organizer="<?php echo esc_attr($taxonomy_organizer); ?>"
-     data-date="<?php echo esc_attr(date('m/d/Y',strtotime($date))); ?>"
+<div class='filter_item mep-event-list-loop  mep_event_list_item mep_event_winter_list mix <?php echo esc_attr( $org_class . ' ' . $cat_class ); ?>'
+     data-title="<?php echo esc_attr( $title ); ?>"
+     data-city-name="<?php echo esc_attr( array_key_exists( 'mep_city', $event_infos ) ? $event_infos['mep_city'] : '' ); ?>"
+     data-state="<?php echo esc_attr( array_key_exists( 'mep_state', $event_infos ) ? $event_infos['mep_state'] : '' ); ?>"
+     data-date="<?php echo esc_attr( $upcoming_date ? date( 'Y-m-d', strtotime( $upcoming_date ) ) : '' ); ?>"
+     data-category="<?php echo esc_attr( $taxonomy_category ); ?>"
+     data-organizer="<?php echo esc_attr( $taxonomy_organizer ); ?>"
 >
-    <?php do_action('mep_event_winter_list_loop_header', $event_id); ?>
-    <div class="mep_list_date_wrapper">
-        <h4 class='mep_winter_list_date'><span class="mep_winter_list_dd"><?php echo esc_html(get_mep_datetime(get_post_meta($event_id,'event_upcoming_datetime',true),'day')); ?></span><span class="mep_winter_list_mm_yy"><?php echo esc_html($start_mm_yy); ?></span></h4>
-    </div>
-    <div class="mep_list_winter_thumb_wrapper">
-        <a href="<?php echo get_the_permalink($event_id); ?>">
-            <div class="mep_list_winter_thumb" data-bg-image="<?php mep_get_list_thumbnail_src($event_id); ?>"></div>
-        </a>
-    </div>
-    <div class="mep_list_event_details">
-        <h2 class="mep_list_title"><a href="<?php the_permalink(); ?>"><?php the_title(); ?></a></h2>
-        <h3 class="mep_price">                    
-            <?php if ($show_price == 'yes') {
-                echo esc_html($show_price_label) . " " . mep_event_list_price($event_id);
-            } ?>
-        </h3>
-        <div class="mep_list_details_wrapper">
-            <div class="mep_list_details_col_one">
-                <?php if(get_mep_datetime($end_time_format, 'time')): ?>
-                    <p class="mep_winter_event_time"><i class="<?php echo esc_attr($event_time_icon); ?>"></i> <?php echo esc_html(get_mep_datetime($start_time_format, 'time')); ?> - <?php echo esc_html(get_mep_datetime($end_time_format, 'time')); ?></p>
-                <?php endif; ?>
-                
-                <p class='mep_winter_event_location'><i class="<?php echo esc_attr($event_location_icon); ?>"></i> <?php echo mep_get_event_city($event_id); ?></p>
-                
-                <?php if(get_mep_datetime($start_date_format, 'date')): ?>
-                    <p class="mep_winter_event_date"><i class="<?php echo esc_attr($event_date_icon); ?>"></i> <?php echo esc_html(get_mep_datetime($start_date_format, 'date')); ?> - <?php echo esc_html(get_mep_datetime($end_date_format, 'date')); ?></p>
-                <?php endif; ?>
-                <?php
-                $org_terms = get_the_terms($event_id, 'mep_org');
-                if ($org_terms && !is_wp_error($org_terms) && count($org_terms) > 0) {
-                ?>
-                <p class='mep_winter_event_organizer'>
-                   <i class="<?php echo esc_attr($event_organizer_icon); ?>"></i> <?php echo esc_html($org_terms[0]->name); ?>
-                </p>
-                <?php } ?>
-            </div>
-
-            <div class="mep_list_details_col_two">
-                <?php if ($available_seat == 0) {
-                    do_action('mep_show_waitlist_label');
-                } ?>
-
-                <?php if (is_array($event_multidate) && sizeof($event_multidate) > 0 && $recurring == 'no') { ?>
-                    <div class='mep-multidate-ribbon mep-tem3-title-sec'>
-                        <span><?php echo mep_get_option('mep_event_multidate_ribon_text', 'label_setting_sec', __('Multi Date Event', 'mage-eventpress')); ?></span>
-                    </div>
-                <?php } elseif ($recurring != 'no') { ?>
-                    <div class='mep-multidate-ribbon mep-tem3-title-sec'>
-                        <span><?php echo mep_get_option('mep_event_recurring_ribon_text', 'label_setting_sec', __('Recurring Event', 'mage-eventpress')); ?></span>
-                    </div>
-                <?php }
-                if ($event_type == 'online') { ?>
-                    <div class='mep-eventtype-ribbon mep-tem3-title-sec'>
-                        <span><?php echo mep_get_option('mep_event_virtual_label', 'label_setting_sec', __('Virtual Event', 'mage-eventpress')); ?></span>
-                    </div>
-                <?php } ?>
-                <?php do_action('mep_event_list_loop_footer', $event_id); ?>
-            </div>
+	<?php do_action( 'mep_event_winter_list_loop_header', $event_id ); ?>
+    <div class="mpwem_style spring_area mep_list_event_details">
+        <div class="mep_list_date_wrapper">
+            <p class='mep_winter_list_date'>
+                <span class="mep_winter_list_dd"><?php echo esc_html( MPWEM_Global_Function::date_format( $upcoming_date, 'day' ) ); ?></span>
+                <span class="mep_winter_list_mm_yy"><?php echo esc_html( MPWEM_Global_Function::date_format( $upcoming_date, 'M,Y' ) ); ?></span>
+            </p>
         </div>
-        <?php do_action('mep_event_winter_list_loop_end', $event_id); ?>
+        <a class="spring_item_4" href="<?php echo esc_url( get_the_permalink( $event_id ) ); ?>">
+			<?php do_action( 'mpwem_list_thumb', $event_infos ); ?>
+        </a>
+        <div class="spring_item_2">
+            <a href="<?php echo esc_url( get_the_permalink( $event_id ) ); ?>">
+                <h5 class='mep_list_title'><?php echo esc_html( $title ); ?></h5>
+				<?php
+					do_action( 'mep_event_minimal_list_after_title', $event_id );
+					if ( $available_seat == 0 ) {
+						do_action( 'mep_show_waitlist_label' );
+					}
+					do_action( 'mpwem_list_upcoming_time', $event_infos );
+					do_action( 'mpwem_list_location', $event_infos );
+					do_action( 'mpwem_list_upcoming_date_only', $event_infos );
+					do_action( 'mpwem_list_organizer', $event_infos ); ?>
+            </a>
+			<?php do_action( 'mpwem_list_more_date_button', $event_infos ); ?>
+        </div>
     </div>
 </div>
