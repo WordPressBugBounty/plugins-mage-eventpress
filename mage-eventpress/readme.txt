@@ -260,6 +260,14 @@ vulnerabilities.
 
 == Changelog ==
 
+= 5.1.7 =
+* Attendee Count missmatch issue solved in dashboard event list page
+* Some design issue fixed 
+* Ribbon wrong display issue fixed
+* Schedule Display issue fixed
+* Code Optimization
+  10 Feb 2026*
+
 = 5.1.6 =
 * Design Broken Issue Fixed
 * Memberonly Event Not Showing Issue Fixed

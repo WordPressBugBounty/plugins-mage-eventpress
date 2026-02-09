@@ -133,7 +133,25 @@
 					wp_die();
 				}
 				// Trigger your action safely
-				do_action( 'mpwem_registration_content', $post_id, [], [], $dates );
+				$all_dates   = MPWEM_Functions::get_dates( $post_id );
+				$all_times   = MPWEM_Functions::get_times( $post_id, $all_dates, $dates );
+                if(sizeof($all_times)>0){
+	                $start_time = '';
+	                if ( sizeof( $all_times ) > 0 ) {
+		                $all_times  = current( $all_times );
+		                $start_time = array_key_exists( 'start', $all_times ) ? $all_times['start']['time'] : '';
+	                }
+	                $event_type  = MPWEM_Global_Function::get_post_info( $post_id, 'mep_enable_recurring', 'no' );
+                    if($event_type=='everyday') {
+	                    if ( $start_time != '' ) {
+		                    $dates = $dates . ' ' . $start_time;
+	                    }
+	                    $dates = MPWEM_Global_Function::check_time_exit_date( $dates ) ? date( 'Y-m-d H:i', strtotime( $dates ) ) : date( 'Y-m-d', strtotime( $dates ) );
+                    }
+                }
+
+				//echo '<pre>';			print_r($all_times);			echo '</pre>';
+				do_action( 'mpwem_registration_content', $post_id, $all_dates, $all_times, $dates );
 				wp_die(); // Always use wp_die() instead of die() in WordPress
 			}
 			public function get_mpwem_time() {
@@ -365,19 +383,24 @@
 				<?php }
 			}
 			public function list_organizer( $event_infos ) {
-				$organizer_name = array_key_exists( 'organizer_name', $event_infos ) ? $event_infos['organizer_name'] : '';
-				if ( $organizer_name ) {
-					$organizer_title      = array_key_exists( 'organizer_title', $event_infos ) ? $event_infos['organizer_title'] : '';
-					$icon_setting_sec     = array_key_exists( 'icon_setting_sec', $event_infos ) ? $event_infos['icon_setting_sec'] : [];
-					$icon_setting_sec     = empty( $icon_setting_sec ) && ! is_array( $icon_setting_sec ) ? [] : $icon_setting_sec;
-					$event_organizer_icon = array_key_exists( 'mep_event_organizer_icon', $icon_setting_sec ) ? $icon_setting_sec['mep_event_organizer_icon'] : 'far fa-list-alt';
-					?>
+		$event_list_setting_sec = array_key_exists( 'event_list_setting_sec', $event_infos ) ? $event_infos['event_list_setting_sec'] : [];
+		$event_list_setting_sec = empty( $event_list_setting_sec ) && ! is_array( $event_list_setting_sec ) ? [] : $event_list_setting_sec;
+		$hide_org_list          = array_key_exists( 'mep_event_hide_organizer_list', $event_list_setting_sec ) ? $event_list_setting_sec['mep_event_hide_organizer_list'] : 'no';
+		if ( $hide_org_list == 'no' ) {
+			$organizer_name = array_key_exists( 'organizer_name', $event_infos ) ? $event_infos['organizer_name'] : '';
+			if ( $organizer_name ) {
+				$organizer_title      = array_key_exists( 'organizer_title', $event_infos ) ? $event_infos['organizer_title'] : '';
+				$icon_setting_sec     = array_key_exists( 'icon_setting_sec', $event_infos ) ? $event_infos['icon_setting_sec'] : [];
+				$icon_setting_sec     = empty( $icon_setting_sec ) && ! is_array( $icon_setting_sec ) ? [] : $icon_setting_sec;
+				$event_organizer_icon = array_key_exists( 'mep_event_organizer_icon', $icon_setting_sec ) ? $icon_setting_sec['mep_event_organizer_icon'] : 'far fa-list-alt';
+				?>
                     <div class="list_content upcomming_organizer">
                         <span class="<?php echo esc_attr( $event_organizer_icon ); ?>"></span>
-						<?php echo esc_html( $organizer_title . ' ' . $organizer_name ); ?>
+					<?php echo esc_html( $organizer_title . ' ' . $organizer_name ); ?>
                     </div>
-				<?php }
-			}
+			<?php }
+		}
+	}
 			public function list_price( $event_infos ) {
 				$event_list_setting_sec = array_key_exists( 'event_list_setting_sec', $event_infos ) ? $event_infos['event_list_setting_sec'] : [];
 				$event_list_setting_sec = empty( $event_list_setting_sec ) && ! is_array( $event_list_setting_sec ) ? [] : $event_list_setting_sec;
@@ -514,11 +537,14 @@
 						if ( sizeof( $all_dates ) > 0 ) {
 							if ( $recurring == 'yes' ) {
 								?>
-                                <div class='mepev-ribbon recurring'><i class="fas fa-history"></i> <?php esc_html_e( 'Recurring', 'mage-eventpress' ); ?></div><?php
+                                <div class='mepev-ribbon multidate'><i class="far fa-calendar-alt"></i> <?php esc_html_e( 'Multi Date', 'mage-eventpress' ); ?></div>
+                                <?php
 							}
 							if ( $recurring == 'everyday' ) {
 								?>
-                                <div class='mepev-ribbon multidate'><i class="far fa-calendar-alt"></i> <?php esc_html_e( 'Multi Date', 'mage-eventpress' ); ?></div><?php
+                                <div class='mepev-ribbon recurring'><i class="fas fa-history"></i> <?php esc_html_e( 'Recurring', 'mage-eventpress' ); ?></div>
+
+                                <?php
 							}
 						}
 						if ( $event_type == 'online' ) {
@@ -539,3 +565,4 @@
 		}
 		new MPWEM_Hooks();
 	}
+
