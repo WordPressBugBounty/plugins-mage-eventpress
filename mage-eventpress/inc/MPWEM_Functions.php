@@ -41,10 +41,7 @@
 				$event_infos = [];
 				$event_meta  = get_post_custom( $event_id );
 				if ( $event_meta ) {
-					$url_date = '';
-					if ( isset( $_GET['_wpnonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ), 'mpwem_date_' . $event_id ) ) {
-						$url_date = isset( $_GET['date'] ) ? sanitize_text_field( wp_unslash( $_GET['date'] ) ) : null;
-					}
+					$url_date = isset( $_GET['date'] ) ? sanitize_text_field( wp_unslash( $_GET['date'] ) ) : null;
 					$url_date=$url_date ? date( 'Y-m-d H:i', $url_date ) : '';
 					$date_format = MPWEM_Global_Function::check_time_exit_date( $url_date ) ? 'Y-m-d H:i' : 'Y-m-d';
 					$url_date    = $url_date ? date( $date_format, strtotime($url_date) ) : '';
@@ -368,11 +365,11 @@
 						$start_time = MPWEM_Global_Function::get_post_info( $event_id, 'event_start_time' );
 						$end_time   = MPWEM_Global_Function::get_post_info( $event_id, 'event_end_time' );
 						if ( $start_time ) {
-							$times[0]['start']['label'] = date( 'H:i', strtotime( $start_time ) );
+							$times[0]['start']['label'] = '';
 							$times[0]['start']['time']  = date( 'H:i', strtotime( $start_time ) );
 						}
 						if ( $end_time ) {
-							$times[0]['end']['label'] = date( 'H:i', strtotime( $end_time ) );
+							$times[0]['end']['label'] = '';
 							$times[0]['end']['time']  = date( 'H:i', strtotime( $end_time ) );
 						}
 					}
@@ -582,11 +579,11 @@
 								$expire_check = date( 'Y-m-d H:i', strtotime( $full_date ) - $buffer_time );
 								if ( strtotime( $expire_check ) > $now ) {
 									if ( $start_time ) {
-										$times[0]['start']['label'] = date( 'H:i', strtotime( $start_time ) );
+										$times[0]['start']['label'] = '';
 										$times[0]['start']['time']  = date( 'H:i', strtotime( $start_time ) );
 									}
 									if ( $end_time ) {
-										$times[0]['end']['label'] = date( 'H:i', strtotime( $end_time ) );
+										$times[0]['end']['label'] ='';
 										$times[0]['end']['time']  = date( 'H:i', strtotime( $end_time ) );
 									}
 								}
