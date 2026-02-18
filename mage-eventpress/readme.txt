@@ -28,7 +28,6 @@ Accelerate your physical or virtual event management and offer attendees a smoot
 Whether you are a small event organizer or a large one, we have thousands of trusted businesses.
 ###  Explore The Demo:
 🌐 [Live Demo](https://wpevently.com/)
-🌐 [Backend Demo](https://app.instawp.io/launch?s=eventadmindemo&d=v2)
 📘 [Online Documentation](https://docs.mage-people.com/woocommerce-event-manager/)
 ❄️ [Available Shortcode List](https://docs.mage-people.com/woocommerce-event-manager/events-list-style-shortcode/)
 🛍️ [Buy Event Booking & Management Plugin for WooCommerce – WpEvently Pro](https://mage-people.com/product/mage-woo-event-booking-manager-pro/)
@@ -259,6 +258,17 @@ vulnerabilities.
 
 
 == Changelog ==
+
+= 5.1.8 =
+* Datepicker Not working issue fixed for multilanguge website
+* Added settings for Passed date in the event start date input box
+* Added settings for hide ticket type once the sale end date is passed. 
+* FAQ Not saving issue fixed
+  18 Feb 2026*
+
+= 5.1.8 =
+* Design Broken issue fixed.
+  10 Feb 2026*
 
 = 5.1.7 =
 * Attendee Count missmatch issue solved in dashboard event list page
