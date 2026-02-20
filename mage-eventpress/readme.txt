@@ -259,7 +259,16 @@ vulnerabilities.
 
 == Changelog ==
 
-= 5.1.8 =
+= 5.2.0 =
+* Multiple Booking not working issue fixed
+* Double date in thankyou page issue fixed
+* Smart theme mobile responsive issue fixed. 
+* Google Map issue fixed
+* Code Optimization
+  20 Feb 2026*
+
+
+= 5.1.9 =
 * Datepicker Not working issue fixed for multilanguge website
 * Added settings for Passed date in the event start date input box
 * Added settings for hide ticket type once the sale end date is passed. 
