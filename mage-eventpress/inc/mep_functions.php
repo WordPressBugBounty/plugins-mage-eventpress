@@ -152,7 +152,9 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 					$time_diff = mep_diff_two_datetime( $post_date, current_time( 'Y-m-d H:i:s' ) );
 					if ( $time_diff > $cart_clear_time_sec ) {
 						wp_delete_post( $post_id, true );
-						$woocommerce->cart->empty_cart();
+							if ( ! empty( $woocommerce ) && ! empty( $woocommerce->cart ) ) {
+							$woocommerce->cart->empty_cart();
+						}
 					}
 				}
 			}
@@ -175,7 +177,7 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 	}
 	add_action( 'init', 'mep_auto_load' );
 	function mep_auto_load() {
-		if ( ! is_admin() ) {
+		if ( ! is_admin() && ! ( defined( 'DOING_CRON' ) && DOING_CRON ) ) {
 			mep_temp_attendee_auto_delete_for_cart();
 		}
 	}
@@ -400,6 +402,16 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 			$date          = get_post_meta( $attendee_id, 'ea_event_date', true ) ? get_mep_datetime( get_post_meta( $attendee_id, 'ea_event_date', true ), 'date-text' ) : '';
 			$time          = get_post_meta( $attendee_id, 'ea_event_date', true ) ? get_mep_datetime( get_post_meta( $attendee_id, 'ea_event_date', true ), 'time' ) : '';
 			$ticket_type   = get_post_meta( $attendee_id, 'ea_ticket_type', true ) ?: '';
+			$payment_method = get_post_meta( $attendee_id, 'ea_payment_method', true ) ?: '';
+			$amount_paid    = '';
+			$order          = wc_get_order( $order_id );
+			if ( $order instanceof WC_Order ) {
+				$payment_method = $order->get_payment_method_title();
+				$amount_paid    = wc_price( (float) $order->get_total() );
+			} else {
+				$attendee_amount = get_post_meta( $attendee_id, 'ea_ticket_order_amount', true );
+				$amount_paid     = '' !== $attendee_amount ? wc_price( (float) $attendee_amount ) : '';
+			}
 			$email_body    = str_replace( "{name}", $attendee_name, $email_body );
 			$email_body    = str_replace( "{email}", $email, $email_body );
 			$email_body    = str_replace( "{event}", $event_name, $email_body );
@@ -408,6 +420,8 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 			$email_body    = str_replace( "{event_datetime}", $date_time, $email_body );
 			$email_body    = str_replace( "{ticket_type}", $ticket_type, $email_body );
 			$email_body    = str_replace( "{order_id}", $order_id, $email_body );
+			$email_body    = str_replace( "{payment_method}", $payment_method, $email_body );
+			$email_body    = str_replace( "{amount_paid}", $amount_paid, $email_body );
 			return $email_body;
 		}
 	}
@@ -476,7 +490,7 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 	if ( ! function_exists( 'mep_get_event_ticket_price_by_name' ) ) {
 		function mep_get_event_ticket_price_by_name( $event, $type ) {
 			$ticket_type = get_post_meta( $event, 'mep_event_ticket_type', true );
-			if ( sizeof( $ticket_type ) > 0 ) {
+			if ( is_array( $ticket_type ) && sizeof( $ticket_type ) > 0 ) {
 				foreach ( $ticket_type as $key => $val ) {
 					if ( $val['option_name_t'] === $type ) {
 						return array_key_exists( 'option_price_t', $val ) ? $val['option_price_t'] : 0;
@@ -602,7 +616,7 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 			// Checking if the form builder addon is active and have any custom fields
 			$reg_form_id           = mep_fb_get_reg_form_id( $event_id );
 			$mep_form_builder_data = get_post_meta( $reg_form_id, 'mep_form_builder_data', true ) ? get_post_meta( $reg_form_id, 'mep_form_builder_data', true ) : [];
-			if ( sizeof( $mep_form_builder_data ) > 0 ) {
+			if ( is_array( $mep_form_builder_data ) && sizeof( $mep_form_builder_data ) > 0 ) {
 				foreach ( $mep_form_builder_data as $_field ) {
 					update_post_meta( $pid, "ea_" . $_field['mep_fbc_id'], $_user_info[ $_field['mep_fbc_id'] ] );
 					do_action( 'mep_attendee_upload_file_save', $event_id, $_user_info, $_field );
@@ -1314,12 +1328,12 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 		function mep_event_list_price( $pid, $type = 'price' ) {
 			$mep_event_ticket_type = get_post_meta( $pid, 'mep_event_ticket_type', true ) ? get_post_meta( $pid, 'mep_event_ticket_type', true ) : [];
 			$price_arr             = [];
-			if ( sizeof( $mep_event_ticket_type ) > 0 ) {
+			if ( is_array( $mep_event_ticket_type ) && sizeof( $mep_event_ticket_type ) > 0 ) {
 				foreach ( $mep_event_ticket_type as $ticket ) {
 					$price_arr[] = array_key_exists( 'option_price_t', $ticket ) ? $ticket['option_price_t'] : null;
 				}
 			}
-			return $type == 'price' && sizeof( $price_arr ) > 0 ? wc_price( mep_get_price_including_tax( $pid, min( $price_arr ) ) ) : count( $price_arr );
+			return $type == 'price' && is_array( $price_arr ) && sizeof( $price_arr ) > 0 ? wc_price( mep_get_price_including_tax( $pid, min( $price_arr ) ) ) : count( $price_arr );
 		}
 	}
 	if ( ! function_exists( 'mep_template_file_validate' ) ) {
@@ -1347,12 +1361,12 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 			$mep_event_ticket_type = get_post_meta( $pid, 'mep_event_ticket_type', true ) ? get_post_meta( $pid, 'mep_event_ticket_type', true ) : [];
 			$n_price               = get_post_meta( $pid, '_price', true );
 			$price_arr             = [];
-			if ( sizeof( $mep_event_ticket_type ) > 0 ) {
+			if ( is_array( $mep_event_ticket_type ) && sizeof( $mep_event_ticket_type ) > 0 ) {
 				foreach ( $mep_event_ticket_type as $ticket ) {
 					$price_arr[] = array_key_exists( 'option_price_t', $ticket ) ? $ticket['option_price_t'] : null;
 				}
 			}
-			return $type == 'price' && sizeof( $price_arr ) > 0 ? min( $price_arr ) : count( $price_arr );
+			return $type == 'price' && is_array( $price_arr ) && sizeof( $price_arr ) > 0 ? min( $price_arr ) : count( $price_arr );
 		}
 	}
 	if ( ! function_exists( 'mep_get_label' ) ) {
@@ -1717,12 +1731,22 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 	}
 	if ( ! function_exists( 'get_mep_datetime' ) ) {
 		function get_mep_datetime( $date, $type ) {
+			// Return empty string if date is empty or invalid
+			if ( empty( $date ) ) {
+				return '';
+			}
+			
 			$event_id             = get_the_id() ? get_the_id() : 0;
 			$date_format          = mep_get_datetime_format( $event_id, 'date' );
 			$time_format_timezone = mep_get_datetime_format( $event_id, 'time_timezone' );
 			$wpdatesettings       = $date_format . '  ' . $time_format_timezone;
-			$timezone             = wp_timezone_string();
-			$timestamp            = strtotime( $date . ' ' . $timezone );
+			$timestamp            = strtotime( $date );
+			
+			// If strtotime fails, return empty string instead of showing 1970
+			if ( $timestamp === false || $timestamp < 0 ) {
+				return '';
+			}
+			
 			if ( $type == 'date' ) {
 				return esc_html( wp_date( $date_format, $timestamp ) );
 			}
@@ -1779,7 +1803,7 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 			$location_sts = get_post_meta( $event_id, 'mep_org_address', true ) ? get_post_meta( $event_id, 'mep_org_address', true ) : '';
 			if ( $location_sts ) {
 				$org_arr  = get_the_terms( $event_id, 'mep_org' ) ? get_the_terms( $event_id, 'mep_org' ) : [];
-				$org_id   = sizeof( $org_arr ) > 0 ? $org_arr[0]->term_id : '';
+				$org_id   = (is_array( $org_arr ) && sizeof( $org_arr ) > 0) ? $org_arr[0]->term_id : '';
 				$location = ! empty( $org_id ) && get_term_meta( $org_id, 'org_location', true ) ? get_term_meta( $org_id, 'org_location', true ) : '';
 				$street   = ! empty( $org_id ) && get_term_meta( $org_id, 'org_street', true ) ? get_term_meta( $org_id, 'org_street', true ) : '';
 				$city     = ! empty( $org_id ) && get_term_meta( $org_id, 'org_city', true ) ? get_term_meta( $org_id, 'org_city', true ) : '';
@@ -1845,36 +1869,68 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 		}
 	}
 	add_filter( 'wp_mail_content_type', 'mep_set_email_content_type' );
+	// if ( ! function_exists( 'mage_array_strip' ) ) {
+	// 	function mage_array_strip( $array_or_string ) {
+	// 		if ( is_string( $array_or_string ) ) {
+	// 			// Check if this looks like coordinates (lat,lng format)
+	// 			if ( preg_match( '/^-?\d+\.?\d*\s*,\s*-?\d+\.?\d*$/', trim( $array_or_string ) ) ) {
+	// 				// For coordinates, only use sanitize_text_field to preserve the comma
+	// 				$array_or_string = sanitize_text_field( $array_or_string );
+	// 			} else {
+	// 				// For regular strings, use the original processing
+	// 				$array_or_string = sanitize_text_field( htmlentities( nl2br( $array_or_string ) ) );
+	// 			}
+	// 		} elseif ( is_array( $array_or_string ) ) {
+	// 			foreach ( $array_or_string as $key => &$value ) {
+	// 				if ( is_array( $value ) ) {
+	// 					$value = mage_array_strip( $value );
+	// 				} else {
+	// 					// Check if this looks like coordinates (lat,lng format)
+	// 					if ( preg_match( '/^-?\d+\.?\d*\s*,\s*-?\d+\.?\d*$/', trim( $value ) ) ) {
+	// 						// For coordinates, only use sanitize_text_field to preserve the comma
+	// 						$value = sanitize_text_field( $value );
+	// 					} else {
+	// 						// For regular values, use the original processing
+	// 						$value = sanitize_text_field( htmlentities( nl2br( $value ) ) );
+	// 					}
+	// 				}
+	// 			}
+	// 		}
+	// 		return $array_or_string;
+	// 	}
+	// }
+
 	if ( ! function_exists( 'mage_array_strip' ) ) {
-		function mage_array_strip( $array_or_string ) {
-			if ( is_string( $array_or_string ) ) {
-				// Check if this looks like coordinates (lat,lng format)
-				if ( preg_match( '/^-?\d+\.?\d*\s*,\s*-?\d+\.?\d*$/', trim( $array_or_string ) ) ) {
-					// For coordinates, only use sanitize_text_field to preserve the comma
-					$array_or_string = sanitize_text_field( $array_or_string );
-				} else {
-					// For regular strings, use the original processing
-					$array_or_string = sanitize_text_field( htmlentities( nl2br( $array_or_string ) ) );
-				}
-			} elseif ( is_array( $array_or_string ) ) {
-				foreach ( $array_or_string as $key => &$value ) {
-					if ( is_array( $value ) ) {
-						$value = mage_array_strip( $value );
-					} else {
-						// Check if this looks like coordinates (lat,lng format)
-						if ( preg_match( '/^-?\d+\.?\d*\s*,\s*-?\d+\.?\d*$/', trim( $value ) ) ) {
-							// For coordinates, only use sanitize_text_field to preserve the comma
-							$value = sanitize_text_field( $value );
-						} else {
-							// For regular values, use the original processing
-							$value = sanitize_text_field( htmlentities( nl2br( $value ) ) );
-						}
-					}
-				}
+		function mage_array_strip( $data ) {
+			// Null safety for PHP 8+
+			if ( is_null( $data ) ) {
+				return '';
 			}
-			return $array_or_string;
+			// If string
+			if ( is_string( $data ) ) {
+				$data = trim( $data );
+				// Coordinate format check (lat,lng)
+				if ( preg_match( '/^-?\d+\.?\d*\s*,\s*-?\d+\.?\d*$/', $data ) ) {
+					return sanitize_text_field( $data );
+				}
+				// Regular string
+				return sanitize_text_field( $data );
+			}
+			// If array → recursive sanitize
+			if ( is_array( $data ) ) {
+				foreach ( $data as $key => $value ) {
+					$data[ $key ] = mage_array_strip( $value );
+				}
+				return $data;
+			}
+			// For other scalar types (int, float, bool)
+			if ( is_scalar( $data ) ) {
+				return $data;
+			}
+			return '';
 		}
 	}
+
 	if ( ! function_exists( 'mep_letters_numbers_spaces_only' ) ) {
 		function mep_letters_numbers_spaces_only( $string ) {
 			// Check if this looks like coordinates (lat,lng format)
@@ -2175,7 +2231,7 @@ die();
 			$mep_form_builder_data = get_post_meta( $reg_form_id, 'mep_form_builder_data', true ) ? get_post_meta( $reg_form_id, 'mep_form_builder_data', true ) : [];
 			$form_id               = [];
 			// print_r($mep_form_builder_data); mep_fbc_label
-			if ( sizeof( $mep_form_builder_data ) > 0 ) {
+			if ( is_array( $mep_form_builder_data ) && sizeof( $mep_form_builder_data ) > 0 ) {
 				foreach ( $mep_form_builder_data as $_field ) {
 					$form_id[ $_field['mep_fbc_label'] ] = $_field['mep_fbc_id'];
 				}
@@ -2215,7 +2271,7 @@ die();
 	if ( ! function_exists( 'mep_cart_order_data_save_ticket_type' ) ) {
 		function mep_cart_order_data_save_ticket_type( $item, $ticket_type_arr, $eid ) {
 			foreach ( $ticket_type_arr as $ticket ) {
-				$ticket_type_name = $ticket['ticket_name'] . " - " . wc_price( mep_get_price_including_tax( $eid, (float) $ticket['ticket_price'] ) ) . ' x ' . $ticket['ticket_qty'] . '  = ';
+				$ticket_type_name = $ticket['ticket_name'] . "   " . wc_price( mep_get_price_including_tax( $eid, (float) $ticket['ticket_price'] ) ) . ' x ' . $ticket['ticket_qty'] . '  =  ';
 				$ticket_type_val  = wc_price( mep_get_price_including_tax( $eid, (float) $ticket['ticket_price'] * (float) $ticket['ticket_qty'] ) );
 				$ticket_name_meta = apply_filters( 'mep_event_order_meta_ticket_name_filter', $ticket_type_name, $ticket, $eid );
 				$item->add_meta_data( $ticket_name_meta, $ticket_type_val );
@@ -2247,7 +2303,7 @@ die();
 				)
 			);
 			$m_date_arr            = [];
-			if ( sizeof( $event_more_dates ) > 0 ) {
+			if ( is_array( $event_more_dates ) && sizeof( $event_more_dates ) > 0 ) {
 				$i = 0;
 				foreach ( $event_more_dates as $mdate ) {
 					// if(strtotime($now) < strtotime($mdate['event_more_start_date'].' '.$mdate['event_more_start_time'])){
@@ -2642,7 +2698,7 @@ die();
 				// Get PolyLang ID
 				$defaultLanguage = function_exists( 'pll_default_language' ) ? pll_default_language() : get_locale();
 				$translations    = function_exists( 'pll_get_post_translations' ) ? pll_get_post_translations( $event_id ) : [];
-				$event_id        = sizeof( $translations ) > 0 ? $translations[ $defaultLanguage ] : $event_id;
+				$event_id        = (is_array( $translations ) && sizeof( $translations ) > 0) ? $translations[ $defaultLanguage ] : $event_id;
 			} elseif ( $multi_lang_plugin == 'wpml' ) {
 				// WPML
 				$default_language = function_exists( 'wpml_loaded' ) ? $sitepress->get_default_language() : get_locale(); // will return 'en'
@@ -2921,7 +2977,7 @@ die();
 				foreach ( $time as $_time ) {
 					$time_list[] = $_time['mep_ticket_time'];
 				}
-				if ( sizeof( $time_list ) > 0 ) {
+				if ( is_array( $time_list ) && sizeof( $time_list ) > 0 ) {
 					$date = date( 'Y-m-d H:i:s', strtotime( $every_day . ' ' . $time_list[0] ) );
 				}
 			}
@@ -3178,7 +3234,7 @@ die();
 		$event_date_display = mep_re_get_the_upcomming_date_arr( $event_id );
 		$datepicker_format  = mep_get_option( 'mep_datepicker_format', 'general_setting_sec', 'yy-mm-dd' );
 		$date_format        = mep_rec_get_datepicker_php_format( $datepicker_format );
-		if ( sizeof( $global_on_days_arr ) > 0 ) {
+		if ( is_array( $global_on_days_arr ) && sizeof( $global_on_days_arr ) > 0 ) {
 			$date_parameter = isset( $_GET['date'] ) ? sanitize_text_field( date( $date_format, $_GET['date'] ) ) : null;
 			ob_start();
 			?>
@@ -3188,7 +3244,7 @@ die();
 						<?php echo mep_get_option( 'mep_event_rec_select_event_date_text', 'label_setting_sec', __( 'Select Event Date:', 'mage-eventpress' ) ); ?>
                     </h3>
                     <div class="mep-date-time">
-						<?php if ( sizeof( $global_on_days_arr ) == 1 ) { ?>
+						<?php if ( is_array( $global_on_days_arr ) && sizeof( $global_on_days_arr ) == 1 ) { ?>
                             <span style='font-size: 20px;'><?php if ( $time_status == 'yes' ) {
 									echo mep_esc_html( $date_parameter )
 									     ?? get_mep_datetime( $global_on_days_arr[0], 'date-text' );
@@ -3256,7 +3312,7 @@ die();
 		$event_off_days       = get_post_meta( $event_id, 'mep_ticket_offdays', true ) ? maybe_unserialize( get_post_meta( $event_id, 'mep_ticket_offdays', true ) ) : '';
 		$global_off_dates     = get_post_meta( $event_id, 'mep_ticket_off_dates', true ) ? maybe_unserialize( get_post_meta( $event_id, 'mep_ticket_off_dates', true ) ) : [];
 		$global_off_dates_arr = [];
-		if ( sizeof( $global_off_dates ) > 0 ) {
+		if ( is_array( $global_off_dates ) && sizeof( $global_off_dates ) > 0 ) {
 			foreach ( $global_off_dates as $off_dates ) {
 				$global_off_dates_arr[] = $off_dates['mep_ticket_off_date'];
 			}
@@ -3311,7 +3367,7 @@ die();
 		$hidden_date = $event_date ? date( 'Y-m-d', strtotime( $event_date ) ) : '';
 		$all_dates   = MPWEM_Functions::get_dates( $event_id );
 		$all_times   = MPWEM_Functions::get_times( $event_id, $all_dates, $hidden_date );
-		if ( sizeof( $all_times ) ) {
+		if ( is_array( $all_times ) && sizeof( $all_times ) ) {
 			foreach ( $all_times as $times ) { ?>
                 <option value="<?php echo esc_attr( $hidden_date . ' ' . $times['start']['time'] ); ?>"><?php echo esc_html( $times['start']['label'] ); ?></option>
 			<?php }
@@ -3426,7 +3482,7 @@ die();
 				$day_name       = 'mep_ticket_times_' . $calender_day;
 				$this_day_times = get_post_meta( $event_id, $day_name, true ) ? maybe_unserialize( get_post_meta( $event_id, $day_name, true ) ) : maybe_unserialize( $global_time_slots );
 				$times          = [];
-				if ( sizeof( $this_day_times ) > 0 ) {
+				if ( is_array( $this_day_times ) && sizeof( $this_day_times ) > 0 ) {
 					foreach ( $this_day_times as $_time ) {
 						$times[] = $_time['mep_ticket_time_name'] . ' (' . get_mep_datetime( $_time['mep_ticket_time'], 'time' ) . ')';
 					}
@@ -3446,13 +3502,13 @@ die();
 			$event_off_days       = get_post_meta( $event_id, 'mep_ticket_offdays', true ) ? maybe_unserialize( get_post_meta( $event_id, 'mep_ticket_offdays', true ) ) : [];
 			$global_off_dates     = get_post_meta( $event_id, 'mep_ticket_off_dates', true ) ? maybe_unserialize( get_post_meta( $event_id, 'mep_ticket_off_dates', true ) ) : [];
 			$global_off_dates_arr = [];
-			if ( sizeof( $global_off_dates ) > 0 ) {
+			if ( is_array( $global_off_dates ) && sizeof( $global_off_dates ) > 0 ) {
 				foreach ( $global_off_dates as $off_dates ) {
 					$global_off_dates_arr[] = date( 'Y-m-d', strtotime( $off_dates['mep_ticket_off_date'] ) );
 				}
 			}
 			$global_off_days_arr = [];
-			if ( sizeof( $event_off_days ) > 0 ) {
+			if ( is_array( $event_off_days ) && sizeof( $event_off_days ) > 0 ) {
 				foreach ( $event_off_days as $off_days ) {
 					if ( $off_days == 'sat' ) {
 						$off_days = 'sat';
@@ -3480,7 +3536,7 @@ die();
 			}
 			$fdate      = array_diff( $global_on_days_arr, $global_off_dates_arr );
 			$m_date_arr = [];
-			if ( sizeof( $fdate ) > 0 ) {
+			if ( is_array( $fdate ) && sizeof( $fdate ) > 0 ) {
 				$i = 0;
 				foreach ( $fdate as $mdate ) {
 					$mstart                    = $mdate;
@@ -3572,7 +3628,7 @@ die();
 			$mep_form_builder_data = get_post_meta( $reg_form_id, 'mep_form_builder_data', true );
 			$iu                    = 0;
 			//if ( isset( $_POST['user_name'] ) || isset( $_POST['user_email'] ) || isset( $_POST['user_phone'] ) || isset( $_POST['gender'] ) || isset( $_POST['tshirtsize'] ) || isset( $_POST['user_company'] ) || isset( $_POST['user_designation'] ) || isset( $_POST['user_website'] ) || isset( $_POST['vegetarian'] ) ) {
-			if ( sizeof( $names ) > 0 ) {
+			if ( is_array( $names ) && sizeof( $names ) > 0 ) {
 				$same_attendee     = MPWEM_Global_Function::get_settings( 'general_setting_sec', 'mep_enable_same_attendee', 'no' );
 				$current_template  = MPWEM_Global_Function::get_post_info( $product_id, 'mep_event_template' );
 				$global_template   = mep_get_option( 'mep_global_single_template', 'single_event_setting_sec', 'default-theme.php' );
@@ -3689,7 +3745,7 @@ die();
 								echo esc_html( $vegetarian );
 							?>
                         </li> <?php } ?>
-					<?php if ( sizeof( $custom_forms_id ) > 0 ) {
+					<?php if ( is_array( $custom_forms_id ) && sizeof( $custom_forms_id ) > 0 ) {
 						foreach ( $custom_forms_id as $key => $value ) {
 							?>
                             <li><?php
@@ -3956,7 +4012,7 @@ die();
 				'event_etd' => $event_end_datetime
 			);
 			$a                       = 1;
-			if ( sizeof( $event_multidate ) > 0 ) {
+			if ( is_array( $event_multidate ) && sizeof( $event_multidate ) > 0 ) {
 				foreach ( $event_multidate as $event_mdt ) {
 					$event_std[ $a ]['event_std'] = $event_mdt['event_more_start_date'] . ' ' . $event_mdt['event_more_start_time'];
 					$event_std[ $a ]['event_etd'] = $event_mdt['event_more_end_date'] . ' ' . $event_mdt['event_more_end_time'];
@@ -4229,7 +4285,7 @@ die();
 		ob_start();
 		$tags  = get_the_terms( get_the_id(), 'mep_tag' );
 		$names = [];
-		if ( sizeof( $tags ) > 0 && ! is_wp_error( $tags ) ) {
+		if ( is_array( $tags ) && sizeof( $tags ) > 0 && ! is_wp_error( $tags ) ) {
 			foreach ( $tags as $key => $value ) {
 				$names[] = $value->name;
 			}

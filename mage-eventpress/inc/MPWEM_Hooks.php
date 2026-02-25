@@ -126,33 +126,48 @@
 			public function get_mpwem_ticket() {
 				// Sanitize and validate input
 				$post_id = isset( $_REQUEST['post_id'] ) ? intval( $_REQUEST['post_id'] ) : 0;
-				$dates   = isset( $_REQUEST['dates'] ) ? sanitize_text_field( $_REQUEST['dates'] ) : '';
+$dates   = isset( $_REQUEST['dates'] ) ? sanitize_text_field( $_REQUEST['dates'] ) : '';
 				// Check if post exists and is published
 				if ( ! $post_id || get_post_status( $post_id ) !== 'publish' ) {
 					wp_send_json_error( 'Invalid or unpublished Event.', 'mage-eventpress' );
 					wp_die();
 				}
-				// Trigger your action safely
+				
+				// Get dates and times
 				$all_dates   = MPWEM_Functions::get_dates( $post_id );
 				$all_times   = MPWEM_Functions::get_times( $post_id, $all_dates, $dates );
-                if(sizeof($all_times)>0){
+				
+				// If dates is empty, get the upcoming date
+				if ( empty( $dates ) ) {
+					$dates = MPWEM_Functions::get_upcoming_date_time( $post_id, $all_dates, $all_times );
+				}
+				
+				// Process for everyday events with time slots
+                if( is_array($all_times) && sizeof($all_times) > 0 ) {
 	                $start_time = '';
-	                if ( sizeof( $all_times ) > 0 ) {
-		                $all_times  = current( $all_times );
-		                $start_time = array_key_exists( 'start', $all_times ) ? $all_times['start']['time'] : '';
+	                if ( is_array($all_times) && sizeof( $all_times ) > 0 ) {
+		                $all_times_current = current( $all_times );
+		                $start_time = array_key_exists( 'start', $all_times_current ) ? $all_times_current['start']['time'] : '';
 	                }
-	                $event_type  = MPWEM_Global_Function::get_post_info( $post_id, 'mep_enable_recurring', 'no' );
-                    if($event_type=='everyday') {
-	                    if ( $start_time != '' ) {
+	                
+	                $event_type = MPWEM_Global_Function::get_post_info( $post_id, 'mep_enable_recurring', 'no' );
+	                
+                    if( $event_type == 'everyday' && ! empty( $start_time ) ) {
+	                    // For everyday events, ensure we have both date and time
+	                    if ( ! MPWEM_Global_Function::check_time_exit_date( $dates ) ) {
+		                    // Date doesn't have time, append it
 		                    $dates = $dates . ' ' . $start_time;
 	                    }
-	                    $dates = MPWEM_Global_Function::check_time_exit_date( $dates ) ? date( 'Y-m-d H:i', strtotime( $dates ) ) : date( 'Y-m-d', strtotime( $dates ) );
+	                    // Format the date properly
+	                    $timestamp = strtotime( $dates );
+	                    if ( $timestamp !== false && $timestamp > 0 ) {
+		                    $dates = date( 'Y-m-d H:i', $timestamp );
+	                    }
                     }
                 }
 
-				//echo '<pre>';			print_r($all_times);			echo '</pre>';
 				do_action( 'mpwem_registration_content', $post_id, $all_dates, $all_times, $dates );
-				wp_die(); // Always use wp_die() instead of die() in WordPress
+				wp_die();
 			}
 			public function get_mpwem_time() {
 				$event_id = isset( $_REQUEST['post_id'] ) ? intval( $_REQUEST['post_id'] ) : 0;
@@ -237,7 +252,7 @@
 				$date_type             = MPWEM_Global_Function::get_post_info( $event_id, 'mep_enable_recurring', 'no' );
 				$mep_show_end_datetime = MPWEM_Global_Function::get_post_info( $event_id, 'mep_show_end_datetime', 'yes' );
 				array_shift( $all_dates );
-				if ( sizeof( $all_dates ) > 0 ) {
+				if ( is_array($all_dates) && sizeof( $all_dates ) > 0 ) {
 					?>
                     <div class="list_date_list">
 						<?php
@@ -274,10 +289,10 @@
 									?>
                                     <div class="date_item">
                                         <a href="<?php echo esc_url( $event_url ); ?>"><?php echo esc_html( MPWEM_Global_Function::date_format( $date, '', $event_id ) ); ?></a>
-										<?php if ( sizeof( $all_times ) ) {
+										<?php if ( is_array( $all_times ) && sizeof( $all_times ) ) {
 											foreach ( $all_times as $times ) {
 												$time_info = array_key_exists( 'start', $times ) ? $times['start'] : [];
-												if ( sizeof( $time_info ) > 0 ) {
+												if ( is_array( $time_info ) && sizeof( $time_info ) > 0 ) {
 													$label = array_key_exists( 'label', $time_info ) ? $time_info['label'] : '';
 													$time  = array_key_exists( 'time', $time_info ) ? $time_info['time'] : '';
 													if ( $time ) {
@@ -303,7 +318,7 @@
 			}
 			/***********************/
 			public function seat_status( $event_id, $event_infos = [], $date = '' ) {
-				$event_infos               = sizeof( $event_infos ) > 0 ? $event_infos : MPWEM_Functions::get_all_info( $event_id );
+				$event_infos               = (is_array( $event_infos ) && sizeof( $event_infos ) > 0) ? $event_infos : MPWEM_Functions::get_all_info( $event_id );
 				$show_available_seat       = array_key_exists( 'mep_available_seat', $event_infos ) ? $event_infos['mep_available_seat'] : 'on';
 				$_single_event_setting_sec = array_key_exists( 'single_event_setting_sec', $event_infos ) ? $event_infos['single_event_setting_sec'] : [];
 				$single_event_setting_sec  = is_array( $_single_event_setting_sec ) && ! empty( $_single_event_setting_sec ) ? $_single_event_setting_sec : [];
@@ -415,7 +430,7 @@
 				if ( $show_price == 'yes' ) {
 					$event_id         = array_key_exists( 'event_id', $event_infos ) ? $event_infos['event_id'] : 0;
 					$ticket_types     = array_key_exists( 'mep_event_ticket_type', $event_infos ) ? $event_infos['mep_event_ticket_type'] : [];
-					$show_price_label = sizeof( $ticket_types ) > 1 ? __( 'Price Starts from:', 'mage-eventpress' ) : __( 'Price:', 'mage-eventpress' );
+					$show_price_label = (is_array( $ticket_types ) && sizeof( $ticket_types ) > 1) ? __( 'Price Starts from:', 'mage-eventpress' ) : __( 'Price:', 'mage-eventpress' );
 					?>
                     <p class="list_price"><?php echo esc_html( $show_price_label ) . " " . wp_kses_post( wc_price( MPWEM_Functions::get_min_price( $event_id ) ) ); ?></p>
 					<?php
@@ -509,7 +524,7 @@
 				$event_list_setting_sec    = array_key_exists( 'event_list_setting_sec', $event_infos ) ? $event_infos['event_list_setting_sec'] : [];
 				$event_list_setting_sec    = empty( $event_list_setting_sec ) && ! is_array( $event_list_setting_sec ) ? [] : $event_list_setting_sec;
 				$show_date_list            = array_key_exists( 'mep_date_list_in_event_listing', $event_list_setting_sec ) ? $event_list_setting_sec['mep_date_list_in_event_listing'] : 'yes';
-				if ( sizeof( $all_dates ) > 1 && $hide_date_list == 'no' && $show_date_list == 'yes' ) { ?>
+				if ( is_array( $all_dates ) && sizeof( $all_dates ) > 1 && $hide_date_list == 'no' && $show_date_list == 'yes' ) { ?>
                     <div class="mpwem_style mpwem_list_date_list">
                         <button type="button" data-event-id="<?php echo esc_attr( $event_id ); ?>" class="_button_theme_light_mt_xs mpwem_get_date_list" data-collapse-target="#mpwem_more_date_<?php echo esc_attr( $event_id ); ?>" data-open-text="<?php esc_attr_e( 'Hide Date Lists', 'mage-eventpress' ); ?>" data-close-text="<?php esc_attr_e( 'View More Date', 'mage-eventpress' ); ?>"><span data-text><?php esc_html_e( 'View More Date', 'mage-eventpress' ); ?></span></button>
                         <div class="date_list_area" data-collapse="#mpwem_more_date_<?php echo esc_attr( $event_id ); ?>"></div>
@@ -541,7 +556,7 @@
 				?>
                 <div class="mepev-ribbons">
 					<?php
-						if ( sizeof( $all_dates ) > 0 ) {
+						if ( is_array( $all_dates ) && sizeof( $all_dates ) > 0 ) {
 							if ( $recurring == 'yes' ) {
 								?>
                                 <div class='mepev-ribbon multidate'><i class="far fa-calendar-alt"></i> <?php esc_html_e( 'Multi Date', 'mage-eventpress' ); ?></div>

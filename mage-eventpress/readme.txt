@@ -259,6 +259,16 @@ vulnerabilities.
 
 == Changelog ==
 
+= 5.2.2 =
+* Virtual Event Theme Added
+* Wrong Date issue solved for Repeted Events
+* New 2 Dynamic Tags added in the email confirmation email text
+* PHP 8.3+ version compatible issue fixed.
+* Some minor design issue fixed.
+* Code Optimization
+  25 Feb 2026*
+
+
 = 5.2.0 =
 * Multiple Booking not working issue fixed
 * Double date in thankyou page issue fixed
