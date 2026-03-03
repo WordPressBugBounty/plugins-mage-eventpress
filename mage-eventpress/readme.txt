@@ -259,6 +259,12 @@ vulnerabilities.
 
 == Changelog ==
 
+= 5.2.3 =
+* Quick Release: Solved the Wrong Date issue for Event and PDF Ticket
+* Mobile Responsive issue fixed
+* Code Optimization
+  03 Mar 2026*
+
 = 5.2.2 =
 * Virtual Event Theme Added
 * Wrong Date issue solved for Repeted Events
