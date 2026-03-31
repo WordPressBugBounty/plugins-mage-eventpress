@@ -204,8 +204,27 @@
 				if ( get_post_type( $event_id ) == 'mep_events' ) {
 					$not_in_the_cart = apply_filters( 'mep_check_product_into_cart', true, $wc_product_id );
 					if ( ! $not_in_the_cart ) {
-						wc_add_notice( "This event has already been added to the shopping cart. To change the quantity, please remove it from the cart and add it back again.", 'error' );
-						$passed = false;
+						// Check if it's a date conflict
+						$current_event_date = isset( $_POST['mep_event_start_date'] ) ? array_map( 'sanitize_text_field', wp_unslash( $_POST['mep_event_start_date'] ) ) : [];
+						$current_event_date = ! empty( $current_event_date ) ? current( $current_event_date ) : '';
+						
+						// Check cart for same event with different date
+						$has_date_conflict = false;
+						if ( isset( WC()->cart ) && ! empty( WC()->cart->get_cart() ) && ! empty( $current_event_date ) ) {
+							foreach ( WC()->cart->get_cart() as $cart_item ) {
+								$cart_event_id = isset( $cart_item['event_id'] ) ? $cart_item['event_id'] : 0;
+								$cart_event_date = isset( $cart_item['event_cart_date'] ) ? $cart_item['event_cart_date'] : '';
+								if ( $cart_event_id == $event_id && ! empty( $cart_event_date ) && $current_event_date == $cart_event_date ) {
+									$passed = false;
+									break;
+								}
+							}
+						}
+						
+						if (!$passed ) {
+							wc_add_notice( "This event has already been added to the shopping cart. To change the quantity, please remove it from the cart and add it back again.", 'error' );
+						}
+
 					}
 				}
 				return $passed;
@@ -338,6 +357,8 @@
 					$event_arr[] = $event_id;
 					if ( get_post_type( $event_id ) == 'mep_events' ) {
 						$event_ticket_info_arr = wc_get_order_item_meta( $item_id, '_event_ticket_info', true );
+
+
 						$org                   = get_the_terms( $event_id, 'mep_org' );
 						$term_id               = isset( $org[0]->term_id ) ? $org[0]->term_id : '';
 						$org_email             = get_term_meta( $term_id, 'org_email', true ) ? get_term_meta( $term_id, 'org_email', true ) : '';
@@ -349,7 +370,7 @@
 							do_action( 'mep_wc_order_status_change', $order_status, $event_id, $order_id );
 							if ( $enable_billing_email == 'enable' ) {
 								if ( in_array( 'processing', $email_send_status ) ) {
-									mep_event_confirmation_email_sent( $event_id, $email, $order_id );
+									mep_event_confirmation_email_sent( $event_id, $email, $order_id, 0, $event_ticket_info_arr );
 								}
 							}
 						}
@@ -372,9 +393,9 @@
 							change_extra_service_status( $order_id, 'publish', 'publish', 'completed' );
 							do_action( 'mep_wc_order_status_change', $order_status, $event_id, $order_id );
 							if ( in_array( 'completed', $email_send_status ) ) {
-								mep_event_confirmation_email_sent( $event_id, $email, $order_id );
+								mep_event_confirmation_email_sent( $event_id, $email, $order_id, 0, $event_ticket_info_arr );
 								if ( ! empty( $org_email ) ) {
-									mep_event_confirmation_email_sent( $event_id, $org_email, $order_id );
+									mep_event_confirmation_email_sent( $event_id, $org_email, $order_id, 0, $event_ticket_info_arr );
 								}
 							}
 						}
@@ -491,6 +512,7 @@
 						$ticket_name               = explode( '_', $name );
                         $_name=$ticket_name[0];
 						$current_qty = apply_filters('mpwem_group_actual_qty', $current_qty, $post_id, $_name);
+						$current_qty = apply_filters('mpwem_group_qty_actual', $current_qty, $post_id, $_name);
 						if ( $_name && $current_qty > 0 ) {
 							$ticket_info[ $key ]['ticket_name']  = $name;
 							$ticket_info[ $key ]['ticket_price'] = MPWEM_Functions::get_ticket_price_by_name( $_name, $post_id );
@@ -572,8 +594,9 @@
 						$ticket_name               = explode( '_', $name );
 						$_name=$ticket_name[0];
 						$current_qty = apply_filters('mpwem_group_actual_qty', $current_qty, $post_id, $_name);
+						$current_qty = apply_filters('mpwem_group_qty_actual', $current_qty, $post_id, $_name);
 						if ( $current_qty > 0 && $name ) {
-							for ( $j = 0; $j < $qty[ $key ]; $j ++ ) {
+							for ( $j = 0; $j < $current_qty; $j ++ ) {
 								if ( ( $same_attendee == 'yes' || $same_attendee == 'must' ) && is_array( $attendee_info ) && sizeof( $attendee_info ) > 0 ) {
 									$attendee_info[ $count ] = current( $attendee_info );
 								} else {
@@ -635,7 +658,10 @@
 										if ( $type && $name && $type != 'title' && array_key_exists( $name, $user ) && $user[ $name ] != '' ) {
 											$label = array_key_exists( 'label', $form ) ? $form['label'] : '';
 											if ( $type == 'file' ) {
-												echo '<li>' . esc_html( $label . ' : ' . $user[ $name ] ) . '</li>';
+												$upload_dir = wp_upload_dir();
+												$file_url   = $upload_dir['baseurl'] . '/mep_attendee_file_list/' . $user[ $name ];
+												$file_url   = str_replace( 'http://', 'https://', $file_url );
+												echo '<li>' . esc_html( $label ) . ' : <a href="' . esc_url( $file_url ) . '" target="_blank">📎 ' . esc_html( $user[ $name ] ) . '</a></li>';
 											} else {
 												echo '<li>' . esc_html( $label . ' : ' . $user[ $name ] ) . '</li>';
 											}

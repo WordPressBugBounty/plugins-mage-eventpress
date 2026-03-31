@@ -387,8 +387,273 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 			return $loop;
 		}
 	}
-	if ( ! function_exists( 'mep_email_dynamic_content' ) ) {
-		function mep_email_dynamic_content( $email_body, $event_id, $order_id, $__attendee_id = 0 ) {
+
+	function getEventDateById($target_id, $data) {
+		if(is_array($data) && count($data) > 0) {
+			foreach ($data as $item) {
+				if (isset($item['event_id']) && $item['event_id'] == $target_id) {
+					return $item['event_date'];
+				}
+			}
+		}		
+		return null; // Return null if the ID doesn't exist in the array
+	}
+
+	if ( ! function_exists( 'mep_email_datetime_has_time' ) ) {
+		function mep_email_datetime_has_time( $date_time ) {
+			if ( empty( $date_time ) ) {
+				return false;
+			}
+
+			$parsed_date = date_parse( $date_time );
+			if ( ! empty( $parsed_date['error_count'] ) ) {
+				return false;
+			}
+
+			return ! empty( $parsed_date['hour'] ) || ! empty( $parsed_date['minute'] ) || ! empty( $parsed_date['second'] );
+		}
+	}
+
+	if ( ! function_exists( 'mep_normalize_email_datetime' ) ) {
+		function mep_normalize_email_datetime( $date_time, $base_date = '' ) {
+			$date_time = is_string( $date_time ) ? trim( wp_strip_all_tags( $date_time ) ) : '';
+			$base_date = is_string( $base_date ) ? trim( wp_strip_all_tags( $base_date ) ) : '';
+
+			if ( empty( $date_time ) ) {
+				return '';
+			}
+
+			$parse_target = $date_time;
+			$has_date     = (bool) preg_match( '/\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[\/\.-]\d{1,2}[\/\.-]\d{2,4}/', $date_time );
+
+			if ( ! $has_date && ! empty( $base_date ) ) {
+				if ( preg_match( '/(\d{1,2}:\d{2}(?::\d{2})?\s*(?:[APMapm]{2})?)/', $date_time, $time_match ) ) {
+					$parse_target = $base_date . ' ' . $time_match[1];
+				} else {
+					$parse_target = $base_date . ' ' . $date_time;
+				}
+			}
+
+			try {
+				$datetime = new DateTimeImmutable( $parse_target, wp_timezone() );
+			} catch ( Exception $exception ) {
+				return '';
+			}
+
+			return $datetime->format( 'Y-m-d H:i:s' );
+		}
+	}
+
+	if ( ! function_exists( 'mep_get_email_slot_value' ) ) {
+		function mep_get_email_slot_value( $event_id, $order_id, $attendee_id = 0 ) {
+			if ( $attendee_id > 0 ) {
+				$attendee_slot = get_post_meta( $attendee_id, 'ea_time_slot', true );
+				if ( ! empty( $attendee_slot ) ) {
+					return $attendee_slot;
+				}
+			}
+
+			$order = wc_get_order( $order_id );
+			if ( ! ( $order instanceof WC_Order ) ) {
+				return '';
+			}
+
+			foreach ( $order->get_items() as $item_id => $item ) {
+				$item_event_id = (int) wc_get_order_item_meta( $item_id, 'event_id', true );
+				if ( $item_event_id !== (int) $event_id ) {
+					continue;
+				}
+
+				$time_slot = wc_get_order_item_meta( $item_id, '_time_slot', true );
+				if ( ! empty( $time_slot ) ) {
+					return $time_slot;
+				}
+			}
+
+			return '';
+		}
+	}
+
+	if ( ! function_exists( 'mep_combine_email_date_and_time' ) ) {
+		function mep_combine_email_date_and_time( $date_value, $time_value ) {
+			$date_value = is_string( $date_value ) ? trim( wp_strip_all_tags( $date_value ) ) : '';
+			$time_value = is_string( $time_value ) ? trim( wp_strip_all_tags( $time_value ) ) : '';
+
+			if ( empty( $date_value ) || empty( $time_value ) ) {
+				return '';
+			}
+
+			try {
+				$date_only = ( new DateTimeImmutable( $date_value, wp_timezone() ) )->format( 'Y-m-d' );
+			} catch ( Exception $exception ) {
+				return '';
+			}
+
+			return mep_normalize_email_datetime( $time_value, $date_only );
+		}
+	}
+
+	if ( ! function_exists( 'mep_get_email_date_only' ) ) {
+		function mep_get_email_date_only( $date_value ) {
+			$date_value = is_string( $date_value ) ? trim( wp_strip_all_tags( $date_value ) ) : '';
+
+			if ( empty( $date_value ) ) {
+				return '';
+			}
+
+			try {
+				return ( new DateTimeImmutable( $date_value, wp_timezone() ) )->format( 'Y-m-d' );
+			} catch ( Exception $exception ) {
+				return '';
+			}
+		}
+	}
+
+	if ( ! function_exists( 'mep_get_email_datetime_text' ) ) {
+		function mep_get_email_datetime_text( $event_id, $date, $type ) {
+			if ( empty( $date ) ) {
+				return '';
+			}
+
+			$date_format          = mep_get_datetime_format( $event_id, 'date' );
+			$time_format_timezone = mep_get_datetime_format( $event_id, 'time_timezone' );
+			$wpdatesettings       = $date_format . '  ' . $time_format_timezone;
+
+			try {
+				$datetime = new DateTimeImmutable( $date, wp_timezone() );
+			} catch ( Exception $exception ) {
+				return '';
+			}
+
+			$timestamp = $datetime->getTimestamp();
+
+			if ( $timestamp === false || $timestamp < 0 ) {
+				return '';
+			}
+
+			if ( $type == 'date' || $type == 'date-text' ) {
+				return esc_html( wp_date( $date_format, $timestamp, wp_timezone() ) );
+			}
+			if ( $type == 'date-time' || $type == 'date-time-text' ) {
+				return esc_html( wp_date( $wpdatesettings, $timestamp, wp_timezone() ) );
+			}
+			if ( $type == 'time' ) {
+				return esc_html( wp_date( $time_format_timezone, $timestamp, wp_timezone() ) );
+			}
+
+			return '';
+		}
+	}
+
+	if ( ! function_exists( 'mep_get_email_event_datetime' ) ) {
+		function mep_get_email_event_datetime( $event_id, $order_id, $attendee_id = 0, $event_ticket_info_arr = array() ) {
+			$attendee_date = $attendee_id > 0 ? get_post_meta( $attendee_id, 'ea_event_date', true ) : '';
+			if ( $attendee_date && mep_email_datetime_has_time( $attendee_date ) ) {
+				return mep_normalize_email_datetime( $attendee_date );
+			}
+
+			$resolved_date = getEventDateById( $event_id, $event_ticket_info_arr );
+
+			if ( empty( $resolved_date ) ) {
+				$order = wc_get_order( $order_id );
+				if ( $order instanceof WC_Order ) {
+					foreach ( $order->get_items() as $item_id => $item ) {
+						$item_event_id = (int) wc_get_order_item_meta( $item_id, 'event_id', true );
+						if ( $item_event_id !== (int) $event_id ) {
+							continue;
+						}
+
+						$item_ticket_info_arr = wc_get_order_item_meta( $item_id, '_event_ticket_info', true );
+						$resolved_date        = getEventDateById( $event_id, $item_ticket_info_arr );
+
+						if ( empty( $resolved_date ) && is_array( $item_ticket_info_arr ) ) {
+							foreach ( $item_ticket_info_arr as $ticket_info ) {
+								$ticket_date = isset( $ticket_info['event_date'] ) ? $ticket_info['event_date'] : '';
+								if ( empty( $ticket_date ) ) {
+									continue;
+								}
+
+								if ( empty( $attendee_date ) ) {
+									$resolved_date = $ticket_date;
+									break;
+								}
+
+								if ( date( 'Y-m-d', strtotime( $ticket_date ) ) === date( 'Y-m-d', strtotime( $attendee_date ) ) ) {
+									$resolved_date = $ticket_date;
+									break;
+								}
+
+								if ( empty( $resolved_date ) ) {
+									$resolved_date = $ticket_date;
+								}
+							}
+						}
+
+						if ( ! empty( $resolved_date ) ) {
+							break;
+						}
+					}
+				}
+			}
+
+			$event_start_time = get_post_meta( $event_id, 'event_start_time', true );
+			$time_slot_value  = mep_get_email_slot_value( $event_id, $order_id, $attendee_id );
+			if ( ! empty( $resolved_date ) ) {
+				if ( mep_email_datetime_has_time( $resolved_date ) ) {
+					return mep_normalize_email_datetime( $resolved_date );
+				}
+
+				$resolved_day = mep_get_email_date_only( $resolved_date );
+
+				$slot_datetime = ! empty( $resolved_day ) ? mep_normalize_email_datetime( $time_slot_value, $resolved_day ) : '';
+				if ( ! empty( $slot_datetime ) ) {
+					return $slot_datetime;
+				}
+
+				$combined_datetime = mep_combine_email_date_and_time( $resolved_date, $event_start_time );
+				if ( ! empty( $combined_datetime ) ) {
+					return $combined_datetime;
+				}
+
+				return $resolved_date;
+			}
+
+			if ( ! empty( $attendee_date ) ) {
+				$attendee_day = mep_get_email_date_only( $attendee_date );
+
+				$slot_datetime = ! empty( $attendee_day ) ? mep_normalize_email_datetime( $time_slot_value, $attendee_day ) : '';
+				if ( ! empty( $slot_datetime ) ) {
+					return $slot_datetime;
+				}
+
+				$combined_datetime = mep_combine_email_date_and_time( $attendee_date, $event_start_time );
+				if ( ! empty( $combined_datetime ) ) {
+					return $combined_datetime;
+				}
+
+				return $attendee_date;
+			}
+
+			$event_start_datetime = get_post_meta( $event_id, 'event_start_datetime', true );
+			if ( ! empty( $event_start_datetime ) ) {
+				return mep_normalize_email_datetime( $event_start_datetime );
+			}
+
+			$event_start_date = get_post_meta( $event_id, 'event_start_date', true );
+			if ( ! empty( $event_start_date ) && ! empty( $event_start_time ) ) {
+				$combined_datetime = mep_combine_email_date_and_time( $event_start_date, $event_start_time );
+				if ( ! empty( $combined_datetime ) ) {
+					return $combined_datetime;
+				}
+			}
+
+			return $event_start_date ?: '';
+		}
+	}
+
+
+	if ( ! function_exists( 'mep_email_dynamic_contentX' ) ) {
+		function mep_email_dynamic_contentX( $email_body, $event_id, $order_id, $__attendee_id = 0, $event_ticket_info_arr = array() ) {
 			$event_name   = get_the_title( $event_id );
 			$attendee_q   = mep_get_attendee_info_query( $event_id, $order_id );
 			$_attendee_id = 0; // Initialize to avoid undefined variable warning
@@ -398,9 +663,12 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 			$attendee_id   = $__attendee_id > 0 ? $__attendee_id : $_attendee_id;
 			$attendee_name = get_post_meta( $attendee_id, 'ea_name', true ) ?: '';
 			$email         = get_post_meta( $attendee_id, 'ea_email', true ) ?: '';
-			$date_time     = get_post_meta( $attendee_id, 'ea_event_date', true ) ? get_mep_datetime( get_post_meta( $attendee_id, 'ea_event_date', true ), 'date-time-text' ) : '';
-			$date          = get_post_meta( $attendee_id, 'ea_event_date', true ) ? get_mep_datetime( get_post_meta( $attendee_id, 'ea_event_date', true ), 'date-text' ) : '';
-			$time          = get_post_meta( $attendee_id, 'ea_event_date', true ) ? get_mep_datetime( get_post_meta( $attendee_id, 'ea_event_date', true ), 'time' ) : '';
+			$event_date_time = mep_get_email_event_datetime( $event_id, $order_id, $attendee_id, $event_ticket_info_arr );
+			$date_time       = $event_date_time ? mep_get_email_datetime_text( $event_id, $event_date_time, 'date-time-text' ) : '';
+			$date            = $event_date_time ? mep_get_email_datetime_text( $event_id, $event_date_time, 'date-text' ) : '';
+			$time            = $event_date_time ? mep_get_email_datetime_text( $event_id, $event_date_time, 'time' ) : '';
+
+
 			$ticket_type   = get_post_meta( $attendee_id, 'ea_ticket_type', true ) ?: '';
 			$payment_method = get_post_meta( $attendee_id, 'ea_payment_method', true ) ?: '';
 			$amount_paid    = '';
@@ -425,9 +693,101 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 			return $email_body;
 		}
 	}
+
+
+	if ( ! function_exists( 'mep_email_dynamic_content' ) ) {
+		function mep_email_dynamic_content( $email_body, $event_id, $order_id, $__attendee_id = 0, $event_ticket_info_arr = array() ) {
+			
+			$event_name = get_the_title( $event_id );
+			$order      = wc_get_order( $order_id );
+			$final_output = "";
+
+			// ১. যদি অ্যারেতে ডাটা থাকে (লুপ মোড)
+			if ( ! empty( $event_ticket_info_arr ) && is_array( $event_ticket_info_arr ) ) {
+				
+				// বিলিং নেম নেওয়া (যদি অর্ডার অবজেক্ট থাকে)
+				$billing_name = '';
+				if ( $order instanceof WC_Order ) {
+					$billing_name = $order->get_billing_first_name() . ' ' . $order->get_billing_last_name();
+				}
+
+				foreach ( $event_ticket_info_arr as $ticket ) {
+					$temp_body = $email_body;
+
+					// টিকেট অ্যারে থেকে টাইম এবং ডেট আলাদা করা
+					$raw_date    = mep_get_email_event_datetime( $event_id, $order_id, 0, array( $ticket ) );
+					$t_date      = '';
+					$t_date_time = '';
+					$t_time      = '';
+
+					if ( ! empty( $raw_date ) ) {
+						$t_date      = mep_get_email_datetime_text( $event_id, $raw_date, 'date-text' );
+						$t_date_time = mep_get_email_datetime_text( $event_id, $raw_date, 'date-time-text' );
+						$t_time      = mep_get_email_datetime_text( $event_id, $raw_date, 'time' );
+					}
+
+					// ডাইনামিক ট্যাগ রিপ্লেস
+					$temp_body = str_replace( "{name}", $billing_name, $temp_body );
+					$temp_body = str_replace( "{event}", $event_name, $temp_body );
+					$temp_body = str_replace( "{ticket_type}", ( isset( $ticket['ticket_name'] ) ? $ticket['ticket_name'] : '' ), $temp_body );
+					$temp_body = str_replace( "{amount_paid}", ( isset( $ticket['ticket_price'] ) ? wc_price( $ticket['ticket_price'] ) : '' ), $temp_body );
+					$temp_body = str_replace( "{event_date}", $t_date, $temp_body );
+					$temp_body = str_replace( "{event_time}", $t_time, $temp_body );
+					$temp_body = str_replace( "{event_datetime}", $t_date_time, $temp_body );
+					$temp_body = str_replace( "{order_id}", $order_id, $temp_body );
+
+					$final_output .= $temp_body . "<br><hr><br>";
+				}
+
+				return $final_output;
+
+			} else {
+				// ২. আগের (Original) লজিক (ফলব্যাক)
+				$attendee_q   = mep_get_attendee_info_query( $event_id, $order_id );
+				$_attendee_id = 0; 
+				foreach ( $attendee_q->posts as $_attendee_q ) {
+					$_attendee_id = $_attendee_q->ID;
+				}
+
+				$attendee_id   = $__attendee_id > 0 ? $__attendee_id : $_attendee_id;
+				$attendee_name = get_post_meta( $attendee_id, 'ea_name', true ) ?: '';
+				$email         = get_post_meta( $attendee_id, 'ea_email', true ) ?: '';
+				$event_date_time = mep_get_email_event_datetime( $event_id, $order_id, $attendee_id, $event_ticket_info_arr );
+				$date_time       = $event_date_time ? mep_get_email_datetime_text( $event_id, $event_date_time, 'date-time-text' ) : '';
+				$date            = $event_date_time ? mep_get_email_datetime_text( $event_id, $event_date_time, 'date-text' ) : '';
+				$time            = $event_date_time ? mep_get_email_datetime_text( $event_id, $event_date_time, 'time' ) : '';
+				
+				$ticket_type    = get_post_meta( $attendee_id, 'ea_ticket_type', true ) ?: '';
+				$payment_method = '';
+				
+				if ( $order instanceof WC_Order ) {
+					$payment_method = $order->get_payment_method_title();
+					$amount_paid    = wc_price( (float) $order->get_total() );
+				} else {
+					$attendee_amount = get_post_meta( $attendee_id, 'ea_ticket_order_amount', true );
+					$amount_paid     = '' !== $attendee_amount ? wc_price( (float) $attendee_amount ) : '';
+				}
+
+				$email_body = str_replace( "{name}", $attendee_name, $email_body );
+				$email_body = str_replace( "{email}", $email, $email_body );
+				$email_body = str_replace( "{event}", $event_name, $email_body );
+				$email_body = str_replace( "{event_date}", $date, $email_body );
+				$email_body = str_replace( "{event_time}", $time, $email_body );
+				$email_body = str_replace( "{event_datetime}", $date_time, $email_body );
+				$email_body = str_replace( "{ticket_type}", $ticket_type, $email_body );
+				$email_body = str_replace( "{order_id}", $order_id, $email_body );
+				$email_body = str_replace( "{payment_method}", $payment_method, $email_body );
+				$email_body = str_replace( "{amount_paid}", $amount_paid, $email_body );
+
+				return $email_body;
+			}
+		}
+	}
+
+	
 	// Send Confirmation email to customer
 	if ( ! function_exists( 'mep_event_confirmation_email_sent' ) ) {
-		function mep_event_confirmation_email_sent( $event_id, $sent_email, $order_id, $attendee_id = 0 ) {
+		function mep_event_confirmation_email_sent( $event_id, $sent_email, $order_id, $attendee_id = 0, $event_ticket_info_arr = array() ) {
 			// Global Email Settings
 			$global_email_text       = mep_get_option( 'mep_confirmation_email_text', 'email_setting_sec', '' );
 			$global_email_form_email = mep_get_option( 'mep_email_form_email', 'email_setting_sec', '' );
@@ -443,7 +803,7 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 			$event_email_text = get_post_meta( $event_id, 'mep_event_cc_email_text', true );
 			$email_body       = ! empty( $event_email_text ) ? $event_email_text : $global_email_text;
 			// Dynamic Content Replace
-			$email_body = mep_email_dynamic_content( $email_body, $event_id, $order_id, $attendee_id );
+			$email_body = mep_email_dynamic_content( $email_body, $event_id, $order_id, $attendee_id, $event_ticket_info_arr );
 			// Allow filter
 			$email_body = apply_filters( 'mep_event_confirmation_text', $email_body, $event_id, $order_id );
 			// ✨ Format email body properly
@@ -453,10 +813,12 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 			$headers   = array();
 			$headers[] = "From: $form_name <$form_email>";
 			$headers[] = 'Content-Type: text/html; charset=UTF-8';
+
 			// Send Email
 			wp_mail( $sent_email, $email_sub, $email_body, $headers );
 		}
 	}
+
 // Function to get page slug
 	if ( ! function_exists( 'mep_get_page_by_slug' ) ) {
 		function mep_get_page_by_slug( $slug ) {
@@ -2682,8 +3044,21 @@ die();
 		function mep_disable_add_to_cart_if_product_is_in_cart( $is_purchasable, $product ) {
 			// Loop through cart items checking if the product is already in cart
 			if ( isset( WC()->cart ) && ! is_admin() && ! empty( WC()->cart->get_cart() ) ) {
+				// Get the current event date being added
+				$current_event_date = isset( $_POST['mep_event_start_date'] ) ? array_map( 'sanitize_text_field', wp_unslash( $_POST['mep_event_start_date'] ) ) : [];
+				$current_event_date = ! empty( $current_event_date ) ? current( $current_event_date ) : '';
+				
 				foreach ( WC()->cart->get_cart() as $cart_item ) {
 					if ( $cart_item['data']->get_id() == $product ) {
+						return false;
+					}
+					
+					// Check if event date is not equal to cart date for same product
+					$cart_event_date = isset( $cart_item['event_cart_date'] ) ? $cart_item['event_cart_date'] : '';
+					$cart_event_id = isset( $cart_item['event_id'] ) ? $cart_item['event_id'] : 0;
+					
+					// If same event but different date, also prevent adding
+					if ( $cart_event_id == $product && ! empty( $current_event_date ) && ! empty( $cart_event_date ) && $current_event_date != $cart_event_date ) {
 						return false;
 					}
 				}
@@ -3298,8 +3673,8 @@ die();
 	}
 	function mep_rec_get_datepicker_php_format( $fotmat ) {
 		$php_format = str_replace(
-			array( "yy-mm-dd", "yy/mm/dd", "yy-dd-mm", "yy/dd/mm", "dd-mm-yy", "dd/mm/yy", "mm-dd-yy", "mm/dd/yy", "d M , yy", "D d M , yy", "M d , yy", "D M d , yy" ),
-			array( "Y-m-d", "Y/m/d", "Y-d-m", "Y/d/m", "d-m-Y", "d/m/Y", "m-d-Y", "m/d/Y", "j M , Y", "D j M , Y", "M  j, Y", "D M  j, Y" ),
+			array( "yy-mm-dd", "yy/mm/dd", "yy-dd-mm", "yy/dd/mm", "dd-mm-yy", "dd/mm/yy", "mm-dd-yy", "mm/dd/yy", "d M , yy", "D d M , yy", "M d , yy", "D M d , yy","dd.mm.yy" ),
+			array( "Y-m-d", "Y/m/d", "Y-d-m", "Y/d/m", "d-m-Y", "d/m/Y", "m-d-Y", "m/d/Y", "j M , Y", "D j M , Y", "M  j, Y", "D M  j, Y","d.m.Y" ),
 			$fotmat
 		);
 		return $php_format;
@@ -3637,6 +4012,7 @@ die();
 				foreach ( $names as $key => $name ) {
 					$current_qty = $qty[ $key ];
 					$current_qty = apply_filters( 'mpwem_group_actual_qty', $current_qty, $product_id, $name );
+					$current_qty = apply_filters( 'mpwem_group_qty_actual', $current_qty, $product_id, $name );
 					if ( $current_qty > 0 && $name ) {
 						for ( $j = 0; $j < $qty[ $key ]; $j ++ ) {
 							if ( ( $same_attendee == 'yes' || $same_attendee == 'must' ) && $iu > 0 && $_current_template == 'smart.php' ) {
@@ -4490,3 +4866,60 @@ die();
 		</div>
 		<?php
 	}
+
+
+    add_action('wp_enqueue_scripts', 'mep_custom_add_to_cart_script');
+    function mep_custom_add_to_cart_script() {
+
+        if (is_product()) {
+            wp_add_inline_script('wc-add-to-cart', '
+            jQuery(document).ready(function($) {
+                $(".mpwem_add_to_cart").on("click", function(e) {
+                    e.preventDefault();
+                    
+                    var product_id = $(this).val();
+                    var is_duplicate = false;
+                    
+                    // Check if product already in cart
+                    $.ajax({
+                        url: mpwem_ajax_url,
+                        type: "POST",
+                        data: {
+                            action: "check_duplicate_product",
+                            product_id: product_id
+                        },
+                        async: false,
+                        success: function(response) {
+                            if(response.duplicate) {
+                                is_duplicate = true;
+                                alert("This product is already in your cart!");
+                            }
+                        }
+                    });
+                    
+                    if(!is_duplicate) {
+                        $(this).closest("form").off("submit").submit();
+                    }
+                });
+            });
+        ');
+        }
+    }
+
+
+    add_action('wp_ajax_check_duplicate_product', 'mep_check_duplicate_product_callback');
+    add_action('wp_ajax_nopriv_check_duplicate_product', 'mep_check_duplicate_product_callback');
+    function mep_check_duplicate_product_callback() {
+
+        $product_id = intval($_POST['product_id']);
+        $is_duplicate = false;
+
+        foreach(WC()->cart->get_cart() as $item) {
+            if($item['product_id'] == $product_id) {
+                $is_duplicate = true;
+                break;
+            }
+        }
+
+        wp_send_json(array('duplicate' => $is_duplicate));
+    }

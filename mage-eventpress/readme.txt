@@ -259,6 +259,14 @@ vulnerabilities.
 
 == Changelog ==
 
+= 5.2.4 =
+* Quick Release: Time issue fixed in Confirmaion email
+* Single Date stock management issue solved
+* Recurring event list shortcode not working issue fixed
+* Some minor design issue fixed
+* Code Optimization
+  31 Mar 2026*
+
 = 5.2.3 =
 * Quick Release: Solved the Wrong Date issue for Event and PDF Ticket
 * Mobile Responsive issue fixed
