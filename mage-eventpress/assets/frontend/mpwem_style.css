@@ -75,6 +75,7 @@
 
 	div.mpwem_registration_area {margin: var(--dmp) 0 0 0;}
 	div.mpwem_style .kera_ticket_area [data-tabs-target] {padding: 2px; margin: 0 15px 0 0; border-radius: 10px;}
+
 	.mpwem_registration_area .section-title { font-size: 25px; font-weight: bold; margin: 10px 0; }
 	.mpwem_registration_area .date-time-header { padding: 10px 25px; background: var(--color_theme); border-radius: 12px 12px 0 0; margin-bottom: -10px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05); display: flex; justify-content: space-between; align-items: center; gap: 20px; border: 1px solid var(--color_theme); position: relative; z-index: 1; flex-direction: column; }
 	.mpwem_registration_area .date-time-header .ticket-title { margin: 0; padding: 0; font-size: 18px; font-weight: normal; color: var(--color_7); }
@@ -316,8 +317,8 @@
 	.mep-event-tags-list a.mep-tag-link { display: inline-block; padding: 5px 15px; margin: 3px 5px 3px 0; background: #F5F5F5; color: #555; border-radius: 4px; text-decoration: none; font-size: 13px; font-weight: 500; transition: all 0.3s ease; border: 1px solid #E0E0E0;}
 	.mep-event-tags-list a.mep-tag-link:hover { background: var(--color_theme); color: #FFF; border-color: var(--color_theme); transform: translateY(-2px); box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);}
 
-	.mpwem_slider_area div.post_thumb {overflow: hidden; position: relative; padding-bottom: 75%; /* 4:3 aspect ratio (3/4 = 0.75 = 75%) */ background: #f5f5f5;}
-	.mpwem_slider_area div.post_thumb img {position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; margin: 0 auto;}
+	.mpwem_slider_area div.post_thumb {overflow: hidden; position: relative; background: #f5f5f5;}
+	.mpwem_slider_area div.post_thumb img {width: 100%; height: 100%; object-fit: cover; margin: 0 auto;}
 	.mpwem_slider_area { margin-top: 0; }
 	.mep_smart_theme .mpwem_slider_area div.superSlider .sliderAllItem { border-radius: 15px; }
 	.mep_smart_theme .mpwem_slider_area div.superSlider .sliderShowcaseItem { border-radius: 15px; }
@@ -1352,4 +1353,50 @@ div.mpwem_style [data-bg-image] { background-size: cover; background-repeat: no-
 	}
 	.mpwem_registration_area .date-time-area label{
 		width: max-content;
+	}
+.mpTabs.kera_ticket_area {
+    margin-top: 20px;
+}
+.mpTabs.kera_ticket_area .mpwem_ticket_type {
+    padding: 15px;
+}
+	div.mpwem_style .kera_ticket_area [data-tabs-target].active {
+		background-color: #fff !important;
+
+	}
+
+
+	div.category-item{
+		display: flex;flex-direction: column;
+	}
+
+	div.category-item div.category-title{
+		text-align: center;
+		padding: 10px;
+		border-radius: 10px 10px 0 0;
+		color: white;
+		font-size: 20px;
+		margin: 0;
+
+	}
+	div.mpwem_style .kera_ticket_area [data-tabs-target]{
+
+		margin: 0 15px 0 0;
+		border-radius: 10px;
+		border:1px solid var(--color_theme);
+		align-items: inherit !important;
+	}
+
+	div.mpwem_style .kera_ticket_area [data-tabs-target].active div.category-item div.category-title{
+		background-color: var(--color_theme);
+		color: var(--color_theme_alter);
+
+	}
+	div.mpwem_style .kera_ticket_area [data-tabs-target] div.category-item div.category-content{
+		padding:20px;
+	}
+	div.mpwem_style .kera_ticket_area [data-tabs-target] div.category-item div.category-title{
+		background-color: #ab93b1;
+		color: #fff;
+
 	}

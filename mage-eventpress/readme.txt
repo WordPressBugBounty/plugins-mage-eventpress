@@ -259,6 +259,12 @@ vulnerabilities.
 
 == Changelog ==
 
+= 5.2.5 =
+* Not all event showing in the event list page issue fixed. 
+* Expired Event shortcode not showing issue fixed. 
+* Code Optimization
+  08 Apr 2026*
+
 = 5.2.4 =
 * Quick Release: Time issue fixed in Confirmaion email
 * Single Date stock management issue solved
