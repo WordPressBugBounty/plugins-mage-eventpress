@@ -259,6 +259,12 @@ vulnerabilities.
 
 == Changelog ==
 
+= 5.2.6 =
+* Attendee Wrong count issue has been fixed
+* Code Optimization
+  13 Apr 2026*
+
+
 = 5.2.5 =
 * Not all event showing in the event list page issue fixed. 
 * Expired Event shortcode not showing issue fixed. 
