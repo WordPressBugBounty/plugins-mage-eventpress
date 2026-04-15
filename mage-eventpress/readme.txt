@@ -259,6 +259,12 @@ vulnerabilities.
 
 == Changelog ==
 
+= 5.2.7 =
+* Wrong date and Seat Count Iussue fixed
+* Code Optimization
+  15 Apr 2026*
+
+
 = 5.2.6 =
 * Attendee Wrong count issue has been fixed
 * Code Optimization
