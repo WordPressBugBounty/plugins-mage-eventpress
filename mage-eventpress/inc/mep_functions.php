@@ -2088,13 +2088,13 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 		}
 	}
 	if ( ! function_exists( 'get_mep_datetime' ) ) {
-		function get_mep_datetime( $date, $type ) {
+		function get_mep_datetime( $date, $type,$event_id='' ) {
 			// Return empty string if date is empty or invalid
 			if ( empty( $date ) ) {
 				return '';
 			}
 			
-			$event_id             = get_the_id() ? get_the_id() : 0;
+			$event_id             = $event_id ?  $event_id: get_the_id();
 			$date_format          = mep_get_datetime_format( $event_id, 'date' );
 			$time_format_timezone = mep_get_datetime_format( $event_id, 'time_timezone' );
 			$wpdatesettings       = $date_format . '  ' . $time_format_timezone;
@@ -4942,4 +4942,161 @@ die();
         if ($product_id) {
             wp_delete_post($product_id, true); // true = force delete
         }
+    }
+    add_action( 'wp_ajax_mep_gat_event_list_all', 'mep_gat_event_list_all' );
+    add_action( 'wp_ajax_nopriv_mep_gat_event_list_all', 'mep_gat_event_list_all');
+    function mep_gat_event_list_all() {
+        if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'mpwem_nonce' ) ) {
+            wp_send_json_error( 'Invalid nonce!' ); // Prevent unauthorized access
+            wp_die();
+        }
+        $unq_id              = isset( $_POST['id'] ) ? sanitize_text_field( wp_unslash( $_POST['id'] ) ) : '';
+        $style              = isset( $_POST['style'] ) ? sanitize_text_field( wp_unslash( $_POST['style'] ) ) : '';
+        $column              = isset( $_POST['column'] ) ? sanitize_text_field( wp_unslash( $_POST['column'] ) ) : '';
+        $cat              = isset( $_POST['cat'] ) ? sanitize_text_field( wp_unslash( $_POST['cat'] ) ) : '';
+        $org              = isset( $_POST['org'] ) ? sanitize_text_field( wp_unslash( $_POST['org'] ) ) : '';
+        $tag              = isset( $_POST['tag'] ) ? sanitize_text_field( wp_unslash( $_POST['tag'] ) ) : '';
+        $city              = isset( $_POST['city'] ) ? sanitize_text_field( wp_unslash( $_POST['city'] ) ) : '';
+        $country              = isset( $_POST['country'] ) ? sanitize_text_field( wp_unslash( $_POST['country'] ) ) : '';
+        $status              = isset( $_POST['status'] ) ? sanitize_text_field( wp_unslash( $_POST['status'] ) ) : '';
+        $year              = isset( $_POST['year'] ) ? sanitize_text_field( wp_unslash( $_POST['year'] ) ) : '';
+        $sort              = isset( $_POST['sort'] ) ? sanitize_text_field( wp_unslash( $_POST['sort'] ) ) : '';
+        $show              = isset( $_POST['show'] ) ? sanitize_text_field( wp_unslash( $_POST['show'] ) ) : '';
+        $pagination              = isset( $_POST['pagination'] ) ? sanitize_text_field( wp_unslash( $_POST['pagination'] ) ) : '';
+        $pagination_style              = isset( $_POST['pagination_style'] ) ? sanitize_text_field( wp_unslash( $_POST['pagination_style'] ) ) : '';
+        $loop       = MPWEM_Query::event_list_query( $show,$status,$sort);
+        $total_item = $loop->found_posts;
+        while ( $loop->have_posts() ) {
+            $loop->the_post();
+            $event_id = get_the_id();
+            if ( $style == 'grid' && (int) $column > 0 && $pagination != 'carousal' ) {
+                $columnNumber = 'column_style';
+                $width        = 100 / (int) $column;
+            } elseif ( $pagination == 'carousal' && $style == 'grid' ) {
+                $columnNumber = 'grid';
+                $width        = 100;
+            } else {
+                $columnNumber = 'one_column';
+                $width        = 100;
+            }
+            //echo $event_id;
+            do_action( 'mep_event_list_shortcode', $event_id, $columnNumber, $style, $width, $unq_id );
+        }
+        wp_reset_postdata();
+        die();
+    }
+    add_action( 'wp_ajax_mep_gat_event_calender', 'gat_event_calender' );
+    add_action( 'wp_ajax_nopriv_mep_gat_event_calender', 'gat_event_calender');
+    function gat_event_calender() {
+        if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'mpwem_nonce' ) ) {
+            wp_send_json_error( 'Invalid nonce!' ); // Prevent unauthorized access
+            wp_die();
+        }
+
+		$cat     = isset( $_POST['cat'] ) ? sanitize_text_field( wp_unslash( $_POST['cat'] ) ) : '0';
+		$org     = isset( $_POST['org'] ) ? sanitize_text_field( wp_unslash( $_POST['org'] ) ) : '0';
+		$tag     = isset( $_POST['tag'] ) ? sanitize_text_field( wp_unslash( $_POST['tag'] ) ) : '0';
+		$city    = isset( $_POST['city'] ) ? sanitize_text_field( wp_unslash( $_POST['city'] ) ) : '';
+		$country = isset( $_POST['country'] ) ? sanitize_text_field( wp_unslash( $_POST['country'] ) ) : '';
+		$status  = isset( $_POST['status'] ) ? sanitize_text_field( wp_unslash( $_POST['status'] ) ) : 'upcoming';
+		$year    = isset( $_POST['year'] ) ? sanitize_text_field( wp_unslash( $_POST['year'] ) ) : '';
+
+		$shortcode_atts = array(
+			'cat'     => $cat,
+			'org'     => $org,
+			'tag'     => $tag,
+			'city'    => $city,
+			'country' => $country,
+			'status'  => $status,
+			// Fixed by Shahnur — 2026-04-22 11:27 AM (Asia/Dhaka)
+			'split_multi_day' => 'yes',
+		);
+
+		if ( ! empty( $year ) ) {
+			$shortcode_atts['year'] = $year;
+		}
+
+		$shortcode_str = '[mep-event-calendar';
+		foreach ( $shortcode_atts as $key => $value ) {
+			if ( $value !== '' && $value !== '0' ) {
+				$shortcode_str .= ' ' . esc_attr( $key ) . '="' . esc_attr( $value ) . '"';
+			}
+		}
+		$shortcode_str .= ']';
+
+		echo do_shortcode( $shortcode_str );
+        die();
+    }
+
+    add_action( 'wp_ajax_mep_change_date_status','mep_change_date_status' );
+    add_action( 'wp_ajax_mep_change_date_status', 'mep_change_date_status');
+function mep_change_date_status() {
+
+    $post_id = isset( $_POST['post_id'] ) ? sanitize_text_field( wp_unslash( $_POST['post_id'] ) ) : '';
+    $event_infos              =  MPWEM_Functions::get_all_info( $post_id );
+    $_single_event_setting_sec = get_option('single_event_setting_sec');
+    $icon_setting_sec = get_option('icon_setting_sec');
+    $single_event_setting_sec = is_array($_single_event_setting_sec) && !empty($_single_event_setting_sec) ? $_single_event_setting_sec : [];
+    $hide_date_details        = array_key_exists( 'mep_event_hide_date_from_details', $single_event_setting_sec ) ? $single_event_setting_sec['mep_event_hide_date_from_details'] : 'no';
+    $upcoming_date            = isset( $_POST['dates'] ) ? sanitize_text_field( wp_unslash( $_POST['dates'] ) ) : '';
+
+    if ( $hide_date_details == 'no' && $upcoming_date ) {
+
+        $icon_setting_sec = empty($icon_setting_sec) && ! is_array( $icon_setting_sec ) ? [] : $icon_setting_sec;
+        $mep_event_date_icon = array_key_exists( 'mep_event_date_icon', $icon_setting_sec ) ? $icon_setting_sec['mep_event_date_icon'] : 'far fa-calendar-alt';
+        echo mep_get_email_datetime_text( $post_id, $upcoming_date, 'date-text' );
+    }
+    die();
+}
+
+    add_action( 'wp_ajax_mep_change_time_status','mep_change_time_status' );
+    add_action( 'wp_ajax_mep_change_time_status', 'mep_change_time_status');
+    function mep_change_time_status() {
+        $event_id = isset( $_POST['post_id'] ) ? sanitize_text_field( wp_unslash( $_POST['post_id'] ) ) : '';
+        if ($event_id > 0) {
+            $event_infos = MPWEM_Functions::get_all_info($event_id);
+            $all_dates = MPWEM_Functions::get_dates($event_id);
+            $upcoming_date = array_key_exists('upcoming_date', $event_infos) ? $event_infos['upcoming_date'] : '';
+            $all_times = MPWEM_Functions::get_times($event_id, $all_dates, $upcoming_date);
+            $_single_event_setting_sec = get_option('single_event_setting_sec');
+            $icon_setting_sec = get_option('icon_setting_sec');
+            $single_event_setting_sec = is_array($_single_event_setting_sec) && !empty($_single_event_setting_sec) ? $_single_event_setting_sec : [];
+            $hide_time_details = array_key_exists('mep_event_hide_time_from_details', $single_event_setting_sec) ? $single_event_setting_sec['mep_event_hide_time_from_details'] : 'no';
+            if ($hide_time_details == 'no' && $upcoming_date && MPWEM_Global_Function::check_time_exit_date($upcoming_date)) {
+
+                $icon_setting_sec = empty($icon_setting_sec) && !is_array($icon_setting_sec) ? [] : $icon_setting_sec;
+                $mep_event_time_icon = array_key_exists('mep_event_time_icon', $icon_setting_sec) ? $icon_setting_sec['mep_event_time_icon'] : 'fas fa-clock';
+                $date_type = MPWEM_Global_Function::get_post_info( $event_id, 'mep_enable_recurring', 'no' );
+                if ($date_type == 'no' || $date_type == 'yes') {
+                    $first_date = is_array($all_dates) && !empty($all_dates) ? current($all_dates) : [];
+                    $start_time = is_array($first_date) && array_key_exists('time', $first_date) ? $first_date['time'] : '';
+                } else {
+                    $date = current($all_dates);
+                    $all_times = MPWEM_Functions::get_times($event_id, $all_dates, $date);
+                    if (is_array($all_times) && sizeof($all_times) > 0) {
+                        $time = current($all_times);
+                        $time_info = array_key_exists('start', $time) ? $time['start'] : [];
+                        if (is_array($time_info) && sizeof($time_info) > 0) {
+                            $time = array_key_exists('time', $time_info) ? $time_info['time'] : '';
+                            if ($time) {
+                                $start_time = $date . ' ' . $time;
+                            }
+                        }
+                    }
+                }
+                $url_date = isset( $_GET['date'] ) ? sanitize_text_field( wp_unslash( $_GET['date'] ) ) : null;
+                $url_date_2 = isset( $_GET['date_time'] ) ? sanitize_text_field( wp_unslash( $_GET['date_time'] ) ) : null;
+                $url_date=$url_date?:$url_date_2;
+                $url_date=$url_date ? date( 'Y-m-d H:i', $url_date ) : '';
+                $date_format = MPWEM_Global_Function::check_time_exit_date( $url_date ) ? 'Y-m-d H:i' : 'Y-m-d';
+                $url_date    = $url_date ? date( $date_format, strtotime($url_date) ) : '';
+                $all_dates   = MPWEM_Functions::get_dates( $event_id );
+                $all_times   = MPWEM_Functions::get_times( $event_id, $all_dates, $url_date );
+                $upcoming_date                           =isset( $_POST['dates'] ) ? sanitize_text_field( wp_unslash( $_POST['dates'] ) ) : '';
+                if (MPWEM_Global_Function::check_time_exit_date($upcoming_date)) {
+                    echo get_mep_datetime($upcoming_date, 'time');
+                }
+            }
+        }
+        die();
     }

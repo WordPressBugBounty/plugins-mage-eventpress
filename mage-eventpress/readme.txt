@@ -220,6 +220,14 @@ You can check the demo of this plugin from here:
 = Q. Any Documentation? =
 A. Yes! Here is the [Online Documentation](https://docs.mage-people.com/woocommerce-event-manager/).
  
+= Q. Does the calendar feature use a bundled third-party library? =
+A. Yes. The frontend calendar bundles FullCalendar Standard Bundle v6.1.17.
+
+Source repository: https://github.com/fullcalendar/fullcalendar
+Documentation and license details: https://fullcalendar.io/docs/initialize-globals
+Bundled file: `assets/helper/calendar/fullcalendar.index.global.min.js`
+
+
 = Q. I installed correctly,y but 404 error what can I do?  =
 A. You need to re-save the permalink setting,s it will solve the 404. If still does not work that means your permalink not working, or you may have httaccess problem or you have a server permission problem. 
 
@@ -258,6 +266,15 @@ vulnerabilities.
 
 
 == Changelog ==
+
+= 5.2.8 =
+* New Event List Style Shortcode added 
+* Calendar Added in New Event List Shortcode
+* Cart Alert issue fixed
+* Date time change based on datepicker in event details page. 
+* Wrong date TimeZone issue fixed 
+* Code Optimization
+  28 Apr 2026*
 
 = 5.2.7 =
 * Wrong date and Seat Count Iussue fixed
