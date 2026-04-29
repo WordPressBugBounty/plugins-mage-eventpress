@@ -267,7 +267,7 @@ vulnerabilities.
 
 == Changelog ==
 
-= 5.3.0 =
+= 5.3.1 =
 * Wrong Date in Attendee issue fixed
 * Dashboard Mobile responsive issue fixed 
 * Code Optimization
