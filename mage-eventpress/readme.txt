@@ -267,6 +267,12 @@ vulnerabilities.
 
 == Changelog ==
 
+= 5.3.0 =
+* Wrong Date in Attendee issue fixed
+* Dashboard Mobile responsive issue fixed 
+* Code Optimization
+  30 Apr 2026*
+
 = 5.2.8 =
 * New Event List Style Shortcode added 
 * Calendar Added in New Event List Shortcode
