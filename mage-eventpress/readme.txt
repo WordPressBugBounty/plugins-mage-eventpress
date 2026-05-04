@@ -267,6 +267,15 @@ vulnerabilities.
 
 == Changelog ==
 
+= 5.3.3 =
+* Block theme header/footer issue fixed for single event page
+* Some minor design issue fixed
+* Sold Out Ribbon setting not working issue fixed
+* Limited Stock and other ribbon settings issue fixed
+* Event list broken style issue fixed.
+* Code Optimization
+  05 May 2026*
+
 = 5.3.1 =
 * Wrong Date in Attendee issue fixed
 * Dashboard Mobile responsive issue fixed 
