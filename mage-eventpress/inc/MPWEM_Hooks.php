@@ -747,3 +747,4 @@ $dates   = isset( $_REQUEST['dates'] ) ? sanitize_text_field( $_REQUEST['dates']
 		}
 		new MPWEM_Hooks();
 	}
+

@@ -267,6 +267,12 @@ vulnerabilities.
 
 == Changelog ==
 
+= 5.3.4 =
+* Security Patch update
+* Calendar Weekly & Dalily list showing bug solved
+* Code Optimization
+  12 May 2026*
+
 = 5.3.3 =
 * Block theme header/footer issue fixed for single event page
 * Some minor design issue fixed
