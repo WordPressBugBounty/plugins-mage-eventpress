@@ -1,11 +1,11 @@
-=== Event Booking Manager for WooCommerce  ===
+=== Event Booking Manager for WooCommerce - Registration, RSVP, Calendar & Tickets  ===
 Contributors: magepeopleteam, aamahin
 Tags: event, WooCommerce events manager, event booking, WordPress Events plugin, event calendar
 Requires at least: 5.3
 Stable tag: trunk
-Tested up to: 6.9
+Tested up to: 7.0
 WC requires at least: 3.0
-WC tested up to: 8.7
+WC tested up to: 10.7
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
@@ -70,6 +70,24 @@ When you need to create something highly effective but have limited time availab
 ✔ **WooCommerce Compatibility:**  Works natively with WooCommerce. Sell event tickets and other products independently or together — no conflict.
 
 ✔ **Theme Compatibility:** Compatible with any standards-compliant WordPress theme. No design or layout conflicts.
+
+✔ **Event Analytics Dashboard:** Track performance with interactive charts — sales over time, tickets sold by event, ticket-type distribution, sales by day of week, and occupancy rates — with date-range filtering and one-click CSV export.
+
+✔ **Modern Event Lists Dashboard:** Manage every event from a fast admin screen with live search, status filtering (published, draft, private), trash / restore / empty-trash, per-event attendee statistics, and at-a-glance Total Registrations and Revenue This Month figures.
+
+✔ **Step-by-Step Event Editor:** A modern, guided event-creation wizard that organizes tickets, dates, pricing, and details into clear steps with inline validation.
+
+✔ **Frontend Event Calendar:** Show your events in an interactive month/week calendar so visitors can browse and book by date.
+
+✔ **Multiple Event Types – Online, Offline & Hybrid:** Create in-person, virtual, or hybrid events, each with the right venue or joining details.
+
+✔ **RSVP Events:** Turn any event into a free RSVP instead of paid ticketing — let attendees confirm their attendance without payment, capture their details, and review all responses from the dashboard.
+
+✔ **Multiple Event List Layouts:** Display events as grid, list, minimal, timeline, native, or title-only styles, with optional pagination and carousel.
+
+✔ **Template Override Support:** Copy and customize event templates in your theme so plugin updates never overwrite your design changes.
+
+✔ **REST API Support:** Enable REST API access to your event data from the Event Settings page for headless or third-party integrations.
 
 
 
@@ -266,12 +284,24 @@ vulnerabilities.
 
 
 == Changelog ==
+= 5.3.5 =
+* Security Patch update
+* RSVP Events
+* Multiple Event Types – Online, Offline & Hybrid
+* Frontend Event Calendar
+* Step-by-Step Event Editor
+* Modern Event Lists Dashboard
+* Event Analytics Dashboard
+* Code Optimization
+  08 July 2026*
 
 = 5.3.4 =
 * Security Patch update
 * Calendar Weekly & Dalily list showing bug solved
+* Some  design issue fixed
+* Backend Modern Editor added
 * Code Optimization
-  12 May 2026*
+  21 May 2026*
 
 = 5.3.3 =
 * Block theme header/footer issue fixed for single event page

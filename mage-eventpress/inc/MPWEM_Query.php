@@ -27,6 +27,11 @@
 				return $all_data;
 			}
 			public static function get_all_post_meta_value( $meta_key, $post_type = 'mep_events', $status = 'publish' ) {
+				$transient_key = 'mep_pmv_' . md5( $meta_key . $post_type . $status );
+				$cached        = get_transient( $transient_key );
+				if ( false !== $cached ) {
+					return $cached;
+				}
 				global $wpdb;
 				$sql         = $wpdb->prepare(
 					"    SELECT DISTINCT pm.meta_value    FROM {$wpdb->postmeta} pm    INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id    WHERE pm.meta_key = %s      AND p.post_status = %s      AND p.post_type = %s    ",
@@ -36,7 +41,12 @@
 				$meta_values = array_values( array_filter( $meta_values, 'strlen' ) );
 				$meta_values = array_unique( $meta_values );
 				sort( $meta_values, SORT_NATURAL );
+				set_transient( $transient_key, $meta_values, HOUR_IN_SECONDS );
 				return $meta_values;
+			}
+			public static function flush_post_meta_value_cache() {
+				global $wpdb;
+				$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_mep_pmv_%' OR option_name LIKE '_transient_timeout_mep_pmv_%'" );
 			}
 			public static function event_list_query($show,$evnt_type = 'upcoming',$sort = '',$paged_override = 0) {
 				$etype          = $evnt_type == 'expired' ? '<' : '>';
@@ -109,6 +119,32 @@
 				if ( ! empty( $expire_filter ) ) {
 					$meta_query[] = $expire_filter;
 				}
+
+				if ( $event_order_by === 'meta_value' || $event_order_by === 'meta_value_num' ) {
+					// "Event Upcoming Date": order by the upcoming occurrence datetime the
+					// list actually displays (with a start-datetime fallback) rather than
+					// event_start_datetime, so recurring / everyday events aren't shown out
+					// of order relative to their upcoming date. Matches event_query().
+					$all_ids = get_posts( array(
+						'post_type'      => array( 'mep_events' ),
+						'post_status'    => array( 'publish' ),
+						'posts_per_page' => -1,
+						'fields'         => 'ids',
+						'no_found_rows'  => true,
+						'meta_query'     => $meta_query,
+					) );
+					$all_ids = self::sort_ids_by_upcoming_datetime( $all_ids, $sort );
+					$args = array(
+						'post_type'      => array( 'mep_events' ),
+						'paged'          => $paged,
+						'posts_per_page' => $show,
+						'post_status'    => array( 'publish' ),
+						'post__in'       => $all_ids,
+						'orderby'        => 'post__in',
+					);
+					return new WP_Query( $args );
+				}
+
 				$args = array(
 					'post_type'      => array( 'mep_events' ),
 					'paged'          => $paged,
@@ -247,12 +283,59 @@
 					'post__in'       => $final_ids,
 					'tax_query'      => $tax_query,
 				];
-				
+
 				if ( $event_order_by === 'meta_value' || $event_order_by === 'meta_value_num' ) {
-					$args['meta_key'] = 'event_start_datetime';
+					// "Event Upcoming Date": order by the upcoming occurrence datetime that
+					// the list actually displays and filters on, falling back to the start
+					// datetime for events that never populated it (some selected-date
+					// recurring events). Ordering by event_start_datetime alone placed
+					// recurring / everyday events out of order relative to their shown date.
+					$final_ids        = self::sort_ids_by_upcoming_datetime( $final_ids, $sort );
+					$args['post__in'] = $final_ids;
+					$args['orderby']  = 'post__in';
+					unset( $args['order'] );
 				}
 
 				return new WP_Query( $args );
+			}
+			/**
+			 * Order a set of event IDs by their upcoming occurrence datetime, falling
+			 * back to the start datetime when no upcoming datetime is stored.
+			 *
+			 * @param array  $ids  Event post IDs.
+			 * @param string $sort 'ASC' or 'DESC'.
+			 * @return array Reordered IDs (preserves the [0] placeholder when empty).
+			 */
+			private static function sort_ids_by_upcoming_datetime( $ids, $sort = 'ASC' ) {
+				$ids = array_values( array_filter( array_map( 'intval', (array) $ids ) ) );
+				if ( empty( $ids ) ) {
+					return array( 0 );
+				}
+				global $wpdb;
+				$in   = implode( ',', $ids );
+				$rows = $wpdb->get_results(
+					"SELECT post_id, meta_key, meta_value FROM {$wpdb->postmeta}
+					 WHERE post_id IN ($in)
+					   AND meta_key IN ('event_upcoming_datetime','event_start_datetime')"
+				);
+				$upcoming = array();
+				$start    = array();
+				foreach ( $rows as $r ) {
+					if ( $r->meta_key === 'event_upcoming_datetime' ) {
+						$upcoming[ (int) $r->post_id ] = $r->meta_value;
+					} else {
+						$start[ (int) $r->post_id ] = $r->meta_value;
+					}
+				}
+				$dir = ( strtoupper( $sort ) === 'DESC' ) ? -1 : 1;
+				usort( $ids, function ( $a, $b ) use ( $upcoming, $start, $dir ) {
+					$va = ! empty( $upcoming[ $a ] ) ? $upcoming[ $a ] : ( isset( $start[ $a ] ) ? $start[ $a ] : '' );
+					$vb = ! empty( $upcoming[ $b ] ) ? $upcoming[ $b ] : ( isset( $start[ $b ] ) ? $start[ $b ] : '' );
+					$ta = $va ? strtotime( $va ) : 0;
+					$tb = $vb ? strtotime( $vb ) : 0;
+					return ( $ta <=> $tb ) * $dir;
+				} );
+				return $ids;
 			}
 			public static function attendee_query( $filter_args = [], $show = - 1, $page = 1 ) {
 				$meta_query = [];

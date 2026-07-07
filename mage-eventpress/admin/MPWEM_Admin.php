@@ -30,16 +30,20 @@
 				//****************Global settings************************//
 				require_once MPWEM_PLUGIN_DIR . '/admin/settings/global/MAGE_Setting_API.php';
 				require_once MPWEM_PLUGIN_DIR . '/admin/settings/global/admin_setting_panel.php';
+				require_once MPWEM_PLUGIN_DIR . '/includes/admin/class-wc-payment-manager.php';
 				//************************************//
 				require_once MPWEM_PLUGIN_DIR . '/admin/MPWEM_Hidden_Product.php';
 				require_once MPWEM_PLUGIN_DIR . '/admin/MPWEM_Event_Lists.php';
+				require_once MPWEM_PLUGIN_DIR . '/admin/MPWEM_RSVP_Responses.php';
 				require_once MPWEM_PLUGIN_DIR . '/admin/MPWEM_CPT.php';
 				require_once MPWEM_PLUGIN_DIR . '/admin/status.php';
 				require_once MPWEM_PLUGIN_DIR . '/admin/MPWEM_Welcome.php';
 				require_once MPWEM_PLUGIN_DIR . '/admin/MPWEM_Quick_Setup.php';
 				require_once MPWEM_PLUGIN_DIR . '/admin/mep_analytics.php';
 				require_once MPWEM_PLUGIN_DIR . '/admin/MPWEM_Template_Override_Menu.php';
+				require_once MPWEM_PLUGIN_DIR . '/admin/MPWEM_Admin_Menu_Group.php';
 				require_once MPWEM_PLUGIN_DIR . '/admin/Mage_people_news_update.php';
+				require_once MPWEM_PLUGIN_DIR . '/admin/MPWEM_Event_Edit_Page.php';
 				//****************Meta Settings File Include************************//
 				require_once MPWEM_PLUGIN_DIR . '/admin/settings/MPWEM_Settings.php';
 				require_once MPWEM_PLUGIN_DIR . '/admin/settings/MPWEM_Venue_Settings.php';
@@ -58,6 +62,9 @@
 				require_once MPWEM_PLUGIN_DIR . '/admin/settings/MPWEM_Template_Override_Settings.php';
 			}
 			public function flush_permalink() {
+				if ( wp_doing_ajax() || ( defined( 'DOING_CRON' ) && DOING_CRON ) ) {
+					return;
+				}
 				if ( get_option( 'mep_flash_event_permalink' ) != 'completed' ) {
 					global $wp_rewrite;
 					$wp_rewrite->flush_rules();

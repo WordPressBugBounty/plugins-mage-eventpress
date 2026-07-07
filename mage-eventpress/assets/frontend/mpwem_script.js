@@ -1,13 +1,31 @@
+function mpwem_qty_inperson(parent) {
+    let total_qty = 0;
+    parent.find('[name="option_qty[]"]').each(function () {
+        const $item = jQuery(this).closest('.mep_ticket_item');
+        if (!$item.find('.mep-ticket-mode-badge--online').length) {
+            total_qty += parseInt(jQuery(this).val()) || 0;
+        }
+    });
+    return total_qty;
+}
 function mpwem_price_calculation(parent) {
+    // alert(123);
     try {
         const total_qty = mpwem_qty(parent);
         mpwem_attendee_management(parent, total_qty);
         const target_summary = parent.find('.mpwem_total');
         let total = mpwem_price(parent);
         if (total_qty > 0) {
-            parent.find('.mpwem_ex_service').slideDown('fast');
             parent.find('.mpwem_form_submit_area button').removeAttr('disabled');
-            total += mpwem_ex_price(parent);
+            // For hybrid events, only show extra service when at least one in-person ticket is selected
+            const isHybrid = parent.find('.mep-ticket-mode-badge--online, .mep-ticket-mode-badge--inperson').length > 0;
+            const inPersonQty = isHybrid ? mpwem_qty_inperson(parent) : total_qty;
+            if (inPersonQty > 0) {
+                parent.find('.mpwem_ex_service').slideDown('fast');
+                total += mpwem_ex_price(parent);
+            } else {
+                parent.find('.mpwem_ex_service').slideUp('fast');
+            }
         } else {
             parent.find('.mpwem_ex_service').slideUp('fast');
             parent.find('.mpwem_form_submit_area button').attr('disabled', 'disabled');
@@ -68,6 +86,14 @@ function mpwem_ex_price(parent) {
 function mpwem_attendee_management(parent, total_qty) {
     let form_target = parent.find('.mep_attendee_info');
     let same_attendee = parent.find('[name="mep_same_attendee"]').val();
+    
+    // Strip required attributes from hidden template inputs to avoid "invalid form control is not focusable" error
+    parent.find('.mep_attendee_info_hidden').find('input, select, textarea').each(function () {
+        if (jQuery(this).prop('required')) {
+            jQuery(this).removeAttr('required').addClass('mep-originally-required');
+        }
+    });
+
     if (form_target.length > 0 && total_qty > 0) {
         if (same_attendee === 'yes' || same_attendee === 'must') {
             form_target.slideDown('fast');
@@ -87,6 +113,7 @@ function mpwem_attendee_management(parent, total_qty) {
                             hidden_target.find('.mep_form_item').attr('data-seat_name', seat_name);
                             hidden_target.find('.mpwem_ticket_count').html(seat_name).promise().done(function () {
                                 form_target.append(hidden_target.html());
+                                form_target.find('.mep-originally-required').attr('required', 'required');
                             }).promise().done(function () {
                                 mpwem_load_date_picker(parent);
                             });
@@ -127,6 +154,7 @@ function mpwem_attendee_management(parent, total_qty) {
                                 hidden_target.find('.mpwem_ticket_name').html(ticket_name);
                                 hidden_target.find('.mpwem_ticket_count').html(i + 1).promise().done(function () {
                                     form_target.append(hidden_target.html()).promise().done(function () {
+                                        jQuery(this).find('.mep-originally-required').attr('required', 'required');
                                         jQuery(this).find('.mp_form_item').each(function () {
                                             let condition_type = jQuery(this).attr('data-depend');
                                             let current_ticket_name = jQuery(this).attr('data-condition-value');
@@ -218,16 +246,17 @@ function mpwem_attendee_management(parent, total_qty) {
                 mpwem_loader_xs(target);
             },
             success: function (data) {
+                // alert(dates);
                 target.html(data).slideDown('fast').promise().done(function () {
-                    mpwem_load_seat_status(parent.closest('.mpwem_wrapper'));
-                    mep_change_date_status(parent.closest('.mpwem_wrapper'),date);
-                    mep_change_time_status(parent.closest('.mpwem_wrapper'),date);
+                    mpwem_load_seat_status(parent.closest('.mpwem_wrapper'),dates);
+                    mep_change_date_status(parent.closest('.mpwem_wrapper'),dates);
+                    mep_change_time_status(parent.closest('.mpwem_wrapper'),dates);
                     mpwem_price_calculation(parent);
                 });
             }
         });
     }
-    function mpwem_load_seat_status(parent) {
+    function mpwem_load_seat_status(parent,dates) {
         let target = parent.find('.mpwem_seat_status');
         if (target.length > 0) {
             let post_id = parent.find('[name="mpwem_post_id"]').val();
@@ -475,6 +504,7 @@ function mpwem_attendee_management(parent, total_qty) {
 (function ($) {
     "use strict";
     $(document).ready(function () {
+        //$('.mpwem_related_area').slideDown('fast').promise().done(function () {
         $('.mpwem_related_area .related_item').slick({
             dots: false,
             arrows: true,
@@ -509,7 +539,10 @@ function mpwem_attendee_management(parent, total_qty) {
                     }
                 },
             ]
+        }).promise().done(function () {
+            $('.mpwem_related_area').removeClass('on_load_off');
         });
+        //});
     });
 }(jQuery));
 //*****************************Event list***********************************//
@@ -1242,3 +1275,487 @@ jQuery(function ($) {
         $wrap.find('.mpwem_add_to_cart').trigger('click');
     });
 });
+
+(function ($) {
+    "use strict";
+    $(document).on('submit', '#mpwem_registration', function(e) {
+        if ($(this).find('.mep-rsvp-submit-btn').length === 0) {
+            return;
+        }
+        e.preventDefault();
+        const $form = $(this);
+        const $btn = $form.find('.mep-rsvp-submit-btn');
+        const $msg = $form.find('.mep-rsvp-message');
+
+        $btn.prop('disabled', true).find('span').text('Submitting...');
+        $msg.hide().removeClass('success error');
+
+        $.ajax({
+            url: mpwem_script_var ? mpwem_script_var.url : mpwem_ajax_url,
+            type: 'POST',
+            data: $form.serialize(),
+            success: function(response) {
+                if (response.success) {
+                    $msg.text(response.data.message).addClass('success').show();
+                    $form.find('input[type="text"], input[type="email"]').val('');
+                    $form.find('input[type="number"]').val(1);
+                } else {
+                    const errorMsg = response.data && response.data.message ? response.data.message : 'An error occurred. Please try again.';
+                    $msg.text(errorMsg).addClass('error').show();
+                }
+            },
+            error: function() {
+                $msg.text('Connection error. Please try again.').addClass('error').show();
+            },
+            complete: function() {
+                $btn.prop('disabled', false).find('span').text('Submit RSVP');
+            }
+        });
+    });
+}(jQuery));
+
+/* ============================================================
+ * Native Checkout — runs when WooCommerce is not active.
+ * Intercepts mpwem_book_now clicks and shows the billing modal.
+ * ============================================================ */
+(function ($) {
+    'use strict';
+
+    // sessionStorage key prefix used to persist a booking intent across a login redirect.
+    var PENDING_BOOKING_PREFIX = 'mep_pending_booking_';
+
+    // Helper: resolve the selected occurrence's full date AND time for native checkout.
+    // The hidden mep_event_start_date field can collapse to a date-only value (saved as
+    // "Y-m-d 00:00") for recurring events that have several times per day, which loses the
+    // chosen time slot. The date/time selectors always carry the full datetime, so prefer
+    // them: mpwem_time (date + time-slot) > mpwem_date_time (occurrence) > mep_event_start_date.
+    // This is native-only and deliberately does not touch the shared $user_date logic used
+    // by the WooCommerce flow.
+    function mepResolveEventDate(parent) {
+        var candidates = [
+            parent.find('[name="mpwem_time"]').val(),
+            parent.find('[name="mpwem_date_time"]').val(),
+            parent.find('[name="mep_event_start_date[]"]').first().val()
+        ];
+        // Prefer the first candidate that includes a time component.
+        for (var i = 0; i < candidates.length; i++) {
+            var v = $.trim(candidates[i] || '');
+            if (v && v.indexOf(':') !== -1) { return v; }
+        }
+        // No time component anywhere (genuinely date-only event) — use the first value present.
+        for (var j = 0; j < candidates.length; j++) {
+            var v2 = $.trim(candidates[j] || '');
+            if (v2) { return v2; }
+        }
+        return '';
+    }
+
+    // Helper: HTML-escape a string for safe insertion into the summary markup.
+    function mepNativeEsc(str) {
+        return $('<span>').text(str == null ? '' : String(str)).html();
+    }
+
+    // Helper: present the resolved event datetime, dropping a meaningless midnight time
+    // (e.g. "2026-07-22 00:00" → "2026-07-22") so only real times are shown.
+    function mepNativeFormatEventDate(raw) {
+        raw = $.trim(raw || '');
+        if (!raw) { return ''; }
+        return raw.replace(/\s+00:00(:00)?$/, '');
+    }
+
+    // Helper: collect ticket data from the registration form
+    function mepCollectTickets(parent) {
+        var tickets = [];
+        parent.find('[name="option_qty[]"]').each(function () {
+            var qty = parseInt($(this).val()) || 0;
+            if (qty <= 0) return;
+            var price = parseFloat($(this).attr('data-price')) || 0;
+            var $item = $(this).closest('.mep_ticket_item, .mpwem_ticket_row');
+            var name  = $item.find('[name="option_name[]"]').val()
+                     || $item.find('[name="ticket_type[]"]').val()
+                     || 'Ticket';
+            tickets.push({ ticket_name: name, ticket_qty: qty, ticket_price: price });
+        });
+        return tickets;
+    }
+
+    // Helper: collect form-builder attendee fields (rendered as name="field[]") into a plain object
+    function mepCollectAttendeeFields(parent) {
+        var fields = {};
+        parent.find('.mep_attendee_info [name$="[]"], .mep_attendee_info_hidden [name$="[]"]').each(function () {
+            var $field = $(this);
+            if ($field.attr('type') === 'file') {
+                return;
+            }
+            var name = ($field.attr('name') || '').replace(/\[\]$/, '');
+            if (name) {
+                fields[name] = $field.val();
+            }
+        });
+        return fields;
+    }
+
+    // Helper: restore previously-selected ticket quantities (used after a login redirect)
+    function mepRestoreTickets(parent, tickets) {
+        if (!Array.isArray(tickets)) {
+            return;
+        }
+        tickets.forEach(function (t) {
+            parent.find('[name="option_qty[]"]').each(function () {
+                var $qty  = $(this);
+                var $item = $qty.closest('.mep_ticket_item, .mpwem_ticket_row');
+                var name  = $item.find('[name="option_name[]"]').val()
+                         || $item.find('[name="ticket_type[]"]').val();
+                if (name === t.ticket_name) {
+                    $qty.val(t.ticket_qty).trigger('change');
+                }
+            });
+        });
+    }
+
+    // Helper: restore previously-entered attendee form fields (used after a login redirect)
+    function mepRestoreAttendeeFields(parent, fields) {
+        if (!fields) {
+            return;
+        }
+        Object.keys(fields).forEach(function (name) {
+            parent.find('.mep_attendee_info [name="' + name + '[]"], .mep_attendee_info_hidden [name="' + name + '[]"]')
+                .val(fields[name]);
+        });
+    }
+
+    // Helper: format a number as currency using the JS constants set by php
+    function mepNativeFormatPrice(amount) {
+        if (typeof mpwem_price_format === 'function') {
+            return mpwem_price_format(amount);
+        }
+        var symbol   = (typeof mpwem_currency_symbol !== 'undefined')   ? mpwem_currency_symbol   : '$';
+        var position = (typeof mpwem_currency_position !== 'undefined') ? mpwem_currency_position : 'left';
+        var decimals = (typeof mpwem_num_of_decimal !== 'undefined')    ? parseInt(mpwem_num_of_decimal) : 2;
+        var fixed    = parseFloat(amount).toFixed(decimals);
+        switch (position) {
+            case 'right':       return fixed + symbol;
+            case 'left_space':  return symbol + ' ' + fixed;
+            case 'right_space': return fixed + ' ' + symbol;
+            default:            return symbol + fixed;
+        }
+    }
+
+    // Open the native checkout modal, pre-populated with ticket summary
+    function mepOpenNativeModal(parent) {
+        var tickets  = mepCollectTickets(parent);
+        if (!tickets.length) {
+            alert('Please Select Ticket Type');
+            return;
+        }
+
+        var total = 0;
+        var summaryHtml = '';
+        tickets.forEach(function (t) {
+            var lineTotal = t.ticket_price * t.ticket_qty;
+            total += lineTotal;
+            summaryHtml += '<div class="mep-ticket-summary-row">'
+                + '<div class="mep-tsr-info">'
+                +   '<span class="mep-tsr-name">' + mepNativeEsc(t.ticket_name) + '</span>'
+                +   '<span class="mep-tsr-sub">' + mepNativeEsc(String(t.ticket_qty)) + ' &times; ' + mepNativeFormatPrice(t.ticket_price) + '</span>'
+                + '</div>'
+                + '<span class="mep-tsr-total">' + mepNativeFormatPrice(lineTotal) + '</span>'
+                + '</div>';
+        });
+
+        var $modal    = $('#mep-native-checkout-modal');
+        var eventDate = mepResolveEventDate(parent);
+
+        $modal.find('#mep-native-ticket-summary').html(summaryHtml);
+        $modal.find('#mep-native-total-display').text(mepNativeFormatPrice(total));
+
+        // Event datetime line (hide the time when it's a meaningless midnight value).
+        var dtText = mepNativeFormatEventDate(eventDate);
+        var $dt    = $modal.find('#mep-native-event-datetime');
+        if (dtText) { $dt.text(dtText).show(); } else { $dt.text('').hide(); }
+        $modal.find('#mep-native-ticket-data').val(JSON.stringify(tickets));
+        $modal.find('#mep-native-event-date').val(eventDate);
+        $modal.find('#mep-native-checkout-msg').hide().removeClass('success error').text('');
+
+        // Collect attendee field values from the main registration form so they are
+        // saved with the order even though the fields are not shown inside this modal.
+        // Only take the first occurrence of each field name (handles multi-ticket layouts
+        // where the same attendee form is cloned once per ticket row).
+        // Collect the registration-form fields once per seat, mirroring the WooCommerce
+        // flow: each field posts as an array indexed by the global seat order and the server
+        // builds one attendee per seat from it. Only the visible per-seat forms
+        // (.mep_attendee_info) are read — never the hidden clone template.
+        var attendeeFieldArrays = {};   // field name -> [value per seat] (submitted to the server)
+        var fieldOrder  = [];           // field names, in display order
+        var fieldLabels = {};           // field name -> human label
+        var fieldTypes  = {};           // field name -> input type
+        parent.find('.mep_attendee_info [data-field-name][data-d-name]').each(function () {
+            var $inp  = $(this);
+            var fname = $inp.data('field-name');
+            var type  = ($inp.attr('type') || '').toLowerCase();
+            if (!fname || type === 'file') {
+                return; // file uploads are not supported in native checkout
+            }
+            (attendeeFieldArrays[fname] = attendeeFieldArrays[fname] || []).push($.trim($inp.val()));
+            if (!fieldLabels.hasOwnProperty(fname)) {
+                fieldOrder.push(fname);
+                fieldTypes[fname]  = type;
+                fieldLabels[fname] = $.trim($inp.closest('.mp_form_item').find('label span').first().text().replace(/\*+\s*$/, ''))
+                                  || $.trim($inp.attr('placeholder') || '')
+                                  || fname;
+            }
+        });
+        $modal.find('#mep-native-attendee-snapshot').val(JSON.stringify(attendeeFieldArrays));
+
+        // Build a compact, per-attendee preview of the registration details.
+        var seatCount = 0;
+        fieldOrder.forEach(function (f) { seatCount = Math.max(seatCount, attendeeFieldArrays[f].length); });
+        var detailsHtml = '';
+        for (var s = 0; s < seatCount; s++) {
+            var rows = '';
+            fieldOrder.forEach(function (fname) {
+                if (fieldTypes[fname] === 'hidden') { return; }
+                var v = attendeeFieldArrays[fname][s];
+                v = (v == null) ? '' : $.trim(v);
+                if (!v) { return; }
+                rows += '<div class="mep-native-detail-row">'
+                    + '<span class="mep-ndr-label">' + mepNativeEsc(fieldLabels[fname]) + '</span>'
+                    + '<span class="mep-ndr-value">' + mepNativeEsc(v) + '</span>'
+                    + '</div>';
+            });
+            if (rows) {
+                var heading = seatCount > 1 ? ('Attendee ' + (s + 1)) : 'Registration Details';
+                detailsHtml += '<div class="mep-native-attendee-block">'
+                    + '<div class="mep-native-detail-title">' + mepNativeEsc(heading) + '</div>'
+                    + rows + '</div>';
+            }
+        }
+
+        var $details = $modal.find('#mep-native-attendee-details');
+        if (detailsHtml) {
+            $details.html(detailsHtml).show();
+        } else {
+            $details.empty().hide();
+        }
+
+        // Prefill the billing form from the event's attendee name/email/phone fields
+        // (when present) so the user doesn't retype them.
+        var preBilling = { name: '', email: '', phone: '' };
+        parent.find('[data-field-name][data-d-name]').each(function () {
+            var dname = $(this).data('d-name');
+            var val   = $.trim($(this).val());
+            if (!val) { return; }
+            if (dname === 'ea_name'  && !preBilling.name)  { preBilling.name  = val; }
+            if (dname === 'ea_email' && !preBilling.email) { preBilling.email = val; }
+            if (dname === 'ea_phone' && !preBilling.phone) { preBilling.phone = val; }
+        });
+        if (preBilling.name)  { $modal.find('#mep-native-billing-name').val(preBilling.name); }
+        if (preBilling.email) { $modal.find('#mep-native-billing-email').val(preBilling.email); }
+        if (preBilling.phone) { $modal.find('#mep-native-billing-phone').val(preBilling.phone); }
+
+        // When login is required to complete checkout, persist the ticket selection so it can
+        // be restored once the user logs in and is redirected back to this page.
+        if ($modal.find('.mep-native-login-required').length && window.sessionStorage) {
+            var eventId = $modal.find('#mep-native-event-id').val();
+            if (eventId) {
+                try {
+                    sessionStorage.setItem(PENDING_BOOKING_PREFIX + eventId, JSON.stringify({
+                        tickets:   tickets,
+                        eventDate: eventDate
+                    }));
+                } catch (e) {}
+            }
+        }
+
+        $modal.css('display', 'flex').hide().fadeIn(200);
+    }
+
+    // Intercept book-now when native mode is present
+    $(document).on('click', '.mpwem_book_now', function () {
+        var parent = $(this).closest('.mpwem_registration_area');
+        if (!parent.find('.mpwem_native_checkout_trigger').length) {
+            return; // WooCommerce mode — let the existing handlers work
+        }
+        var totalQty = 0;
+        parent.find('[name="option_qty[]"]').each(function () {
+            totalQty += parseInt($(this).val()) || 0;
+        });
+        if (totalQty <= 0) {
+            parent.find('[name="option_qty[]"]').addClass('error');
+            return;
+        }
+        parent.find('[name="option_qty[]"]').removeClass('error');
+        mepOpenNativeModal(parent);
+    });
+
+    // Close modal
+    $(document).on('click', '.mep-native-modal-close', function () {
+        $('#mep-native-checkout-modal').fadeOut(200);
+    });
+    $(document).on('click', '#mep-native-checkout-modal', function (e) {
+        if ($(e.target).is('#mep-native-checkout-modal')) {
+            $(this).fadeOut(200);
+        }
+    });
+    $(document).on('keydown', function (e) {
+        if (e.key === 'Escape') {
+            $('#mep-native-checkout-modal').fadeOut(200);
+        }
+    });
+
+    // Submit native checkout
+    $(document).on('click', '#mep-native-confirm-btn', function () {
+        var $btn       = $(this);
+        var $modal     = $('#mep-native-checkout-modal');
+        var $msg       = $modal.find('#mep-native-checkout-msg');
+        var eventId    = $modal.find('#mep-native-event-id').val();
+        var nonce      = $modal.find('#mep-native-nonce').val();
+        var ticketData = $modal.find('#mep-native-ticket-data').val();
+        var eventDate  = $modal.find('#mep-native-event-date').val();
+        var payMethod  = $modal.find('[name="mep_payment_method"]:checked').val() || 'offline';
+
+        $msg.hide().removeClass('success error').text('');
+
+        // Read the attendee field snapshot collected from the main form when the modal opened.
+        var attendeeFields = {};
+        var billingName  = '';
+        var billingEmail = '';
+        var billingPhone = '';
+        try {
+            var snapshotRaw = $modal.find('#mep-native-attendee-snapshot').val();
+            if (snapshotRaw) {
+                attendeeFields = JSON.parse(snapshotRaw) || {};
+            }
+        } catch (e) {}
+
+        // Read billing details from the modal's billing form (all fields required).
+        var $bName = $modal.find('#mep-native-billing-name');
+        if ($bName.length) {
+            var $bEmail = $modal.find('#mep-native-billing-email');
+            var $bPhone = $modal.find('#mep-native-billing-phone');
+            billingName  = $.trim($bName.val()  || '');
+            billingEmail = $.trim($bEmail.val() || '');
+            billingPhone = $.trim($bPhone.val() || '');
+
+            $modal.find('.mep-native-input').removeClass('mep-native-input-error');
+            var missing = [];
+            if (!billingName)  { missing.push($bName); }
+            if (!billingEmail) { missing.push($bEmail); }
+            if (!billingPhone) { missing.push($bPhone); }
+            if (missing.length) {
+                missing.forEach(function ($f) { $f.addClass('mep-native-input-error'); });
+                $msg.text('Please fill in all billing details (name, email and phone).').addClass('error').show();
+                return;
+            }
+        } else {
+            // Fallback (older template): derive billing from the first attendee's fields.
+            $('.mpwem_registration_area').find('.mep_attendee_info [data-field-name][data-d-name]').each(function () {
+                var $inp  = $(this);
+                var fname = $inp.data('field-name');
+                var dname = $inp.data('d-name');
+                var v = attendeeFields[fname];
+                if (Array.isArray(v)) { v = v[0]; }
+                if (v === undefined) { return; }
+                if (dname === 'ea_name'  && !billingName)  billingName  = v;
+                if (dname === 'ea_email' && !billingEmail) billingEmail = v;
+                if (dname === 'ea_phone' && !billingPhone) billingPhone = v;
+            });
+        }
+
+        if (billingEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(billingEmail)) {
+            $modal.find('#mep-native-billing-email').addClass('mep-native-input-error');
+            $msg.text('Please enter a valid email address.').addClass('error').show();
+            return;
+        }
+
+        $btn.prop('disabled', true)
+            .find('.mep-native-btn-text').hide().end()
+            .find('.mep-native-btn-loading').show();
+
+        var ajaxUrl = (typeof mpwem_script_var !== 'undefined' && mpwem_script_var.url)
+            ? mpwem_script_var.url
+            : (typeof mpwem_ajax_url !== 'undefined' ? mpwem_ajax_url : '/wp-admin/admin-ajax.php');
+
+        $.ajax({
+            url: ajaxUrl,
+            type: 'POST',
+            data: {
+                action:         'mep_native_checkout',
+                nonce:          nonce,
+                event_id:       eventId,
+                billing_name:    billingName,
+                billing_email:   billingEmail,
+                billing_phone:   billingPhone,
+                event_date:      eventDate,
+                ticket_data:     ticketData,
+                attendee_fields: JSON.stringify(attendeeFields),
+                payment_method: payMethod
+            },
+            success: function (response) {
+                if (response.success) {
+                    // Booking succeeded — clear any persisted intent for this event.
+                    if (window.sessionStorage) {
+                        try { sessionStorage.removeItem(PENDING_BOOKING_PREFIX + eventId); } catch (e) {}
+                    }
+                    $msg.text(response.data.message).addClass('success').show();
+                    // Gateway redirect (PayPal, Stripe) — go immediately, no delay
+                    if (response.data.requires_redirect && response.data.redirect) {
+                        window.location.href = response.data.redirect;
+                    } else {
+                        // Free / offline — show success message then redirect to confirmation page
+                        setTimeout(function () {
+                            if (response.data.redirect) {
+                                window.location.href = response.data.redirect;
+                            } else {
+                                $modal.fadeOut(300);
+                            }
+                        }, 1800);
+                    }
+                } else {
+                    var errMsg = (response.data && response.data.message)
+                        ? response.data.message
+                        : 'An error occurred. Please try again.';
+                    $msg.text(errMsg).addClass('error').show();
+                    $btn.prop('disabled', false)
+                        .find('.mep-native-btn-text').show().end()
+                        .find('.mep-native-btn-loading').hide();
+                }
+            },
+            error: function () {
+                $msg.text('Connection error. Please try again.').addClass('error').show();
+                $btn.prop('disabled', false)
+                    .find('.mep-native-btn-text').show().end()
+                    .find('.mep-native-btn-loading').hide();
+            }
+        });
+    });
+
+    // Restore a booking intent persisted before a login redirect, then reopen the modal.
+    $(function () {
+        if (typeof mpwem_script_var === 'undefined' || mpwem_script_var.is_logged_in !== '1' || !window.sessionStorage) {
+            return;
+        }
+        $('.mpwem_registration_area').each(function () {
+            var $area   = $(this);
+            var eventId = $area.find('#mep-native-event-id').val();
+            if (!eventId) {
+                return;
+            }
+            var raw = sessionStorage.getItem(PENDING_BOOKING_PREFIX + eventId);
+            if (!raw) {
+                return;
+            }
+            sessionStorage.removeItem(PENDING_BOOKING_PREFIX + eventId);
+            var pending;
+            try {
+                pending = JSON.parse(raw);
+            } catch (e) {
+                return;
+            }
+            mepRestoreTickets($area, pending.tickets);
+            mepRestoreAttendeeFields($area, pending.attendeeFields);
+            mepOpenNativeModal($area);
+        });
+    });
+
+}(jQuery));

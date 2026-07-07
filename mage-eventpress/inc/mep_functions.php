@@ -196,27 +196,32 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 		}
 	}
 	if ( ! function_exists( 'mep_temp_attendee_count' ) ) {
-		function mep_temp_attendee_count( $event_id, $ticket_type, $event_date ) {
+		function mep_temp_attendee_count( $event_id, $ticket_type = '', $event_date = '' ) {
+			$meta_query = array(
+				array(
+					'key'     => 'event_id',
+					'value'   => $event_id,
+					'compare' => '='
+				),
+				array(
+					'key'     => 'event_date',
+					'value'   => $event_date,
+					'compare' => 'LIKE'
+				)
+			);
+
+			if ( ! empty( $ticket_type ) ) {
+				$meta_query[] = array(
+					'key'     => 'ticket_type',
+					'value'   => $ticket_type,
+					'compare' => '='
+				);
+			}
+
 			$args = array(
 				'post_type'      => array( 'mep_temp_attendee' ),
 				'posts_per_page' => - 1,
-				'meta_query'     => array(
-					array(
-						'key'     => 'event_id',
-						'value'   => $event_id,
-						'compare' => '='
-					),
-					array(
-						'key'     => 'ticket_type',
-						'value'   => $ticket_type,
-						'compare' => '='
-					),
-					array(
-						'key'     => 'event_date',
-						'value'   => $event_date,
-						'compare' => 'LIKE'
-					)
-				)
+				'meta_query'     => $meta_query
 			);
 			$loop = new WP_Query( $args );
 			$qty  = 0;
@@ -702,9 +707,15 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 			if ( ! empty( $event_ticket_info_arr ) && is_array( $event_ticket_info_arr ) ) {
 				
 				// বিলিং নেম নেওয়া (যদি অর্ডার অবজেক্ট থাকে)
-				$billing_name = '';
+				// Order-level details (name, email, payment method) are identical for every
+				// ticket in this loop, so resolve them once before iterating.
+				$billing_name   = '';
+				$billing_email  = '';
+				$payment_method = '';
 				if ( $order instanceof WC_Order ) {
-					$billing_name = $order->get_billing_first_name() . ' ' . $order->get_billing_last_name();
+					$billing_name   = $order->get_billing_first_name() . ' ' . $order->get_billing_last_name();
+					$billing_email  = $order->get_billing_email();
+					$payment_method = $order->get_payment_method_title();
 				}
 
 				foreach ( $event_ticket_info_arr as $ticket ) {
@@ -724,6 +735,7 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 
 					// ডাইনামিক ট্যাগ রিপ্লেস
 					$temp_body = str_replace( "{name}", $billing_name, $temp_body );
+					$temp_body = str_replace( "{email}", $billing_email, $temp_body );
 					$temp_body = str_replace( "{event}", $event_name, $temp_body );
 					$temp_body = str_replace( "{ticket_type}", ( isset( $ticket['ticket_name'] ) ? $ticket['ticket_name'] : '' ), $temp_body );
 					$temp_body = str_replace( "{amount_paid}", ( isset( $ticket['ticket_price'] ) ? wc_price( $ticket['ticket_price'] ) : '' ), $temp_body );
@@ -731,6 +743,7 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 					$temp_body = str_replace( "{event_time}", $t_time, $temp_body );
 					$temp_body = str_replace( "{event_datetime}", $t_date_time, $temp_body );
 					$temp_body = str_replace( "{order_id}", $order_id, $temp_body );
+					$temp_body = str_replace( "{payment_method}", $payment_method, $temp_body );
 
 					$final_output .= $temp_body . "<br><hr><br>";
 				}
@@ -801,7 +814,7 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 			// Dynamic Content Replace
 			$email_body = mep_email_dynamic_content( $email_body, $event_id, $order_id, $attendee_id, $event_ticket_info_arr );
 			// Allow filter
-			$email_body = apply_filters( 'mep_event_confirmation_text', $email_body, $event_id, $order_id );
+			$email_body = apply_filters( 'mep_event_confirmation_text', $email_body, $event_id, $order_id, $event_ticket_info_arr );
 			// ✨ Format email body properly
 			$email_body = wpautop( $email_body );        // Add paragraphs
 			$email_body = wp_kses_post( $email_body );   // Secure the content
@@ -810,6 +823,11 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 			$headers[] = "From: $form_name <$form_email>";
 			$headers[] = 'Content-Type: text/html; charset=UTF-8';
 
+			// Allow suppression (e.g. hybrid in-person tickets where the body would be blank).
+			$should_send = apply_filters( 'mep_should_send_confirmation_email', true, $event_id, $order_id, $event_ticket_info_arr );
+			if ( ! $should_send ) {
+				return;
+			}
 			// Send Email
 			wp_mail( $sent_email, $email_sub, $email_body, $headers );
 		}
@@ -988,7 +1006,175 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 					do_action( 'mep_attendee_upload_file_save', $event_id, $_user_info, $_field );
 				}
 			} // End User Form builder data update loop
+		}
+	}
+	if ( ! function_exists( 'mep_rsvp_attendee_create' ) ) {
+		function mep_rsvp_attendee_create( $event_id, $user_info = array() ) {
+			$uname      = isset( $user_info['user_name'] ) ? sanitize_text_field( $user_info['user_name'] ) : '';
+			$email      = isset( $user_info['user_email'] ) ? sanitize_email( $user_info['user_email'] ) : '';
+			$phone      = isset( $user_info['user_phone'] ) ? sanitize_text_field( $user_info['user_phone'] ) : '';
+			$event_date = isset( $user_info['user_event_date'] ) ? sanitize_text_field( $user_info['user_event_date'] ) : '';
+			$ticket_qty = isset( $user_info['user_ticket_qty'] ) ? absint( $user_info['user_ticket_qty'] ) : 1;
+
+			$new_post   = array(
+				'post_title'    => $uname,
+				'post_content'  => '',
+				'post_status'   => 'publish',
+				'post_type'     => 'mep_rsvp_responses'
+			);
+
+			$pid = wp_insert_post( $new_post );
+			if ( ! $pid || is_wp_error( $pid ) ) {
+				return false;
+			}
+
+			$pin = 'RSVP' . $event_id . $pid . rand( 100, 999 );
+			update_post_meta( $pid, 'ea_name', mep_prevent_serialized_input( $uname ) );
+			update_post_meta( $pid, 'ea_email', mep_prevent_serialized_input( $email ) );
+			update_post_meta( $pid, 'ea_phone', mep_prevent_serialized_input( $phone ) );
+			update_post_meta( $pid, 'ea_ticket_qty', $ticket_qty );
+			update_post_meta( $pid, 'ea_event_name', get_the_title( $event_id ) );
+			update_post_meta( $pid, 'ea_event_id', $event_id );
+			update_post_meta( $pid, 'mep_checkin', 'No' );
+			update_post_meta( $pid, 'ea_ticket_no', $pin );
+			update_post_meta( $pid, 'ea_event_date', $event_date );
+			update_post_meta( $pid, 'ea_order_status', 'completed' );
+			update_post_meta( $pid, 'ea_flag', 'rsvp_processed' );
+
+			// Populate standard ticket metadata fields for query compatibility
+			update_post_meta( $pid, 'ea_ticket_type', 'RSVP' );
+			update_post_meta( $pid, 'ea_ticket_price', 0 );
+			update_post_meta( $pid, 'ea_ticket_order_amount', 0 );
+			update_post_meta( $pid, 'ea_payment_method', 'RSVP' );
+			update_post_meta( $pid, 'ea_order_id', 0 );
+			update_post_meta( $pid, 'ea_user_id', get_current_user_id() );
+
+			// Optional details fields stored as empty strings to avoid PHP notice/blank field issues
+			update_post_meta( $pid, 'ea_address_1', '' );
+			update_post_meta( $pid, 'ea_gender', '' );
+			update_post_meta( $pid, 'ea_company', '' );
+			update_post_meta( $pid, 'ea_desg', '' );
+			update_post_meta( $pid, 'ea_website', '' );
+			update_post_meta( $pid, 'ea_vegetarian', '' );
+			update_post_meta( $pid, 'ea_tshirtsize', '' );
+
 			return $pid;
+		}
+	}
+	if ( ! function_exists( 'mep_native_ticket_attendee_create' ) ) {
+		/**
+		 * Creates a single mep_events_attendees record for native (non-WooCommerce) checkout.
+		 *
+		 * @param int    $event_id
+		 * @param int    $booking_id  Native booking reference (0 is valid).
+		 * @param array  $user_info   Keys: user_name, user_email, user_phone, user_event_date
+		 * @param array  $ticket_info Keys: ticket_name, ticket_qty, ticket_price
+		 * @param string $payment_method  'offline', 'paypal', 'stripe', etc.
+		 * @param string $order_status    'completed' or 'pending'
+		 * @param array  $extra_meta      Additional `ea_*` meta keys/values (e.g. from form-builder
+		 *                                 attendee fields) keyed by meta key, applied after the defaults
+		 *                                 so they can override the blank placeholders below.
+		 * @return int|false  The new post ID or false on failure.
+		 */
+		function mep_native_ticket_attendee_create( $event_id, $booking_id, $user_info, $ticket_info, $payment_method = 'offline', $order_status = 'pending', $extra_meta = array() ) {
+			$uname       = isset( $user_info['user_name'] ) ? sanitize_text_field( $user_info['user_name'] ) : '';
+			$email       = isset( $user_info['user_email'] ) ? sanitize_email( $user_info['user_email'] ) : '';
+			$phone       = isset( $user_info['user_phone'] ) ? sanitize_text_field( $user_info['user_phone'] ) : '';
+			$event_date  = isset( $user_info['user_event_date'] ) ? sanitize_text_field( $user_info['user_event_date'] ) : '';
+
+			$ticket_name  = isset( $ticket_info['ticket_name'] ) ? sanitize_text_field( $ticket_info['ticket_name'] ) : '';
+			$ticket_qty   = isset( $ticket_info['ticket_qty'] ) ? absint( $ticket_info['ticket_qty'] ) : 1;
+			$ticket_price = isset( $ticket_info['ticket_price'] ) ? (float) $ticket_info['ticket_price'] : 0.0;
+			$ticket_total = $ticket_price * $ticket_qty;
+
+			$new_post = array(
+				'post_title'  => $uname ?: $email,
+				'post_content' => '',
+				'post_status' => 'publish',
+				'post_type'   => 'mep_events_attendees',
+			);
+
+			$pid = wp_insert_post( $new_post );
+			if ( ! $pid || is_wp_error( $pid ) ) {
+				return false;
+			}
+
+			$pin = 'TKT' . $event_id . $pid . rand( 100, 999 );
+
+			update_post_meta( $pid, 'ea_name', mep_prevent_serialized_input( $uname ) );
+			update_post_meta( $pid, 'ea_email', mep_prevent_serialized_input( $email ) );
+			update_post_meta( $pid, 'ea_phone', mep_prevent_serialized_input( $phone ) );
+			update_post_meta( $pid, 'ea_address_1', '' );
+			update_post_meta( $pid, 'ea_gender', '' );
+			update_post_meta( $pid, 'ea_company', '' );
+			update_post_meta( $pid, 'ea_desg', '' );
+			update_post_meta( $pid, 'ea_website', '' );
+			update_post_meta( $pid, 'ea_vegetarian', '' );
+			update_post_meta( $pid, 'ea_tshirtsize', '' );
+
+			// Apply form-builder attendee fields, overriding the blank defaults above where provided.
+			foreach ( $extra_meta as $meta_key => $meta_value ) {
+				update_post_meta( $pid, sanitize_key( $meta_key ), mep_prevent_serialized_input( $meta_value ) );
+			}
+
+			update_post_meta( $pid, 'ea_ticket_type', $ticket_name );
+			update_post_meta( $pid, 'ea_ticket_qty', $ticket_qty );
+			update_post_meta( $pid, 'ea_ticket_price', $ticket_price );
+			update_post_meta( $pid, 'ea_ticket_order_amount', $ticket_total );
+			update_post_meta( $pid, 'ea_payment_method', sanitize_text_field( $payment_method ) );
+			update_post_meta( $pid, 'ea_event_name', get_the_title( $event_id ) );
+			update_post_meta( $pid, 'ea_event_id', $event_id );
+			update_post_meta( $pid, 'ea_event_date', $event_date );
+			update_post_meta( $pid, 'ea_order_id', $booking_id );
+			update_post_meta( $pid, 'ea_user_id', get_current_user_id() );
+			update_post_meta( $pid, 'mep_checkin', 'No' );
+			update_post_meta( $pid, 'ea_ticket_no', $pin );
+			update_post_meta( $pid, 'ea_order_status', sanitize_text_field( $order_status ) );
+			update_post_meta( $pid, 'ea_flag', 'native_checkout' );
+
+			do_action( 'mep_native_attendee_created', $pid, $event_id, $booking_id, $user_info, $ticket_info, $order_status );
+
+			return $pid;
+		}
+	}
+	if ( ! function_exists( 'mep_collect_attendee_form_fields' ) ) {
+		/**
+		 * Maps posted form-builder attendee fields to `ea_*` meta keys for native checkout.
+		 *
+		 * Cross-references the event's registration form definition (built-in optional fields
+		 * such as address/gender/company plus any custom form-builder fields) so values posted
+		 * under their `name` (e.g. `user_address`, a custom field id) are translated to the
+		 * `d_name` meta key (e.g. `ea_address_1`) expected by mep_native_ticket_attendee_create().
+		 *
+		 * @param int   $event_id
+		 * @param array $posted_fields Decoded `attendee_fields` payload, keyed by field `name`.
+		 * @return array `ea_*` meta key => sanitized value.
+		 */
+		function mep_collect_attendee_form_fields( $event_id, $posted_fields ) {
+			$extra_meta = array();
+			if ( ! is_array( $posted_fields ) || empty( $posted_fields ) ) {
+				return $extra_meta;
+			}
+
+			$form_array = MPWEM_Layout::get_form_array( $event_id );
+			foreach ( $form_array as $field ) {
+				$name   = is_array( $field ) && array_key_exists( 'name', $field ) ? $field['name'] : '';
+				$d_name = is_array( $field ) && array_key_exists( 'd_name', $field ) ? $field['d_name'] : '';
+				$type   = is_array( $field ) && array_key_exists( 'type', $field ) ? $field['type'] : '';
+
+				if ( ! $name || ! $d_name || $type === 'file' || $type === 'title' || ! array_key_exists( $name, $posted_fields ) ) {
+					continue;
+				}
+
+				$value = $posted_fields[ $name ];
+				if ( is_array( $value ) ) {
+					$value = reset( $value );
+				}
+
+				$extra_meta[ $d_name ] = ( $type === 'textarea' ) ? sanitize_textarea_field( $value ) : sanitize_text_field( $value );
+			}
+
+			return $extra_meta;
 		}
 	}
 	if ( ! function_exists( 'mep_attendee_extra_service_create' ) ) {
@@ -1474,13 +1660,16 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 				$thedir = glob( $default_path . "*" );
 			}
 			$theme = array();
+			
 			foreach ( $thedir as $filename ) {
+				
 				if ( is_file( $filename ) ) {
 					$file  = basename( $filename );
 					$naame = str_replace( "?>", "", strip_tags( file_get_contents( $filename, false, null, 25, 15 ) ) );
 				}
 				$theme[ $file ] = $naame;
 			}
+			
 			return $theme;
 		}
 	}
@@ -1629,11 +1818,12 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 				],
 				'h2'       => [ 'class' => [], 'id' => [], ],
 				'a'        => [ 'class' => [], 'id' => [], 'href' => [], ],
-				'div'      => [ 'class' => [], 'id' => [], 'data' => [], ],
+				'div'      => [ 'class' => [], 'id' => [], 'data' => [], 'style' => [] ],
 				'span'     => [
 					'class' => [],
 					'id'    => [],
 					'data'  => [],
+					'style' => [],
 				],
 				'i'        => [
 					'class' => [],
@@ -1682,7 +1872,20 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 					'fill' => [],
 				],
 				'path'     => [
-					'd' => [],
+					'd'    => [],
+					'fill' => [],
+					'style'=> [],
+				],
+				'h3'       => [ 'class' => [], 'id' => [], 'style' => [] ],
+				'h4'       => [ 'class' => [], 'id' => [], 'style' => [] ],
+				'button'   => [
+					'type'  => [],
+					'class' => [],
+					'id'    => [],
+					'style' => [],
+					'data-gateway' => [],
+					'data-field'   => [],
+					'disabled'     => [],
 				],
 				'br'       => array(),
 				'em'       => array(),
@@ -2881,14 +3084,93 @@ die();
 			}
 		}
 	}
-	add_filter( 'mep_event_confirmation_text', 'mep_virtual_join_info_event_email_text', 10, 3 );
-	if ( ! function_exists( 'mep_virtual_join_info_event_email_text' ) ) {
-		function mep_virtual_join_info_event_email_text( $content, $event_id, $order_id ) {
-			$event_type    = get_post_meta( $event_id, 'mep_event_type', true ) ? get_post_meta( $event_id, 'mep_event_type', true ) : 'offline';
-			$email_content = get_post_meta( $event_id, 'mp_event_virtual_type_des', true ) ? get_post_meta( $event_id, 'mp_event_virtual_type_des', true ) : '';
-			if ( $event_type == 'online' ) {
-				$content = $content . '<br/>' . html_entity_decode( $email_content );
+	// For hybrid events, suppress the confirmation email when every purchased ticket
+	// is In Person (Physical) — those buyers only need the PDF ticket, not a blank email.
+	add_filter( 'mep_should_send_confirmation_email', 'mep_hybrid_suppress_inperson_email', 10, 4 );
+	if ( ! function_exists( 'mep_hybrid_suppress_inperson_email' ) ) {
+		function mep_hybrid_suppress_inperson_email( $should_send, $event_id, $order_id, $event_ticket_info_arr ) {
+			if ( ! $should_send ) {
+				return false; // Already suppressed upstream.
 			}
+
+			$event_type = get_post_meta( $event_id, 'mep_event_type', true ) ?: 'offline';
+			if ( $event_type !== 'hybrid' ) {
+				return $should_send; // Non-hybrid — no change.
+			}
+
+			// Build mode map: plain ticket name → mode.
+			$ticket_types = get_post_meta( $event_id, 'mep_event_ticket_type', true );
+			$mode_map     = [];
+			if ( is_array( $ticket_types ) ) {
+				foreach ( $ticket_types as $t ) {
+					if ( ! empty( $t['option_name_t'] ) ) {
+						$mode_map[ $t['option_name_t'] ] = isset( $t['option_ticket_mode_t'] ) ? $t['option_ticket_mode_t'] : 'inperson';
+					}
+				}
+			}
+
+			// If any ticket in this purchase has mode 'online', send the email
+			// (virtual content will be appended by mep_virtual_join_info_event_email_text).
+			if ( is_array( $event_ticket_info_arr ) ) {
+				foreach ( $event_ticket_info_arr as $ticket ) {
+					$name = isset( $ticket['ticket_name'] ) ? (string) $ticket['ticket_name'] : '';
+					if ( $name && isset( $mode_map[ $name ] ) && $mode_map[ $name ] === 'online' ) {
+						return $should_send; // Has at least one online ticket — send email.
+					}
+				}
+			}
+
+			// All tickets are In Person for a hybrid event — suppress the email.
+			return false;
+		}
+	}
+
+	add_filter( 'mep_event_confirmation_text', 'mep_virtual_join_info_event_email_text', 10, 4 );
+	if ( ! function_exists( 'mep_virtual_join_info_event_email_text' ) ) {
+		function mep_virtual_join_info_event_email_text( $content, $event_id, $order_id, $event_ticket_info_arr = [] ) {
+			$event_type    = get_post_meta( $event_id, 'mep_event_type', true ) ?: 'offline';
+			$email_content = get_post_meta( $event_id, 'mp_event_virtual_type_des', true ) ?: '';
+
+			// Fully online event: always include virtual details.
+			if ( $event_type === 'online' ) {
+				return html_entity_decode( $content . '<br/>' . html_entity_decode( $email_content ) );
+			}
+
+			// Hybrid event: include virtual details only when a purchased
+			// ticket has option_ticket_mode_t = 'online'.
+			if ( $event_type === 'hybrid' && ! empty( $event_ticket_info_arr ) && '' !== $email_content ) {
+				// Build map: plain ticket name (option_name_t) → ticket mode.
+				// ticket_name in _event_ticket_info equals the plain option_name_t value.
+				$ticket_types = get_post_meta( $event_id, 'mep_event_ticket_type', true );
+				$mode_map     = [];
+				if ( is_array( $ticket_types ) ) {
+					foreach ( $ticket_types as $t ) {
+						if ( ! empty( $t['option_name_t'] ) ) {
+							$mode_map[ $t['option_name_t'] ] = isset( $t['option_ticket_mode_t'] ) ? $t['option_ticket_mode_t'] : 'inperson';
+						}
+					}
+				}
+
+				$include_virtual = false;
+				foreach ( $event_ticket_info_arr as $ticket ) {
+					$name = isset( $ticket['ticket_name'] ) ? (string) $ticket['ticket_name'] : '';
+					if ( '' === $name ) {
+						continue;
+					}
+					if ( isset( $mode_map[ $name ] ) && $mode_map[ $name ] === 'online' ) {
+						$include_virtual = true;
+						break;
+					}
+				}
+
+				if ( $include_virtual ) {
+					$virtual_block = '<br/><hr style="margin:16px 0;border:none;border-top:1px solid #e2e8f0;">'
+						. '<strong>' . esc_html__( 'Online Event Access Details', 'mage-eventpress' ) . '</strong><br/>'
+						. html_entity_decode( $email_content );
+					$content = $content . $virtual_block;
+				}
+			}
+
 			return html_entity_decode( $content );
 		}
 	}
@@ -2907,6 +3189,27 @@ die();
 				register_taxonomy_for_object_type( 'product_cat', 'mep_events' );
 			} else {
 				return null;
+			}
+		}
+	}
+	// Attaching product_cat to mep_events lets events be assigned WooCommerce
+	// product categories, but WordPress also auto-adds a "Categories" item to the
+	// Events admin menu. Drop just that menu item — the taxonomy/metabox stays.
+	add_action( 'admin_menu', 'mep_remove_product_cat_event_submenu', 999 );
+	if ( ! function_exists( 'mep_remove_product_cat_event_submenu' ) ) {
+		function mep_remove_product_cat_event_submenu() {
+			global $submenu;
+			$cpt    = class_exists( 'MPWEM_Functions' ) ? MPWEM_Functions::get_cpt() : 'mep_events';
+			$parent = 'edit.php?post_type=' . $cpt;
+			if ( empty( $submenu[ $parent ] ) ) {
+				return;
+			}
+			foreach ( $submenu[ $parent ] as $key => $item ) {
+				// $item[2] is the submenu slug; match the product_cat taxonomy page
+				// regardless of & vs &amp; encoding in the slug.
+				if ( isset( $item[2] ) && false !== strpos( $item[2], 'taxonomy=product_cat' ) ) {
+					unset( $submenu[ $parent ][ $key ] );
+				}
 			}
 		}
 	}
@@ -5534,46 +5837,50 @@ function mep_change_date_status() {
         return apply_filters( 'mep_gq_total_left_sect', $total_left, $event_id, $event_date );
     }
     if (!is_plugin_active('woocommerce-event-manager-addon-early-bird/early-bird.php')) {
-    if ( ! function_exists( 'mep_early_bird_column' ) ) {
-    add_action( 'mpwem_add_extra_column', 'mep_early_bird_column', 90 );
-    function mep_early_bird_column( $event_id ) {
-        $show_advance_column = MPWEM_Global_Function::get_post_info( $event_id, 'mep_show_advance_col_status', 'off' );
-        $active_category     = $show_advance_column == 'on' ? 'mActive' : '';
+	    if ( ! function_exists( 'mep_early_bird_column' ) ) {
+	    function mep_early_bird_column( $event_id ) {
+        $show_advance_column = MPWEM_Global_Function::get_post_info( $event_id, 'mep_enable_early_bird_status', 'off' );
+        $active_category     = $show_advance_column == 'on' ? 'mActive' : 'mpwem-ticket-col-hidden';
         ?>
-        <th class="_min_250 <?php echo esc_attr( $active_category ); ?>" data-collapse="#mep_show_advance_col_status" title="<?php esc_attr_e( 'Sale Start Date & Time', 'mage-eventpress' ); ?>"><?php esc_html_e( 'Sale Start Date & Time', 'mage-eventpress' ); ?></th>
+        <th class="_min_250 <?php echo esc_attr( $active_category ); ?>" data-collapse="#mep_enable_early_bird_status" title="<?php esc_attr_e( 'Sale Start Date & Time', 'mage-eventpress' ); ?>"><?php esc_html_e( 'Sale Start Date & Time', 'mage-eventpress' ); ?></th>
         <?php
     }
     }
     if ( ! function_exists( 'mep_early_bird_column_saved' ) ) {
-    add_action( 'mpwem_add_extra_input_box', 'mep_early_bird_column_saved', 90,2 );
+    add_action( 'mpwem_add_sale_period_input_box', 'mep_early_bird_column_saved', 90, 2 );
     function mep_early_bird_column_saved( $event_id, $ticket_info = [] ) {
-        $show_advance_column = MPWEM_Global_Function::get_post_info( $event_id, 'mep_show_advance_col_status', 'off' );
-        $active_category     = $show_advance_column == 'on' ? 'mActive' : '';
+        $early_bird_status   = MPWEM_Global_Function::get_post_info( $event_id, 'mep_enable_early_bird_status', 'off' );
+        $active_category     = $early_bird_status == 'on' ? 'mActive' : 'mpwem-ticket-col-hidden';
         $sale_start          = is_array($ticket_info) && array_key_exists( 'option_sale_start_date_t', $ticket_info ) ? $ticket_info['option_sale_start_date_t'] : '';
         ?>
-        <td class="<?php echo esc_attr( $active_category ); ?>" data-collapse="#mep_show_advance_col_status">
-            <div class="_dFlex">
+        <div class="mpwem-card-date-wrapper <?php echo esc_attr( $active_category ); ?>" data-collapse="#mep_enable_early_bird_status">
+            <div style="font-size: 11px; color: #646970; margin-bottom: 0;text-align:left; font-weight: 600; text-transform: uppercase;"><?php esc_html_e('Start Date', 'mage-eventpress'); ?></div>
+            <div class="mpwem-card-date-field">
                 <?php MPWEM_Date_Settings::date_item( 'option_sale_start_date[]', $sale_start ); ?>
-                <label>
-                    <input type="time" value="<?php echo esc_attr( MPWEM_Global_Function::check_time_exit_date( $sale_start ) ? date( 'H:i', strtotime( $sale_start ) ) : '' ); ?>" name="option_sale_start_time[]" class="formControl"/>
+                <label class="mpwem-card-time-field">
+                    <input type="time" value="<?php echo esc_attr( strlen(trim((string)$sale_start)) > 10 ? date( 'H:i', strtotime( $sale_start ) ) : '' ); ?>" name="option_sale_start_time[]" class="formControl"/>
                 </label>
             </div>
-        </td>
+        </div>
         <?php
     }
     }
     if ( ! function_exists( 'mep_early_bird_save_data' ) ) {
         add_filter('mpwem_ticket_type_arr_save', 'mep_early_bird_save_data');
         function mep_early_bird_save_data($data) {
-            $sale_start_date = $_POST['option_sale_start_date'] ? mage_array_strip($_POST['option_sale_start_date']) : array();
-            $sale_start_time = $_POST['option_sale_start_time'] ? mage_array_strip($_POST['option_sale_start_time']) : array();
-            if (sizeof($sale_start_date) > 0) {
+            $sale_start_date = isset($_POST['option_sale_start_date']) ? mage_array_strip($_POST['option_sale_start_date']) : array();
+            $sale_start_time = isset($_POST['option_sale_start_time']) ? mage_array_strip($_POST['option_sale_start_time']) : array();
+            
+            if (is_array($sale_start_date) && sizeof($sale_start_date) > 0) {
                 $count = count($data);
                 for ($i = 0; $i < $count; $i++) {
                     if (is_array($data) && array_key_exists( $i, $data )) {
-                        $data[$i]['option_sale_start_date'] = !empty($sale_start_date[$i]) ? stripslashes(strip_tags($sale_start_date[$i])) : '';
-                        $data[$i]['option_sale_start_time'] = !empty($sale_start_time[$i]) ? stripslashes(strip_tags($sale_start_time[$i])) : '';
-                        $data[$i]['option_sale_start_date_t'] = !empty($sale_start_date[$i]) ? stripslashes(strip_tags($sale_start_date[$i] . ' ' . $sale_start_time[$i])) : '';
+                        $s_date = isset($sale_start_date[$i]) ? stripslashes(strip_tags($sale_start_date[$i])) : '';
+                        $s_time = isset($sale_start_time[$i]) ? stripslashes(strip_tags($sale_start_time[$i])) : '';
+                        
+                        $data[$i]['option_sale_start_date'] = $s_date;
+                        $data[$i]['option_sale_start_time'] = $s_time;
+                        $data[$i]['option_sale_start_date_t'] = trim($s_date . ' ' . $s_time);
                     }
                 }
             }
@@ -5589,6 +5896,10 @@ function mep_change_date_status() {
     if ( ! function_exists( 'mpwem_early_date_filter' ) ) {
         add_filter('mpwem_early_date', 'mpwem_early_date_filter', 10, 3);
         function mpwem_early_date_filter($return, $ticket_type, $event_id) {
+            $early_bird_status = get_post_meta( $event_id, 'mep_enable_early_bird_status', true );
+            if ( $early_bird_status !== 'on' ) {
+                return $return;
+            }
             $sale_start_datetime = is_array($ticket_type) && array_key_exists( 'option_sale_start_date_t', $ticket_type ) && !empty($ticket_type['option_sale_start_date_t']) ? date('Y-m-d H:i', strtotime($ticket_type['option_sale_start_date_t'])) : '';
             if ($sale_start_datetime) {
                 $current_time = current_time('Y-m-d H:i');

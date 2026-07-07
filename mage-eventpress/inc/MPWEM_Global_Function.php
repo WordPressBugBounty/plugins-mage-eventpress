@@ -14,45 +14,63 @@
 			}
 			public static function enqueue_date_picker( $selector, $dates ) {
 
-				if ( empty( $dates ) ) {
+				if ( empty( $dates ) || ! is_array( $dates ) ) {
 					return;
 				}
-
-				$start_date = current( $dates );
-				$end_date   = end( $dates );
 
 				$available_dates = [];
 
 				foreach ( $dates as $date ) {
-					$available_dates[] = date( 'j-n-Y', strtotime( $date ) );
+					// Normalise: accept both flat 'Y-m-d' strings and the assoc
+					// shape ['time' => ..., 'end' => ...] produced by
+					// get_all_dates() / get_dates() for the 'no'/'yes' branches.
+					if ( is_array( $date ) ) {
+						$candidate = isset( $date['time'] ) ? $date['time'] : ( isset( $date['start_date'] ) ? $date['start_date'] : '' );
+					} else {
+						$candidate = (string) $date;
+					}
+					if ( ! $candidate ) {
+						continue;
+					}
+					$available_dates[] = date( 'j-n-Y', strtotime( $candidate ) );
 				}
 
-				wp_enqueue_script(
-					'mpwem-datepicker',
-					plugin_dir_url( __FILE__ ) . '../assets/js/mpwem-datepicker.js',
-					array( 'jquery', 'jquery-ui-datepicker' ),
-					'1.0',
-					true
+				if ( empty( $available_dates ) ) {
+					return;
+				}
+
+				// minDate / maxDate from the available list (already off-date /
+				// off-day / special-date filtered). Clamp minDate to today so past
+				// dates are never selectable even when the earliest event date is
+				// in the past.
+				$first_ts = strtotime( $available_dates[0] );
+				$last_ts  = strtotime( end( $available_dates ) );
+				$today_ts = strtotime( date( 'Y-m-d' ) );
+
+				$min_ts = $first_ts >= $today_ts ? $first_ts : $today_ts;
+
+				$data = array(
+					'selector'       => $selector,
+					'availableDates' => array_values( array_unique( $available_dates ) ),
+					'minDate'        => array(
+						'year'  => (int) date( 'Y', $min_ts ),
+						'month' => (int) date( 'n', $min_ts ) - 1,
+						'day'   => (int) date( 'j', $min_ts ),
+					),
+					'maxDate'        => array(
+						'year'  => (int) date( 'Y', $last_ts ),
+						'month' => (int) date( 'n', $last_ts ) - 1,
+						'day'   => (int) date( 'j', $last_ts ),
+					),
 				);
 
-				wp_localize_script(
-					'mpwem-datepicker',
-					'mpwemDateData',
-					array(
-						'selector'       => $selector,
-						'availableDates' => $available_dates,
-						'minDate'        => array(
-							'year'  => (int) date( 'Y', strtotime( $start_date ) ),
-							'month' => (int) date( 'n', strtotime( $start_date ) ) - 1,
-							'day'   => (int) date( 'j', strtotime( $start_date ) ),
-						),
-						'maxDate'        => array(
-							'year'  => (int) date( 'Y', strtotime( $end_date ) ),
-							'month' => (int) date( 'n', strtotime( $end_date ) ) - 1,
-							'day'   => (int) date( 'j', strtotime( $end_date ) ),
-						),
-					)
-				);
+				// Inline <script> rather than wp_localize_script so the global is
+				// updated on every popup AJAX render, not just once per page load.
+				// The admin picker (mpwem_admin.js) and the frontend picker
+				// (mpwem_script.js) both read window.mpwemDateData — they share
+				// the same beforeShowDay filter via the inline initialiser in
+				// MPWEM_Global_Function::init_mpwem_date_picker().
+				echo '<script>window.mpwemDateData = ' . wp_json_encode( $data ) . ';</script>';
 			}			
 			public function date_picker_js( $selector, $dates ) {
 				if ( is_array( $dates ) && sizeof( $dates ) > 0 ) {
@@ -99,8 +117,6 @@
                                             .find('input[type="hidden"]')
                                             .val(formattedDate)
                                             .trigger('change');
-
-                                        console.log(formattedDate);
 
                                     } else {
 
@@ -263,7 +279,35 @@
 				return $data;
 			}
 			//=================//
+			public static function has_woocommerce(): bool {
+				return class_exists( 'WooCommerce' ) || self::check_woocommerce() === 1;
+			}
+			/**
+			 * Whether the WooCommerce checkout/payment flow should be used for bookings.
+			 *
+			 * Returns true only when WooCommerce is active AND the global
+			 * "Enable WooCommerce Payment" setting is on. When the admin disables it,
+			 * bookings fall back to the native checkout (custom payment) flow even if
+			 * WooCommerce itself is active.
+			 */
+			public static function use_wc_payment(): bool {
+				if ( ! self::has_woocommerce() ) {
+					return false;
+				}
+				$opts  = get_option( 'payment_setting_sec', array() );
+				$value = isset( $opts['mep_enable_wc_payment'] ) ? $opts['mep_enable_wc_payment'] : 'on';
+				return $value === 'on';
+			}
+			public static function get_admin_capability(): string {
+				return self::has_woocommerce() ? 'manage_woocommerce' : 'edit_posts';
+			}
 			public static function price_convert_raw( $price ) {
+				if ( ! self::has_woocommerce() ) {
+					$price = wp_strip_all_tags( $price );
+					$price = preg_replace( '/[^0-9.]/', '', $price );
+					$price = (float) $price;
+					return max( $price, 0 );
+				}
 				$price = wp_strip_all_tags( $price );
 				$price = str_replace( get_woocommerce_currency_symbol(), '', $price );
 				$price = str_replace( wc_get_price_thousand_separator(), 't_s', $price );
@@ -276,6 +320,9 @@
 				return max( $price, 0 );
 			}
 			public static function get_wc_raw_price( $price ) {
+				if ( ! self::has_woocommerce() ) {
+					return (float) $price;
+				}
 				$price = wc_price( $price );
 				return self::price_convert_raw( $price );
 			}
@@ -389,7 +436,11 @@
 				return $options ? self::data_sanitize( $options ) : $default;
 			}
 			public static function get_settings( $section, $key, $default = '' ) {
-				$options = get_option( $section );
+				static $mep_options_cache = array();
+				if ( ! isset( $mep_options_cache[ $section ] ) ) {
+					$mep_options_cache[ $section ] = get_option( $section );
+				}
+				$options = $mep_options_cache[ $section ];
 				if ( isset( $options[ $key ] ) && $options[ $key ] ) {
 					$default = $options[ $key ];
 				}
@@ -447,6 +498,55 @@
 					'H:i'         => date( 'H:i' ),
 					'H\H i\m\i\n' => date( 'H\H i\m\i\n' ),
 				];
+			}
+			public static function get_native_currency_settings(): array {
+				return wp_parse_args(
+					(array) get_option( 'mep_currency_settings', [] ),
+					[
+						'mep_currency_symbol'       => '$',
+						'mep_currency_position'     => 'left',
+						'mep_currency_decimal_sep'  => '.',
+						'mep_currency_thousand_sep' => ',',
+						'mep_currency_num_decimals' => 2,
+					]
+				);
+			}
+			public static function get_currency_symbol(): string {
+				if ( self::has_woocommerce() ) {
+					return get_woocommerce_currency_symbol();
+				}
+				$opts = self::get_native_currency_settings();
+				return (string) $opts['mep_currency_symbol'];
+			}
+			public static function get_currency_position(): string {
+				if ( self::has_woocommerce() ) {
+					return (string) get_option( 'woocommerce_currency_pos', 'left' );
+				}
+				$opts = self::get_native_currency_settings();
+				return (string) $opts['mep_currency_position'];
+			}
+			public static function mep_format_price( $amount ): string {
+				$amount = (float) $amount;
+				if ( self::has_woocommerce() ) {
+					return wc_price( $amount );
+				}
+				$show_free = self::get_settings( 'general_setting_sec', 'mep_show_zero_as_free', 'yes' );
+				if ( $amount == 0 && $show_free === 'yes' ) {
+					return __( 'Free', 'mage-eventpress' );
+				}
+				$opts     = self::get_native_currency_settings();
+				$symbol   = (string) $opts['mep_currency_symbol'];
+				$position = (string) $opts['mep_currency_position'];
+				$dec_sep  = (string) $opts['mep_currency_decimal_sep'];
+				$thou_sep = (string) $opts['mep_currency_thousand_sep'];
+				$decimals = (int) $opts['mep_currency_num_decimals'];
+				$number   = number_format( $amount, $decimals, $dec_sep, $thou_sep );
+				switch ( $position ) {
+					case 'right':       return '<span class="woocommerce-Price-amount amount">' . $number . '<span class="woocommerce-Price-currencySymbol">' . $symbol . '</span></span>';
+					case 'left_space':  return '<span class="woocommerce-Price-amount amount"><span class="woocommerce-Price-currencySymbol">' . $symbol . '</span>&nbsp;' . $number . '</span>';
+					case 'right_space': return '<span class="woocommerce-Price-amount amount">' . $number . '&nbsp;<span class="woocommerce-Price-currencySymbol">' . $symbol . '</span></span>';
+					default:            return '<span class="woocommerce-Price-amount amount"><span class="woocommerce-Price-currencySymbol">' . $symbol . '</span>' . $number . '</span>';
+				}
 			}
 		}
 		new MPWEM_Global_Function();
@@ -580,6 +680,9 @@
 				return $format == 'D M d , yy' ? 'D M  j, Y' : $date_format;
 			}
 			public function date_picker_js( $selector, $dates ) {
+				if ( empty( $dates ) ) {
+					return;
+				}
 				$start_date  = $dates[0];
 				$start_year  = date( 'Y', strtotime( $start_date ) );
 				$start_month = ( date( 'n', strtotime( $start_date ) ) - 1 );
@@ -713,7 +816,19 @@
 				return self::get_settings( 'mp_basic_license_settings', $key, $default );
 			}
 			//***********************************//
+			public static function has_woocommerce(): bool {
+				return class_exists( 'WooCommerce' ) || self::check_woocommerce() === 1;
+			}
+			public static function get_admin_capability(): string {
+				return self::has_woocommerce() ? 'manage_woocommerce' : 'edit_posts';
+			}
 			public static function price_convert_raw( $price ) {
+				if ( ! self::has_woocommerce() ) {
+					$price = wp_strip_all_tags( $price );
+					$price = preg_replace( '/[^0-9.]/', '', $price );
+					$price = (float) $price;
+					return max( $price, 0 );
+				}
 				$price = wp_strip_all_tags( $price );
 				$price = str_replace( get_woocommerce_currency_symbol(), '', $price );
 				$price = str_replace( wc_get_price_thousand_separator(), 't_s', $price );
@@ -726,6 +841,10 @@
 				return max( $price, 0 );
 			}
 			public static function wc_price( $post_id, $price, $args = array() ): string {
+				if ( ! self::has_woocommerce() ) {
+					$currency_symbol = get_option( 'woocommerce_currency_symbol', '$' );
+					return $currency_symbol . number_format( (float) $price, 2 );
+				}
 				$num_of_decimal = get_option( 'woocommerce_price_num_decimals', 2 );
 				$args           = wp_parse_args( $args, array(
 					'qty'   => '',
@@ -783,6 +902,9 @@
 				return wc_price( $return_price ) . ' ' . $display_suffix;
 			}
 			public static function get_wc_raw_price( $price ) {
+				if ( ! self::has_woocommerce() ) {
+					return (float) $price;
+				}
 				$price = wc_price( $price );
 				return self::price_convert_raw( $price );
 			}
@@ -795,14 +917,8 @@
 				return wp_get_attachment_image_url( $image_id, $size );
 			}
 			public static function get_page_by_slug( $slug ) {
-				if ( $pages = get_pages() ) {
-					foreach ( $pages as $page ) {
-						if ( $slug === $page->post_name ) {
-							return $page;
-						}
-					}
-				}
-				return false;
+				$page = get_page_by_path( $slug, OBJECT, 'page' );
+				return $page ? $page : false;
 			}
 			//***********************************//
 			public static function check_plugin( $plugin_dir_name, $plugin_file ): int {
@@ -927,7 +1043,6 @@
 				}
 				return $message;
 			}
-			//***********************************//
 			public static function get_country_list() {
 				return array(
 					'AF' => 'Afghanistan',

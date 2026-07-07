@@ -30,11 +30,23 @@
 				require_once MPWEM_PLUGIN_DIR . '/inc/MPWEM_Functions.php';
 				require_once MPWEM_PLUGIN_DIR . '/inc/MPWEM_Frontend.php';
 				require_once MPWEM_PLUGIN_DIR . '/admin/MPWEM_Admin.php';
+				require_once MPWEM_PLUGIN_DIR . '/admin/MPWEM_Deactivation.php';
 				require_once MPWEM_PLUGIN_DIR . '/inc/MPWEM_Hooks.php';
 				require_once MPWEM_PLUGIN_DIR . '/inc/MPWEM_Shortcodes.php';
 				require_once MPWEM_PLUGIN_DIR . '/inc/MPWEM_Event_List.php';
-				require_once MPWEM_PLUGIN_DIR . '/inc/MPWEM_Woocommerce.php';
-				require_once MPWEM_PLUGIN_DIR . '/inc/MPWEM_My_Account_Dashboard.php';
+				if ( MPWEM_Global_Function::has_woocommerce() ) {
+					require_once MPWEM_PLUGIN_DIR . '/inc/MPWEM_Woocommerce.php';
+					require_once MPWEM_PLUGIN_DIR . '/inc/MPWEM_My_Account_Dashboard.php';
+				}
+				// Custom (native) payment checkout is a PRO feature: the request handler ships
+				// with the PRO plugin (MEP_Pro_Native_Checkout). The free plugin no longer
+				// processes native checkout — when WooCommerce payment is not in use and PRO is
+				// absent, the frontend shows a "Custom Payment is a PRO feature" upsell instead.
+				// The booking-confirmation (thank-you) view is still loaded so PRO's completed
+				// bookings can render their confirmation.
+				if ( ! MPWEM_Global_Function::use_wc_payment() ) {
+					require_once MPWEM_PLUGIN_DIR . '/inc/MPWEM_Booking_Confirmation.php';
+				}
 				require_once MPWEM_PLUGIN_DIR . '/inc/mep-google-maps-fix.php';
 				require_once MPWEM_PLUGIN_DIR . '/inc/MPWEM_Query.php';
 				require_once MPWEM_PLUGIN_DIR . '/inc/MPWEM_Calendar.php';
@@ -85,24 +97,63 @@
 				wp_enqueue_style( 'mpwem_slick', MPWEM_PLUGIN_URL . '/assets/helper/slick/slick.css', array(), '1.8.1', 'all' );
 				wp_enqueue_script( 'mpwem_slick', MPWEM_PLUGIN_URL . '/assets/helper/slick/slick.min.js', array( 'jquery' ), '1.8.1', false );
 				wp_enqueue_style( 'mpwem_slick_theme', MPWEM_PLUGIN_URL . '/assets/helper/slick/slick_theme.css', array( 'mpwem_slick' ), '1.8.1' );
-				wp_enqueue_style( 'mpwem_global', MPWEM_PLUGIN_URL . '/assets/helper/mp_style/mpwem_global.css', array(), time() );
-				wp_enqueue_script( 'mpwem_global', MPWEM_PLUGIN_URL . '/assets/helper/mp_style/mpwem_global.js', array( 'jquery' ), time(), true );
+				wp_enqueue_style( 'mpwem_global', MPWEM_PLUGIN_URL . '/assets/helper/mp_style/mpwem_global.css', array(), MPWEM_PLUGIN_VERSION );
+				wp_enqueue_script( 'mpwem_global', MPWEM_PLUGIN_URL . '/assets/helper/mp_style/mpwem_global.js', array( 'jquery' ), MPWEM_PLUGIN_VERSION, true );
 				do_action( 'add_mpwem_common_script' );
-				wp_enqueue_style( 'mage-icons', MPWEM_PLUGIN_URL . '/assets/mage-icon/css/mage-icon.css', array(), time() );
+				wp_enqueue_style( 'mage-icons', MPWEM_PLUGIN_URL . '/assets/mage-icon/css/mage-icon.css', array(), MPWEM_PLUGIN_VERSION );
 			}
+			/**
+			 * Returns true when the current admin page belongs to this plugin.
+			 * Used to gate heavy assets that are only needed on MEP screens.
+			 */
+			private function is_mep_admin_page( $hook ) {
+				// Post edit / new screens for MEP post types
+				$post_type = isset( $_GET['post_type'] ) ? sanitize_key( $_GET['post_type'] ) : '';
+				if ( in_array( $hook, array( 'post.php', 'post-new.php' ), true ) ) {
+					global $post;
+					if ( $post && in_array( $post->post_type, array( 'mep_events', 'mep_event_speaker', 'mep_events_attendees' ), true ) ) {
+						return true;
+					}
+					if ( in_array( $post_type, array( 'mep_events', 'mep_event_speaker', 'mep_events_attendees' ), true ) ) {
+						return true;
+					}
+				}
+				// List table screens
+				if ( in_array( $post_type, array( 'mep_events', 'mep_event_speaker', 'mep_events_attendees' ), true ) ) {
+					return true;
+				}
+				// MEP submenu pages
+				if ( strpos( $hook, 'mep_events' ) !== false || strpos( $hook, 'mpwem_' ) !== false ) {
+					return true;
+				}
+				// Taxonomy edit screens for MEP taxonomies
+				$taxonomy = isset( $_GET['taxonomy'] ) ? sanitize_key( $_GET['taxonomy'] ) : '';
+				if ( in_array( $taxonomy, array( 'mep_cat', 'mep_org', 'mep_tag' ), true ) ) {
+					return true;
+				}
+				return false;
+			}
+
 			public function admin_enqueue( $hook ) {
-				wp_enqueue_editor();
+				$is_mep_page = $this->is_mep_admin_page( $hook );
+
+				// Heavy editor assets only needed on MEP post/page edit screens
+				if ( $is_mep_page ) {
+					wp_enqueue_editor();
+					wp_enqueue_style( 'wp-codemirror' );
+					wp_enqueue_script( 'wp-codemirror' );
+					wp_enqueue_script( 'editor' );
+					wp_enqueue_script( 'quicktags' );
+					wp_enqueue_script( 'media-upload' );
+					wp_enqueue_script( 'thickbox' );
+					wp_enqueue_style( 'thickbox' );
+					wp_enqueue_style( 'editor-buttons' );
+				}
+
+				// These are needed on all admin pages for MEP meta boxes / color pickers
 				wp_enqueue_script( 'jquery-ui-sortable' );
 				wp_enqueue_style( 'wp-color-picker' );
 				wp_enqueue_script( 'wp-color-picker' );
-				wp_enqueue_style( 'wp-codemirror' );
-				wp_enqueue_script( 'wp-codemirror' );
-				wp_enqueue_script( 'editor' );
-				wp_enqueue_script( 'quicktags' );
-				wp_enqueue_script( 'media-upload' );
-				wp_enqueue_script( 'thickbox' );
-				wp_enqueue_style( 'thickbox' );
-				wp_enqueue_style( 'editor-buttons' );
 				//********//
 				$this->global_enqueue();
 				//********//
@@ -127,30 +178,32 @@
 					wp_enqueue_script( 'chartjs', 'https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js', array(), '3.9.1', true );
 					wp_enqueue_script( 'chartjs-date-adapter', 'https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@2.0.0/dist/chartjs-adapter-date-fns.bundle.min.js', array( 'chartjs' ), '2.0.0', true );
 					// Enqueue custom analytics scripts (renamed to avoid ad blocker blocking)
-					wp_enqueue_script( 'mep-event-stats', MPWEM_PLUGIN_URL . '/assets/admin/mep_event_stats.js', array( 'jquery', 'chartjs' ), time(), true );
-					wp_enqueue_style( 'mep-event-stats', MPWEM_PLUGIN_URL . '/assets/admin/mep_event_stats.css', array(), time() );
+					wp_enqueue_script( 'mep-event-stats', MPWEM_PLUGIN_URL . '/assets/admin/mep_event_stats.js', array( 'jquery', 'chartjs' ), MPWEM_PLUGIN_VERSION, true );
+					wp_enqueue_style( 'mep-event-stats', MPWEM_PLUGIN_URL . '/assets/admin/mep_event_stats.css', array(), MPWEM_PLUGIN_VERSION );
 					// Localize script with AJAX URL, nonce, and currency symbol
 					wp_localize_script( 'mep-event-stats', 'mep_analytics_data', array(
 						'ajax_url'        => admin_url( 'admin-ajax.php' ),
 						'nonce'           => wp_create_nonce( 'mep_analytics_nonce' ),
-						'currency_symbol' => get_woocommerce_currency_symbol(),
+						'currency_symbol' => MPWEM_Global_Function::has_woocommerce() ? get_woocommerce_currency_symbol() : '$',
 					) );
 				}
 				//******************/
 				wp_localize_script( 'mkb-admin', 'mep_ajax_var', array( 'url' => admin_url( 'admin-ajax.php' ), 'nonce' => wp_create_nonce( 'mep-ajax-nonce' ) ) );
 				// Only load event lists scripts on relevant pages
 				if ( $hook == 'mep_events_page_mep_event_lists' || ( isset( $_GET['post_type'] ) && $_GET['post_type'] == 'mep_events' && ( $hook == 'edit.php' || isset( $_GET['page'] ) && $_GET['page'] == 'mep_event_lists' ) ) ) {
-					wp_enqueue_script( 'mpwem_event_lists', MPWEM_PLUGIN_URL . '/assets/admin/mpwem_event_lists.js', array( 'jquery' ), time(), true );
+					$mpwem_el_js_ver  = file_exists( MPWEM_PLUGIN_DIR . '/assets/admin/mpwem_event_lists.js' ) ? filemtime( MPWEM_PLUGIN_DIR . '/assets/admin/mpwem_event_lists.js' ) : MPWEM_PLUGIN_VERSION;
+					$mpwem_el_css_ver = file_exists( MPWEM_PLUGIN_DIR . '/assets/admin/mpwem_event_lists.css' ) ? filemtime( MPWEM_PLUGIN_DIR . '/assets/admin/mpwem_event_lists.css' ) : MPWEM_PLUGIN_VERSION;
+					wp_enqueue_script( 'mpwem_event_lists', MPWEM_PLUGIN_URL . '/assets/admin/mpwem_event_lists.js', array( 'jquery' ), $mpwem_el_js_ver, true );
 					wp_localize_script( 'mpwem_event_lists', 'mep_ajax', array(
 						'url'   => admin_url( 'admin-ajax.php' ),
 						'nonce' => wp_create_nonce( 'mep_nonce' )
 					) );
-					wp_enqueue_style( 'mpwem_event_lists', MPWEM_PLUGIN_URL . '/assets/admin/mpwem_event_lists.css', array(), time() );
+					wp_enqueue_style( 'mpwem_event_lists', MPWEM_PLUGIN_URL . '/assets/admin/mpwem_event_lists.css', array(), $mpwem_el_css_ver );
 				}
 				/******************************/
 				// custom
-				wp_enqueue_style( 'mpwem_admin', MPWEM_PLUGIN_URL . '/assets/admin/mpwem_admin.css', array(), time() );
-				wp_enqueue_script( 'mpwem_admin', MPWEM_PLUGIN_URL . '/assets/admin/mpwem_admin.js', array( 'jquery' ), time(), true );
+				wp_enqueue_style( 'mpwem_admin', MPWEM_PLUGIN_URL . '/assets/admin/mpwem_admin.css', array(), MPWEM_PLUGIN_VERSION );
+				wp_enqueue_script( 'mpwem_admin', MPWEM_PLUGIN_URL . '/assets/admin/mpwem_admin.js', array( 'jquery' ), MPWEM_PLUGIN_VERSION, true );
 				wp_localize_script( 'mpwem_admin', 'mpwem_admin_var', array( 'url' => admin_url( 'admin-ajax.php' ), 'nonce' => wp_create_nonce( 'mpwem_admin_nonce' ) ) );
 				/******************************/
 				
@@ -173,15 +226,21 @@
 				wp_enqueue_style( 'mep-calendar-min-style', MPWEM_PLUGIN_URL . '/assets/helper/calender/calendar.min.css', array() );
 				wp_enqueue_script( 'mep-calendar-scripts', MPWEM_PLUGIN_URL . '/assets/helper/calender/calendar.min.js', array( 'jquery', 'mep-moment-js' ), 1, true );
 				//custom
-				wp_enqueue_script( 'filter_pagination', MPWEM_PLUGIN_URL . '/assets/frontend/filter_pagination.js', array(), time(), true );
+				wp_enqueue_script( 'filter_pagination', MPWEM_PLUGIN_URL . '/assets/frontend/filter_pagination.js', array(), MPWEM_PLUGIN_VERSION, true );
 
 				if ($is_divi) {
-					wp_enqueue_style( 'divi_style', MPWEM_PLUGIN_URL . '/assets/frontend/divi_style.css', array(), time() );
+					wp_enqueue_style( 'divi_style', MPWEM_PLUGIN_URL . '/assets/frontend/divi_style.css', array(), MPWEM_PLUGIN_VERSION );
 				} else {
-					wp_enqueue_style( 'mpwem_style', MPWEM_PLUGIN_URL . '/assets/frontend/mpwem_style.css', array(), time() );
+					wp_enqueue_style( 'mpwem_style', MPWEM_PLUGIN_URL . '/assets/frontend/mpwem_style.css', array(), MPWEM_PLUGIN_VERSION );
 				}
-				wp_enqueue_script( 'mpwem_script', MPWEM_PLUGIN_URL . '/assets/frontend/mpwem_script.js', array( 'jquery' ), time(), true );
-				wp_localize_script( 'mpwem_script', 'mpwem_script_var', array( 'url' => admin_url( 'admin-ajax.php' ), 'nonce' => wp_create_nonce( 'mpwem_nonce' ) ) );
+				wp_enqueue_script( 'mpwem_script', MPWEM_PLUGIN_URL . '/assets/frontend/mpwem_script.js', array( 'jquery' ), MPWEM_PLUGIN_VERSION, true );
+				wp_localize_script( 'mpwem_script', 'mpwem_script_var', array(
+					'url'             => admin_url( 'admin-ajax.php' ),
+					'nonce'           => wp_create_nonce( 'mpwem_nonce' ),
+					'has_woocommerce' => MPWEM_Global_Function::has_woocommerce() ? '1' : '0',
+					'native_nonce'    => wp_create_nonce( 'mep_native_checkout_nonce' ),
+					'is_logged_in'    => is_user_logged_in() ? '1' : '0',
+				) );
 				do_action( 'add_mpwem_frontend_script' );
 
 			}
@@ -194,16 +253,29 @@
 				$this->add_open_graph_tags();
 			}
 			public function js_constant() {
+				$has_woo = MPWEM_Global_Function::has_woocommerce();
+				$currency_symbol   = MPWEM_Global_Function::get_currency_symbol();
+				$currency_position = MPWEM_Global_Function::get_currency_position();
+				if ( $has_woo ) {
+					$currency_decimal  = wc_get_price_decimal_separator();
+					$currency_thousands = wc_get_price_thousand_separator();
+					$num_of_decimals   = get_option( 'woocommerce_price_num_decimals', 2 );
+				} else {
+					$native            = MPWEM_Global_Function::get_native_currency_settings();
+					$currency_decimal  = (string) $native['mep_currency_decimal_sep'];
+					$currency_thousands = (string) $native['mep_currency_thousand_sep'];
+					$num_of_decimals   = (int) $native['mep_currency_num_decimals'];
+				}
 				?>
                 <script type="text/javascript">
                     let mp_ajax_url = "<?php echo admin_url( 'admin-ajax.php' ); ?>";
                     var ajaxurl = "<?php echo admin_url( 'admin-ajax.php' ); ?>";
                     let mpwem_ajax_url = "<?php echo admin_url( 'admin-ajax.php' ); ?>";
-                    let mpwem_currency_symbol = "<?php echo get_woocommerce_currency_symbol(); ?>";
-                    let mpwem_currency_position = "<?php echo get_option( 'woocommerce_currency_pos' ); ?>";
-                    let mpwem_currency_decimal = "<?php echo wc_get_price_decimal_separator(); ?>";
-                    let mpwem_currency_thousands_separator = "<?php echo wc_get_price_thousand_separator(); ?>";
-                    let mpwem_num_of_decimal = "<?php echo get_option( 'woocommerce_price_num_decimals', 2 ); ?>";
+                    let mpwem_currency_symbol = "<?php echo esc_js( html_entity_decode( $currency_symbol, ENT_QUOTES, 'UTF-8' ) ); ?>";
+                    let mpwem_currency_position = "<?php echo esc_js( $currency_position ); ?>";
+                    let mpwem_currency_decimal = "<?php echo esc_js( $currency_decimal ); ?>";
+                    let mpwem_currency_thousands_separator = "<?php echo esc_js( $currency_thousands ); ?>";
+                    let mpwem_num_of_decimal = "<?php echo esc_js( $num_of_decimals ); ?>";
                     let mpwem_empty_image_url = "<?php echo esc_attr( MPWEM_PLUGIN_URL . '/assets/helper/images/no_image.png' ); ?>";
                     let mpwem_date_format = "<?php echo  MPWEM_Global_Function::get_settings( 'general_setting_sec', 'mep_datepicker_format', 'D d M , yy' );?>";
                     //let mp_nonce = wp_create_nonce('mep-ajax-nonce');
@@ -239,7 +311,7 @@
                                 "@type"         : "Offer",
                                 "url"           : "<?php echo get_the_permalink( $event_id ); ?>",
                                 "price"         : "<?php echo strip_tags( mep_event_list_number_price( $event_id ) ); ?>",
-                                "priceCurrency" : "<?php echo get_woocommerce_currency(); ?>",
+                                "priceCurrency" : "<?php echo MPWEM_Global_Function::has_woocommerce() ? get_woocommerce_currency() : 'USD'; ?>",
                                 "availability"  : "https://schema.org/InStock",
                                 "validFrom"     : "<?php echo esc_attr( $event_end_date ); ?>"
                             },

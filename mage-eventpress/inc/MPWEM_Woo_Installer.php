@@ -22,6 +22,8 @@ if ( ! class_exists( 'MPWEM_Woo_Installer' ) ) {
 		public function __construct() {
 			// On admin_init, check if our plugin was just activated (for redirect)
 			add_action( 'admin_init', array( $this, 'handle_activation_redirect' ) );
+			// Reset a previous dismissal once WooCommerce is active again
+			add_action( 'admin_init', array( $this, 'maybe_reset_dismissal' ) );
 			// Enqueue popup assets on all admin pages (only outputs if WooCommerce is missing)
 			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 			// Render the popup markup in admin footer
@@ -29,6 +31,7 @@ if ( ! class_exists( 'MPWEM_Woo_Installer' ) ) {
 			// AJAX handlers for install, activate & dismiss
 			add_action( 'wp_ajax_mpwem_install_woocommerce', array( $this, 'ajax_install_woocommerce' ) );
 			add_action( 'wp_ajax_mpwem_activate_woocommerce', array( $this, 'ajax_activate_woocommerce' ) );
+			add_action( 'wp_ajax_mpwem_dismiss_woocommerce_installer', array( $this, 'ajax_dismiss_installer' ) );
 		}
 
 		/**
@@ -52,8 +55,8 @@ if ( ! class_exists( 'MPWEM_Woo_Installer' ) ) {
 		}
 
 		/**
-		 * Runs on admin_init. If the transient from activation exists
-		 * and WooCommerce IS active, redirect to event lists page.
+		 * Runs on admin_init. If the transient from activation exists,
+		 * redirect to event lists page regardless of WooCommerce status.
 		 */
 		public function handle_activation_redirect() {
 			if ( ! get_transient( 'mpwem_plugin_activated' ) ) {
@@ -66,26 +69,38 @@ if ( ! class_exists( 'MPWEM_Woo_Installer' ) ) {
 				return;
 			}
 
-			// WooCommerce is active → redirect immediately
-			if ( $this->is_woo_active() ) {
-				delete_transient( 'mpwem_plugin_activated' );
-				wp_safe_redirect( admin_url( 'edit.php?post_type=mep_events&page=mep_event_lists' ) );
-				exit;
-			}
-
-			// WooCommerce is NOT active → clear transient, popup will show via should_show_popup()
 			delete_transient( 'mpwem_plugin_activated' );
+			wp_safe_redirect( admin_url( 'edit.php?post_type=mep_events&page=mep_event_lists' ) );
+			exit;
 		}
 
 		/**
-		 * Should we show the popup on this page load?
-		 * Always show when WooCommerce is not active and our plugin is active.
+		 * WooCommerce is no longer required — popup is permanently disabled.
 		 *
 		 * @return bool
 		 */
 		private function should_show_popup() {
-			// Always show the popup when WooCommerce is not active
-			return ! $this->is_woo_active();
+			return false;
+		}
+
+		/**
+		 * Clear the per-user popup dismissal once WooCommerce is active again,
+		 * so the prompt reappears the next time WooCommerce is deactivated
+		 * instead of staying hidden permanently after a single dismissal.
+		 *
+		 * @return void
+		 */
+		public function maybe_reset_dismissal() {
+			if ( ! current_user_can( 'activate_plugins' ) ) {
+				return;
+			}
+
+			if (
+				$this->is_woo_active()
+				&& get_user_meta( get_current_user_id(), 'mpwem_woo_installer_dismissed', true )
+			) {
+				delete_user_meta( get_current_user_id(), 'mpwem_woo_installer_dismissed' );
+			}
 		}
 
 		/**
@@ -115,6 +130,7 @@ if ( ! class_exists( 'MPWEM_Woo_Installer' ) ) {
 				'ajax_url'         => admin_url( 'admin-ajax.php' ),
 				'install_nonce'    => wp_create_nonce( 'mpwem_install_woo' ),
 				'activate_nonce'   => wp_create_nonce( 'mpwem_activate_woo' ),
+				'dismiss_nonce'    => wp_create_nonce( 'mpwem_dismiss_woo' ),
 				'redirect_url'     => admin_url( 'edit.php?post_type=mep_events&page=mep_event_lists' ),
 				'woo_installed'    => $this->is_woo_installed() ? 'yes' : 'no',
 				'i18n'             => array(
@@ -154,6 +170,9 @@ if ( ! class_exists( 'MPWEM_Woo_Installer' ) ) {
 							</svg>
 						</div>
 						<span class="mpwem-woo-header-text"><?php esc_html_e( 'Event Booking Manager', 'mage-eventpress' ); ?></span>
+						<button type="button" class="mpwem-woo-popup-close" id="mpwem-woo-dismiss-btn" aria-label="Close">
+							&times;
+						</button>
 					</div>
 
 					<!-- Icon -->
@@ -297,8 +316,13 @@ if ( ! class_exists( 'MPWEM_Woo_Installer' ) ) {
 			if ( is_wp_error( $result ) ) {
 				wp_send_json_error( array( 'message' => $result->get_error_message() ) );
 			}
-
 			wp_send_json_success( array( 'message' => __( 'WooCommerce activated successfully!', 'mage-eventpress' ) ) );
+		}
+
+		public function ajax_dismiss_installer() {
+			check_ajax_referer( 'mpwem_dismiss_woo', 'nonce' );
+			update_user_meta( get_current_user_id(), 'mpwem_woo_installer_dismissed', true );
+			wp_send_json_success();
 		}
 	}
 

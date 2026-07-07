@@ -13,13 +13,18 @@
 				add_action( 'admin_menu', array( $this, 'event_list_menu' ) );
 				add_action( 'admin_action_mpwem_duplicate_post', [ $this, 'mpwem_duplicate_post_function' ] );
 				add_action( 'wp_ajax_mpwem_trash_multiple_posts', [ $this, 'mpwem_trash_multiple_posts' ] );
+				add_action( 'wp_ajax_mpwem_restore_event', array( $this, 'mpwem_restore_event' ) );
+				add_action( 'wp_ajax_mpwem_delete_event_permanently', array( $this, 'mpwem_delete_event_permanently' ) );
+				add_action( 'wp_ajax_mpwem_empty_event_trash', array( $this, 'mpwem_empty_event_trash' ) );
+				add_action( 'wp_ajax_mpwem_load_event_list', array( $this, 'mpwem_load_event_list' ) );
+				add_action( 'wp_ajax_mpwem_dashboard_stats', array( $this, 'mpwem_dashboard_stats' ) );
 				add_action( 'wp_ajax_mpwem_quick_edit_event', array( $this, 'mpwem_quick_edit_event' ) );
 				add_action( 'wp_ajax_mpwem_popup_attendee_statistic', array( $this, 'mpwem_popup_attendee_statistic' ) );
 				add_action( 'wp_ajax_mpwem_load_popup_attendee_statistics', array( $this, 'mpwem_load_popup_attendee_statistics' ) );
 				add_action( 'wp_ajax_mpwem_load_time', array( $this, 'mpwem_load_time' ) );
 			}
 			public function event_list_menu() {
-				add_submenu_page( 'edit.php?post_type=mep_events', __( 'Event Lists', 'mage-eventpress' ), __( 'Event Lists', 'mage-eventpress' ), 'manage_woocommerce', 'mep_event_lists', array( $this, 'display_event_list' ) );
+				add_submenu_page( 'edit.php?post_type=mep_events', __( 'Event Lists', 'mage-eventpress' ), __( 'Event Lists', 'mage-eventpress' ), MPWEM_Global_Function::get_admin_capability(), 'mep_event_lists', array( $this, 'display_event_list' ) );
 			}
 			public function display_event_list() {
 				$counts = wp_count_posts( 'mep_events' );
@@ -31,43 +36,12 @@
 					'trash'   => isset( $counts->trash ) ? $counts->trash : 0,
 				);
 				$total_event = $post_counts['publish'] + $post_counts['draft'] + $post_counts['private'] + $post_counts['trash'];
-				//$statuses = ['publish', 'draft', 'trash'];
-				$statuses           = [ 'publish', 'draft', 'private' ];
-				$events             = get_posts( array(
-					'post_type'   => 'mep_events',
-					'post_status' => $statuses,
-					'numberposts' => - 1
-				) );
-				$event_status_count = get_active_expire_upcoming_count( $events );
+				// Active/Expired counts via cheap meta-compare queries instead of loading every event.
+				$event_status_count = mpwem_active_expire_count();
 				$post_type          = 'mep_events';
 				$add_new_link       = admin_url( 'post-new.php?post_type=' . $post_type );
-				$trash_url          = admin_url( 'edit.php?post_status=trash&post_type=mep_events' );
-				$order_status       = array( 'wc-completed', 'wc-processing' );
-				$completed_orders   = wc_get_orders( [
-					'status' => $order_status,
-					'limit'  => - 1,
-					'return' => 'ids',
-				] );
-				$total_registration = count( $completed_orders );
-				$year               = date( 'Y' );
-				$month              = date( 'm' );
-				$prev_year          = $year;
-				$prev_month         = $month - 1;
-				if ( $month === 1 ) {
-					$prev_month = 12;
-					$prev_year  = $year - 1;
-				}
-				$currency                   = get_woocommerce_currency();
-				$currency_symbol            = get_woocommerce_currency_symbol( $currency );
-				$header_info                = get_monthly_revenue( $year, $month );
-				$prev_header_info           = get_monthly_revenue( $prev_year, $prev_month );
-				$current_month_revenue      = $header_info['revenue'];
-				$current_month_registration = $header_info['each_month_registration'];
-				$prev_month_revenue         = $prev_header_info['revenue'];
-				$prev_month_registration    = $prev_header_info['each_month_registration'];
-				$rev_change                 = $current_month_revenue - $prev_month_revenue;
-				$revenue_percent_change     = get_change_in_percent( $current_month_revenue, $prev_month_revenue );
-				$reg_percent_change         = get_change_in_percent( $current_month_registration, $prev_month_registration );
+				// Heavy, order-scanning analytics (registrations + revenue) are loaded asynchronously
+				// via the mpwem_dashboard_stats AJAX handler so the page can paint immediately.
 				$get_all_categories         = get_all_event_taxonomy( 'mep_cat' );
 				?>
                 <div class="wrap">
@@ -103,16 +77,14 @@
                                         <div class="trend neutral">→ <?php esc_html_e( 'Same as last week', 'mage-eventpress' ); ?></div>
                                     </div>
                                     <div class="analytics-card">
-                                        <h3><?php echo esc_html( $total_registration ); ?></h3>
+                                        <h3 id="mpwem_total_registration" class="mpwem-stat-loading">&hellip;</h3>
                                         <p><?php esc_html_e( 'Total Registrations', 'mage-eventpress' ); ?></p>
-                                        <div class="trend up">↗ <?php echo esc_html( $reg_percent_change['inc_dec_sign'] . '%' . $reg_percent_change['percent_change'] . ' vs last month' ); ?></div>
+                                        <div class="trend up" id="mpwem_registration_trend">&nbsp;</div>
                                     </div>
                                     <div class="analytics-card">
-                                        <h3><?php echo esc_html( $currency_symbol . ' ' . $current_month_revenue ); ?></h3>
+                                        <h3 id="mpwem_month_revenue" class="mpwem-stat-loading">&hellip;</h3>
                                         <p><?php esc_html_e( 'Revenue This Month', 'mage-eventpress' ); ?></p>
-                                        <div class="trend up">
-											<?php printf( '↗ %1$s%2$s%% vs last month', esc_html( $revenue_percent_change['inc_dec_sign'] ), esc_html( $revenue_percent_change['percent_change'] ) ); ?>
-                                        </div>
+                                        <div class="trend up" id="mpwem_revenue_trend">&nbsp;</div>
                                     </div>
                                 </div>
                                 <div class="stats-summary">
@@ -140,12 +112,10 @@
                                         <span><?php esc_html_e( 'Expired', 'mage-eventpress' ); ?></span>
                                         <span class="stat-number">(<?php echo esc_html( $event_status_count['expire_count'] ); ?>)</span>
                                     </div>
-                                    <a href="<?php echo esc_url( $trash_url ); ?>">
-                                        <div class="stat-item">
-                                            <span><?php esc_html_e( 'Trash', 'mage-eventpress' ); ?></span>
-                                            <span class="stat-number">(<?php echo esc_html( $post_counts['trash'] ); ?>)</span>
-                                        </div>
-                                    </a>
+                                    <div class="stat-item mpwem_filter_by_status" data-by-filter="trash">
+                                        <span><?php esc_html_e( 'Trash', 'mage-eventpress' ); ?></span>
+                                        <span class="stat-number" id="mpwem_trash_count">(<?php echo esc_html( $post_counts['trash'] ); ?>)</span>
+                                    </div>
                                 </div>
                             </div>
                             <div class="controls">
@@ -153,16 +123,17 @@
                                     <button class="mpwem_multiple_trash_btn" id="mpwem_multiple_trash_btn">Trash</button>
                                     <input type="hidden" id='mpwem_multiple_trash_nonce' value="<?php echo esc_attr( wp_create_nonce( 'mpwem_multiple_trash_nonce' ) ); ?>">
                                 </div>
+                                <button type="button" class="mpwem_empty_trash_btn" id="mpwem_empty_trash_btn" style="display: none;"><?php esc_html_e( 'Empty Trash', 'mage-eventpress' ); ?></button>
                                 <div class="search-box">
                                     <div class="search-icon">🔍</div>
                                     <input id="mpwem_search_event_list" type="text" placeholder="<?php esc_attr_e( 'Search events, locations, or organizers...', 'mage-eventpress' ); ?>">
                                 </div>
                                 <select class="category-select" id="mpwem_event_filter_by_category">
-                                    <option><?php esc_html_e( 'All Categories', 'mage-eventpress' ); ?></option>
+                                    <option value=""><?php esc_html_e( 'All Categories', 'mage-eventpress' ); ?></option>
 									<?php
 										if ( is_array( $get_all_categories ) && ! empty( $get_all_categories ) ) {
 											foreach ( $get_all_categories as $key => $event_categories ) { ?>
-                                                <option><?php echo esc_html( $event_categories ); ?></option>
+                                                <option value="<?php echo esc_attr( $key ); ?>" data-slug="<?php echo esc_attr( $key ); ?>"><?php echo esc_html( $event_categories ); ?></option>
 											<?php }
 										}
 									?>
@@ -190,19 +161,42 @@
                                         <th><?php esc_html_e( 'Actions', 'mage-eventpress' ); ?></th>
                                     </tr>
                                     </thead>
-                                    <tbody>
-									<?php render_mep_events_by_status( $events ); ?>
+                                    <tbody id="mpwem_event_list_body">
+                                    <tr class="mpwem_event_list_loading_row">
+                                        <td colspan="9" style="text-align:center;padding:30px;">
+                                            <?php esc_html_e( 'Loading events…', 'mage-eventpress' ); ?>
+                                        </td>
+                                    </tr>
                                     </tbody>
                                 </table>
                             </div>
                             <div class="pagination">
-                                <div class="pagination-info">
-									<?php esc_html_e( 'Showing', 'mage-eventpress' ); ?> <span id="visibleCount">0</span> of <span id="totalCount">0</span> <?php esc_html_e( ' Events', 'mage-eventpress' ); ?>
+                                <div class="mpwem-pg-left">
+                                    <div class="pagination-info">
+										<?php esc_html_e( 'Showing', 'mage-eventpress' ); ?> <span id="visibleCount">0</span> of <span id="totalCount">0</span> <?php esc_html_e( ' Events', 'mage-eventpress' ); ?>
+                                    </div>
+                                    <div class="mpwem-perpage">
+                                        <label for="mpwem_per_page"><?php esc_html_e( 'Show', 'mage-eventpress' ); ?></label>
+                                        <select id="mpwem_per_page" class="mpwem-perpage-input">
+                                            <option value="10">10</option>
+                                            <option value="20">20</option>
+                                            <option value="50">50</option>
+                                            <option value="100">100</option>
+                                        </select>
+                                        <span><?php esc_html_e( 'events', 'mage-eventpress' ); ?></span>
+                                    </div>
                                 </div>
-                                <button class="load-more-btn" id="loadMoreBtn">
-                                    <span><?php esc_html_e( 'Load More Events', 'mage-eventpress' ); ?></span>
-                                    <span>↓</span>
-                                </button>
+                                <div class="mpwem-pagination-switch" id="mpwem_pagination_switch" role="tablist" aria-label="<?php esc_attr_e( 'Pagination mode', 'mage-eventpress' ); ?>">
+                                    <button type="button" class="mpwem-pg-mode" data-mode="loadmore"><?php esc_html_e( 'Load More', 'mage-eventpress' ); ?></button>
+                                    <button type="button" class="mpwem-pg-mode" data-mode="numbered"><?php esc_html_e( 'Numbered', 'mage-eventpress' ); ?></button>
+                                </div>
+                                <div class="mpwem-pg-right">
+                                    <button class="load-more-btn" id="loadMoreBtn">
+                                        <span><?php esc_html_e( 'Load More Events', 'mage-eventpress' ); ?></span>
+                                        <svg class="mpwem-pg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M6 13l6 6 6-6"/></svg>
+                                    </button>
+                                    <div class="mpwem-numbered-pagination" id="mpwem_numbered_pagination"></div>
+                                </div>
                             </div>
                             <div class="mpPopup mpwem_popup_attendee_statistic" data-popup="mpwem_popup_attendee_statistic"></div>
                         </div>
@@ -231,6 +225,203 @@
 					}
 				}
 				wp_send_json_success( [ 'message' => 'Selected posts moved to trash successfully.' ] );
+			}
+			/**
+			 * Restore a single trashed event (Trash → its previous status), like WordPress.
+			 */
+			public function mpwem_restore_event() {
+				if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'mep_nonce' ) ) {
+					wp_send_json_error( array( 'message' => 'Security check failed' ) );
+				}
+				if ( ! current_user_can( 'edit_posts' ) ) {
+					wp_send_json_error( array( 'message' => 'Permission denied' ) );
+				}
+				$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
+				if ( ! $post_id || get_post_type( $post_id ) !== 'mep_events' ) {
+					wp_send_json_error( array( 'message' => 'Invalid event' ) );
+				}
+				if ( ! ( get_post_field( 'post_author', $post_id ) == get_current_user_id() || is_super_admin() ) ) {
+					wp_send_json_error( array( 'message' => 'Permission denied' ) );
+				}
+				wp_untrash_post( $post_id );
+				wp_send_json_success( array( 'message' => 'Event restored.' ) );
+			}
+			/**
+			 * Permanently delete a single trashed event, like WordPress.
+			 */
+			public function mpwem_delete_event_permanently() {
+				if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'mep_nonce' ) ) {
+					wp_send_json_error( array( 'message' => 'Security check failed' ) );
+				}
+				if ( ! current_user_can( 'delete_posts' ) ) {
+					wp_send_json_error( array( 'message' => 'Permission denied' ) );
+				}
+				$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
+				if ( ! $post_id || get_post_type( $post_id ) !== 'mep_events' || get_post_status( $post_id ) !== 'trash' ) {
+					wp_send_json_error( array( 'message' => 'Invalid event' ) );
+				}
+				if ( ! ( get_post_field( 'post_author', $post_id ) == get_current_user_id() || is_super_admin() ) ) {
+					wp_send_json_error( array( 'message' => 'Permission denied' ) );
+				}
+				wp_delete_post( $post_id, true );
+				wp_send_json_success( array( 'message' => 'Event permanently deleted.' ) );
+			}
+			/**
+			 * Permanently delete every trashed event the user may delete (Empty Trash).
+			 */
+			public function mpwem_empty_event_trash() {
+				if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'mep_nonce' ) ) {
+					wp_send_json_error( array( 'message' => 'Security check failed' ) );
+				}
+				if ( ! current_user_can( 'delete_posts' ) ) {
+					wp_send_json_error( array( 'message' => 'Permission denied' ) );
+				}
+				$trashed = get_posts( array(
+					'post_type'      => 'mep_events',
+					'post_status'    => 'trash',
+					'posts_per_page' => -1,
+					'fields'         => 'ids',
+					'no_found_rows'  => true,
+				) );
+				$deleted = 0;
+				foreach ( $trashed as $pid ) {
+					if ( get_post_field( 'post_author', $pid ) == get_current_user_id() || is_super_admin() ) {
+						wp_delete_post( $pid, true );
+						$deleted ++;
+					}
+				}
+				wp_send_json_success( array( 'message' => 'Trash emptied.', 'deleted' => $deleted ) );
+			}
+			public function mpwem_load_event_list() {
+				if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'mep_nonce' ) ) {
+					wp_send_json_error( array( 'message' => 'Security check failed' ) );
+				}
+				if ( ! current_user_can( 'edit_posts' ) ) {
+					wp_send_json_error( array( 'message' => 'Permission denied' ) );
+				}
+				$page          = isset( $_POST['page'] ) ? max( 1, absint( $_POST['page'] ) ) : 1;
+				$per_page      = isset( $_POST['per_page'] ) ? min( 100, max( 1, absint( $_POST['per_page'] ) ) ) : 20;
+				$search        = isset( $_POST['search'] ) ? sanitize_text_field( wp_unslash( $_POST['search'] ) ) : '';
+				$category      = isset( $_POST['category'] ) ? sanitize_text_field( wp_unslash( $_POST['category'] ) ) : '';
+				$date_from     = isset( $_POST['date_from'] ) ? sanitize_text_field( wp_unslash( $_POST['date_from'] ) ) : '';
+				$date_to       = isset( $_POST['date_to'] ) ? sanitize_text_field( wp_unslash( $_POST['date_to'] ) ) : '';
+				$status        = isset( $_POST['status'] ) ? sanitize_text_field( wp_unslash( $_POST['status'] ) ) : 'all';
+				$active_status = isset( $_POST['active_status'] ) ? sanitize_text_field( wp_unslash( $_POST['active_status'] ) ) : 'all';
+				$orderby       = isset( $_POST['orderby'] ) ? sanitize_text_field( wp_unslash( $_POST['orderby'] ) ) : '';
+				$order         = ( isset( $_POST['order'] ) && strtolower( $_POST['order'] ) === 'desc' ) ? 'DESC' : 'ASC';
+
+				$allowed_status = array( 'publish', 'draft', 'private', 'trash' );
+				// "all" (or anything unrecognised) lists the live statuses but never Trash.
+				$post_status    = in_array( $status, $allowed_status, true ) ? array( $status ) : array( 'publish', 'draft', 'private' );
+
+				$args = array(
+					'post_type'      => 'mep_events',
+					'post_status'    => $post_status,
+					'posts_per_page' => $per_page,
+					'paged'          => $page,
+				);
+				if ( $search !== '' ) {
+					$args['s'] = $search;
+				}
+				$meta_query = array();
+				if ( $category !== '' ) {
+					$args['tax_query'] = array(
+						array(
+							'taxonomy' => 'mep_cat',
+							'field'    => 'slug',
+							'terms'    => $category,
+						),
+					);
+				}
+				if ( $date_from !== '' ) {
+					$meta_query[] = array(
+						'key'     => 'event_start_datetime',
+						'value'   => $date_from . ' 00:00:00',
+						'compare' => '>=',
+						'type'    => 'DATETIME',
+					);
+				}
+				if ( $date_to !== '' ) {
+					$meta_query[] = array(
+						'key'     => 'event_start_datetime',
+						'value'   => $date_to . ' 23:59:59',
+						'compare' => '<=',
+						'type'    => 'DATETIME',
+					);
+				}
+				if ( $active_status === 'active' || $active_status === 'expired' ) {
+					$now          = current_time( 'mysql' );
+					$meta_query[] = array(
+						'key'     => 'event_end_datetime',
+						'value'   => $now,
+						'compare' => ( $active_status === 'active' ) ? '>=' : '<',
+						'type'    => 'DATETIME',
+					);
+				}
+				if ( ! empty( $meta_query ) ) {
+					$meta_query['relation'] = 'AND';
+					$args['meta_query']     = $meta_query;
+				}
+				if ( $orderby === 'title' ) {
+					$args['orderby'] = 'title';
+					$args['order']   = $order;
+				} elseif ( $orderby === 'date' ) {
+					$args['orderby']  = 'meta_value';
+					$args['meta_key'] = 'event_start_datetime';
+					$args['meta_type'] = 'DATETIME';
+					$args['order']    = $order;
+				}
+
+				$query = new WP_Query( $args );
+				ob_start();
+				render_mep_events_by_status( $query->posts );
+				$html = ob_get_clean();
+
+				wp_send_json_success( array(
+					'html'      => $html,
+					'found'     => (int) $query->found_posts,
+					'max_pages' => (int) $query->max_num_pages,
+					'page'      => $page,
+				) );
+			}
+			public function mpwem_dashboard_stats() {
+				if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'mep_nonce' ) ) {
+					wp_send_json_error( array( 'message' => 'Security check failed' ) );
+				}
+				if ( ! current_user_can( 'edit_posts' ) ) {
+					wp_send_json_error( array( 'message' => 'Permission denied' ) );
+				}
+				// Total registrations = paid attendees/tickets across BOTH WooCommerce and
+				// native (custom-payment) orders. Counted uniformly from the attendee records
+				// that both flows create, so custom-payment bookings are always included.
+				$total_registration = MPWEM_Functions::registration_stats()['tickets'];
+				$year       = date( 'Y' );
+				$month      = date( 'm' );
+				$prev_year  = $year;
+				$prev_month = $month - 1;
+				if ( (int) $month === 1 ) {
+					$prev_month = 12;
+					$prev_year  = $year - 1;
+				}
+				$currency                   = get_woocommerce_currency();
+				// get_woocommerce_currency_symbol() returns an HTML entity (e.g. &#36;); decode it
+				// so the JSON carries the real glyph and JS .text() renders it correctly.
+				$currency_symbol            = html_entity_decode( get_woocommerce_currency_symbol( $currency ), ENT_QUOTES, 'UTF-8' );
+				$header_info                = get_monthly_revenue( $year, $month );
+				$prev_header_info           = get_monthly_revenue( $prev_year, $prev_month );
+				$current_month_revenue      = $header_info['revenue'];
+				$current_month_registration = $header_info['each_month_registration'];
+				$prev_month_revenue         = $prev_header_info['revenue'];
+				$prev_month_registration    = $prev_header_info['each_month_registration'];
+				$revenue_percent_change     = get_change_in_percent( $current_month_revenue, $prev_month_revenue );
+				$reg_percent_change         = get_change_in_percent( $current_month_registration, $prev_month_registration );
+
+				wp_send_json_success( array(
+					'total_registration' => $total_registration,
+					'revenue'            => $currency_symbol . ' ' . $current_month_revenue,
+					'registration_trend' => '↗ ' . $reg_percent_change['inc_dec_sign'] . '%' . $reg_percent_change['percent_change'] . ' vs last month',
+					'revenue_trend'      => sprintf( '↗ %1$s%2$s%% vs last month', $revenue_percent_change['inc_dec_sign'], $revenue_percent_change['percent_change'] ),
+				) );
 			}
 			function mpwem_duplicate_post_function() {
 				if ( ! isset( $_GET['post_id'] ) || ! isset( $_GET['_wpnonce'] ) ||
@@ -387,7 +578,7 @@
 									$ticket_name      = is_array($ticket_type) && array_key_exists( 'option_name_t', $ticket_type ) ? $ticket_type['option_name_t'] : '';
 									$ticket_qty       = is_array($ticket_type) && array_key_exists( 'option_qty_t', $ticket_type ) ? $ticket_type['option_qty_t'] : 0;
 									$ticket_r_qty     = is_array($ticket_type) && array_key_exists( 'option_rsv_t', $ticket_type ) ? $ticket_type['option_rsv_t'] : 0;
-									$total_sold       = mep_get_ticket_type_seat_count( $event_id, $ticket_name, $date, $ticket_qty, $ticket_r_qty );
+								    $total_sold       = mep_get_ticket_type_seat_count( $event_id, $ticket_name, $date, $ticket_qty, $ticket_r_qty );
 									$available_ticket = (int) $ticket_qty - ( (int) $total_sold + (int) $ticket_r_qty );
 									?>
                                     <tr>
@@ -421,6 +612,40 @@
 			}
 		}
 		new MPWEM_Event_Lists();
+	}
+	function mpwem_active_expire_count() {
+		$now    = current_time( 'mysql' );
+		$base   = array(
+			'post_type'      => 'mep_events',
+			'post_status'    => array( 'publish', 'draft', 'private' ),
+			'posts_per_page' => 1,
+			'fields'         => 'ids',
+			'no_found_rows'  => false,
+		);
+		$active = new WP_Query( array_merge( $base, array(
+			'meta_query' => array(
+				array(
+					'key'     => 'event_end_datetime',
+					'value'   => $now,
+					'compare' => '>=',
+					'type'    => 'DATETIME',
+				),
+			),
+		) ) );
+		$expire = new WP_Query( array_merge( $base, array(
+			'meta_query' => array(
+				array(
+					'key'     => 'event_end_datetime',
+					'value'   => $now,
+					'compare' => '<',
+					'type'    => 'DATETIME',
+				),
+			),
+		) ) );
+		return array(
+			'active_count' => (int) $active->found_posts,
+			'expire_count' => (int) $expire->found_posts,
+		);
 	}
 	function get_active_expire_upcoming_count( $events ) {
 		$active_count   = 0;
@@ -491,27 +716,68 @@
 		if ( ! $month ) {
 			$month = date( 'm' );
 		}
-		$start_date             = "$year-$month-01 00:00:00";
-		$order_status           = array( 'wc-completed', 'wc-processing' );
-		$end_date               = date( 'Y-m-t 23:59:59', strtotime( $start_date ) );
-		$orders                 = wc_get_orders( [
-			'limit'        => - 1,
-			'status'       => $order_status,
-			'date_created' => $start_date . '...' . $end_date,
-			'return'       => 'ids',
-		] );
-		$total                  = 0;
-		$each_month_order_count = count( $orders );
-		foreach ( $orders as $order_id ) {
-			$order = wc_get_order( $order_id );
-			if ( $order ) {
-				$total += $order->get_total();
-			}
+		$start_date = "$year-$month-01 00:00:00";
+		$end_date   = date( 'Y-m-t 23:59:59', strtotime( $start_date ) );
+
+		// Native (custom-payment) order revenue for the month. These mep_custom_order
+		// records are independent of WooCommerce, so they must be counted whether or
+		// not WooCommerce is active. Paid statuses mirror WooCommerce's processing +
+		// completed (native "completed" is the post status "publish").
+		$native_revenue = mpwem_native_orders_revenue( $start_date, $end_date );
+
+		if ( ! MPWEM_Global_Function::has_woocommerce() ) {
+			$rsvp_attendees = get_posts( array(
+				'post_type'   => 'mep_events_attendees',
+				'numberposts' => -1,
+				'post_status' => 'publish',
+				'date_query'  => array(
+					array(
+						'after'     => $start_date,
+						'before'    => $end_date,
+						'inclusive' => true,
+					),
+				),
+			) );
+			return array(
+				'revenue'                 => $native_revenue,
+				'each_month_registration' => count( $rsvp_attendees ),
+			);
 		}
+
 		return array(
-			'revenue'                 => $total,
+			'revenue'                 => $total + $native_revenue,
 			'each_month_registration' => $each_month_order_count,
 		);
+	}
+	/**
+	 * Sum the order totals of paid native (custom-payment) orders created within a
+	 * date range. Paid = post status "processing" or "publish" (native Completed),
+	 * mirroring WooCommerce's processing + completed revenue statuses.
+	 *
+	 * @param string $start_date 'Y-m-d H:i:s'
+	 * @param string $end_date   'Y-m-d H:i:s'
+	 * @return float
+	 */
+	function mpwem_native_orders_revenue( $start_date, $end_date ) {
+		$native_orders = get_posts( array(
+			'post_type'      => 'mep_custom_order',
+			'post_status'    => array( 'processing', 'publish' ),
+			'posts_per_page' => -1,
+			'fields'         => 'ids',
+			'no_found_rows'  => true,
+			'date_query'     => array(
+				array(
+					'after'     => $start_date,
+					'before'    => $end_date,
+					'inclusive' => true,
+				),
+			),
+		) );
+		$total = 0;
+		foreach ( $native_orders as $order_id ) {
+			$total += (float) get_post_meta( $order_id, '_mep_order_total', true );
+		}
+		return $total;
 	}
 	function get_change_in_percent( $current_month, $prev_month ) {
 		$change = $current_month - $prev_month;
@@ -725,7 +991,7 @@
 											?>
                                             <div class="ticket-item">
                                                 <span class="ticket-name"><?php echo is_array($type) && array_key_exists( 'option_name_t', $type ) ? esc_html( $type['option_name_t'] ) : ''; ?></span>
-                                                <span class="ticket-price ticket-free"><?php echo isset( $type['option_price_t'] ) ? esc_html( $type['option_price_t'] ) : ''; ?></span>
+                                                <span class="ticket-price ticket-free"><?php echo isset( $type['option_price_t'] ) ? wc_price(esc_html( $type['option_price_t'] )) : ''; ?></span>
                                             </div>
 											<?php
 										}
@@ -750,21 +1016,16 @@
                     <td>
                         <div class="actions">
 							<?php do_action( 'mep_before_dashboard_event_list', $id ); ?>
-                            <a href="<?php echo esc_url( $view_link ); ?>">
-                                <button class="action-btn view" title="View Event"><span class="mi mi-eye"></span></button>
-                            </a>
-                            <a href="#">
-                                <button class="action-btn quick-edit" title="Quick Edit" data-event-id="<?php echo esc_attr( $id ); ?>"><span class="mi mi-file-edit"></span></button>
-                            </a>
-                            <a href="<?php echo esc_url( $edit_link ); ?>">
-                                <button class="action-btn edit" title="Edit Event"><span class="mi mi-pencil"></span></button>
-                            </a>
-                            <a href="#" data-mpwem_popup_attendee_statistic="mpwem_popup_attendee_statistic" data-event-id="<?php echo esc_attr( $id ); ?>">
-                                <button class="action-btn"><i class="mi mi-stats"></i></button>
-                            </a>
-                            <a href="<?php echo esc_url( $delete_link ); ?>">
-                                <button class="action-btn delete" title="Delete Event"><span class="mi mi-trash"></span></button>
-                            </a>
+							<?php if ( $status === 'trash' ) : ?>
+                            <a href="#" class="action-btn mpwem_restore_event" title="<?php esc_attr_e( 'Restore Event', 'mage-eventpress' ); ?>" data-event-id="<?php echo esc_attr( $id ); ?>"><span class="dashicons dashicons-image-rotate"></span></a>
+                            <a href="#" class="action-btn mpwem_delete_permanently" title="<?php esc_attr_e( 'Delete Permanently', 'mage-eventpress' ); ?>" data-event-id="<?php echo esc_attr( $id ); ?>"><span class="dashicons dashicons-trash"></span></a>
+							<?php else : ?>
+                            <a href="<?php echo esc_url( $view_link ); ?>" class="action-btn view" title="View Event"><span class="mi mi-eye"></span></a>
+                            <a href="#" class="action-btn quick-edit" title="Quick Edit" data-event-id="<?php echo esc_attr( $id ); ?>"><span class="mi mi-file-edit"></span></a>
+                            <a href="<?php echo esc_url( $edit_link ); ?>" class="action-btn edit" title="Edit Event"><span class="mi mi-pencil"></span></a>
+                            <a href="#" class="action-btn" data-mpwem_popup_attendee_statistic="mpwem_popup_attendee_statistic" data-event-id="<?php echo esc_attr( $id ); ?>" title="<?php esc_attr_e( 'Attendee Statistics', 'mage-eventpress' ); ?>"><i class="mi mi-stats"></i></a>
+                            <a href="<?php echo esc_url( $delete_link ); ?>" class="action-btn delete" title="Delete Event"><span class="mi mi-trash"></span></a>
+							<?php endif; ?>
 							<?php do_action( 'mep_after_dashboard_event_list', $id ); ?>
                         </div>
                     </td>

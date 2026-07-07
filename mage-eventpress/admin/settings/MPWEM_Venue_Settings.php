@@ -79,12 +79,7 @@
 			public function venue_settings( $event_id ,$event_infos) {
 				?>
                 <div class="mp_tab_item active" data-tab-item="#mp_event_venue">
-                    <h3><?php esc_html_e( 'Venue/Location Settings', 'mage-eventpress' ) ?></h3>
-                    <p><?php esc_html_e( 'Configure Your Venue/Location Settings Here', 'mage-eventpress' ) ?></p>
-                    <section class="bg-light">
-                        <h2><?php esc_html_e( 'General Settings', 'mage-eventpress' ) ?></h2>
-                        <span><?php esc_html_e( 'Configure Event Locations and Virtual Venues', 'mage-eventpress' ) ?></span>
-                    </section>
+                    
 					<?php do_action( 'mep_event_tab_before_location', $event_id ); ?>
 
 					<?php $this->event_online_enable( $event_id ); ?>
@@ -98,9 +93,11 @@
 				$event_label     = mep_get_option( 'mep_event_label', 'general_setting_sec', 'Events' );
 				$values          = get_post_custom( $post_id );
 				$user_api        = mep_get_option( 'google-map-api', 'general_setting_sec', '' );
+				// Detect saved manual fields (kept for potential future use, section always starts closed)
+				$has_manual_fields = true;
 				$map_type        = mep_get_option( 'mep_google_map_type', 'general_setting_sec', 'iframe' );
 				$mep_org_address = is_array($values) && array_key_exists( 'mep_org_address', $values ) ? $values['mep_org_address'][0] : 0;
-				$map_visible     = is_array($values) && array_key_exists( 'mep_sgm', $values ) ? $values['mep_sgm'][0] : 0;
+				$map_visible     = is_array($values) && array_key_exists( 'mep_sgm', $values ) ? $values['mep_sgm'][0] : 1;
 				$author_id       = get_post_field( 'post_author', $post_id );
 				$event_type      = get_post_meta( $post_id, 'mep_event_type', true );
 				$organizer       = [
@@ -118,56 +115,62 @@
                                 <h2><?php esc_html_e( " Location Source:", "mage-eventpress" ); ?></h2>
                                 <span class="label-text"><?php esc_html_e( 'If you have saved organizer details, please select the "Organizer" option. Please note that if you select "Organizer" and have not checked the organizer from the Event Organizer list on the right sidebar, the Event Location section will not populate on the front end.', 'mage-eventpress' ); ?></span>
                             </div>
-                            <select class="mp_formControl" name="mep_org_address" class='mep_org_address_list' id='mep_org_address_list'>
+                            <select class="mp_formControl mep_org_address_list" name="mep_org_address" id="mep_org_address_list">
 								<?php foreach ( $organizer as $key => $value ) { ?>
                                     <option value="<?php echo esc_attr( $key ); ?>" <?php echo ( $mep_org_address == $key ) ? esc_attr( 'selected' ) : ''; ?> > <?php echo esc_html( $value ); ?> </option>
 								<?php } ?>
                             </select>
                         </label>
                     </section>
-                    <section class="mp_event_address">
+                    <section class="mp_event_address mpwem-venue-search-section">
+                        <div class="mpwem-venue-search-wrap">
+                            <label class="mpwem-venue-search-label"><?php esc_html_e( 'Location/Venue:', 'mage-eventpress' ); ?></label>
+                            <!-- Supports both full addresses and coordinates (format: latitude, longitude) -->
+                            <input type="text" name='mep_location_venue' id="mpwem_location_venue" placeholder="<?php esc_attr_e( 'Type a full address or place name…', 'mage-eventpress' ); ?>" class="mp_formControl mpwem-venue-search-input" value='<?php echo esc_attr( mep_get_event_locaion_item( $post_id, 'mep_location_venue' ) ); ?>'>
+                            <div class="mpwem-venue-search-footer">
+                                <span class="mpwem-venue-search-hint"><?php esc_html_e( 'Map updates as you type. Or use coordinates: latitude, longitude.', 'mage-eventpress' ); ?></span>
+                                <button type="button" id="mpwem-manual-entry-toggle" class="mpwem-manual-entry-btn">
+                                    <span class="dashicons dashicons-edit-page"></span>
+                                    <span class="mpwem-manual-entry-btn__label"><?php esc_html_e( 'Manual Entry', 'mage-eventpress' ); ?></span>
+                                </button>
+                            </div>
+                        </div>
+                    </section>
+                    <section class="mp_event_address mpwem-manual-entry-wrap" id="mpwem-manual-entry-wrap" style="display:none">
                         <table>
                             <tr class="mp_event_address">
-                                <th><?php esc_html_e( 'Location/Venue:', 'mage-eventpress' ); ?></th>
-                                <td>
-                                    <label>
-                                        <!-- Supports both location names and coordinates (format: latitude, longitude) -->
-                                        <input type="text" name='mep_location_venue' placeholder="Ex: New york Meeting Center or 56.976239, 24.419633" class="mp_formControl" value='<?php echo mep_get_event_locaion_item( $post_id, 'mep_location_venue' ); ?>'>
-                                        <small style="color: #666; display: block; margin-top: 4px;">Enter location name or coordinates in format: latitude, longitude</small>
-                                    </label>
-                                </td>
                                 <th><span><?php esc_html_e( 'Street:', 'mage-eventpress' ); ?></span></th>
                                 <td>
                                     <label>
-                                        <input type="text" name='mep_street' placeholder="Ex: 10 E 33rd St" class="mp_formControl" value='<?php echo mep_get_event_locaion_item( $post_id, 'mep_street' ); ?>'>
+                                        <input type="text" name='mep_street' placeholder="Ex: 10 E 33rd St" class="mp_formControl" value='<?php echo esc_attr( mep_get_event_locaion_item( $post_id, 'mep_street' ) ); ?>'>
+                                    </label>
+                                </td>
+                                <th><span><?php esc_html_e( 'City:', 'mage-eventpress' ); ?></span></th>
+                                <td>
+                                    <label>
+                                        <input type="text" name='mep_city' placeholder="Ex: New York" class="mp_formControl" value='<?php echo esc_attr( mep_get_event_locaion_item( $post_id, 'mep_city' ) ); ?>'>
                                     </label>
                                 </td>
                             </tr>
                             <tr class="mp_event_address">
-                                <th><span><?php esc_html_e( 'City: ', 'mage-eventpress' ); ?></span></th>
+                                <th><span><?php esc_html_e( 'State:', 'mage-eventpress' ); ?></span></th>
                                 <td>
                                     <label>
-                                        <input type="text" name='mep_city' placeholder="Ex: New York" class="mp_formControl" value='<?php echo mep_get_event_locaion_item( $post_id, 'mep_city' ); ?>'>
+                                        <input type="text" name='mep_state' placeholder="Ex: NY" class="mp_formControl" value='<?php echo esc_attr( mep_get_event_locaion_item( $post_id, 'mep_state' ) ); ?>'>
                                     </label>
                                 </td>
-                                <th><span><?php esc_html_e( 'State: ', 'mage-eventpress' ); ?></span></th>
+                                <th><span><?php esc_html_e( 'Postcode:', 'mage-eventpress' ); ?></span></th>
                                 <td>
                                     <label>
-                                        <input type="text" name='mep_state' placeholder="Ex: NY" class="mp_formControl" value='<?php echo mep_get_event_locaion_item( $post_id, 'mep_state' ); ?>'>
+                                        <input type="text" name='mep_postcode' placeholder="Ex: 10016" class="mp_formControl" value='<?php echo esc_attr( mep_get_event_locaion_item( $post_id, 'mep_postcode' ) ); ?>'>
                                     </label>
                                 </td>
                             </tr>
                             <tr class="mp_event_address">
-                                <th><span><?php esc_html_e( 'Postcode: ', 'mage-eventpress' ); ?></span></th>
-                                <td>
+                                <th><span><?php esc_html_e( 'Country:', 'mage-eventpress' ); ?></span></th>
+                                <td class="is-full">
                                     <label>
-                                        <input type="text" name='mep_postcode' placeholder="Ex: 10016" class="mp_formControl" value='<?php echo mep_get_event_locaion_item( $post_id, 'mep_postcode' ); ?>'>
-                                    </label>
-                                </td>
-                                <th><span><?php esc_html_e( 'Country: ', 'mage-eventpress' ); ?></span></th>
-                                <td>
-                                    <label>
-                                        <input type="text" name='mep_country' placeholder="Ex: USA" class="mp_formControl" value='<?php echo mep_get_event_locaion_item( $post_id, 'mep_country' ); ?>'>
+                                        <input type="text" name='mep_country' placeholder="Ex: USA" class="mp_formControl" value='<?php echo esc_attr( mep_get_event_locaion_item( $post_id, 'mep_country' ) ); ?>'>
                                     </label>
                                 </td>
                             </tr>
@@ -478,26 +481,24 @@
 			public function event_online_enable( $post_id ) {
 				$event_label       = mep_get_option( 'mep_event_label', 'general_setting_sec', 'Events' );
 				$event_type        = get_post_meta( $post_id, 'mep_event_type', true );
+				if ( ! in_array( $event_type, [ 'online', 'offline', 'hybrid' ] ) ) {
+					$event_type = 'offline';
+				}
 				$event_member_type = get_post_meta( $post_id, 'mep_member_only_event', true );
 				$description       = get_post_meta( $post_id, 'mp_event_virtual_type_des', true );
 				$description       = $this->normalize_virtual_event_details( $description );
-				$checked           = ( $event_type == 'online' ) ? 'online' : '';
 				?>
                 <section>
                     <div class="mpev-label">
                         <div>
-                            <h2><?php esc_html_e( 'Online/Virtual ', 'mage-eventpress' );
-									echo esc_html( $event_label . '?' ); ?> (No/Yes)</span></h2>
-                            <span class="label-text"><?php _e( 'If your event is online or virtual, please ensure that this option is enabled.', 'mage-eventpress' ); ?>
+                            <h2><?php esc_html_e( 'Event Type', 'mage-eventpress' ); ?></h2>
+                            <span class="label-text"><?php _e( 'Select the type of your event.', 'mage-eventpress' ); ?></span>
                         </div>
-                        <label class="mpev-switch">
-                            <input type="checkbox" name="mep_event_type" value="<?php echo esc_attr( $checked ); ?>" <?php echo esc_attr( ( $checked == 'online' ) ? 'checked' : '' ); ?> data-collapse-target="#mpev-online-event" data-close-target="#mpev-close-online-event" data-toggle-values="online,offline">
-                            <span class="mpev-slider"></span>
-                        </label>
+                        <input type="hidden" name="mep_event_type" value="<?php echo esc_attr( $event_type ); ?>" data-collapse-target="#mpev-online-event" data-close-target="#mpev-close-online-event">
                     </div>
                 </section>
 				<?php do_action( 'mep_event_details_before_virtual_event_info_text_box', $post_id ); ?>
-                <section class="mp_event_virtual_type_des" id='mpev-online-event' style="display:<?php echo ( $event_type == 'online' ) ? esc_attr( 'block' ) : esc_attr( 'none' ); ?>">
+                <section class="mp_event_virtual_type_des" id='mpev-online-event' style="display:<?php echo ( $event_type == 'online' || $event_type == 'hybrid' ) ? esc_attr( 'block' ) : esc_attr( 'none' ); ?>">
                     <div class="mpev-label">
                         <div>
                             <h2>

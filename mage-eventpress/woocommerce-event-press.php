@@ -3,7 +3,7 @@
 	 * Plugin Name: Event Booking Manager for WooCommerce
 	 * Plugin URI: http://mage-people.com
 	 * Description: A Complete Event Solution for WordPress by MagePeople..
-	 * Version: 5.3.4
+	 * Version: 5.3.5
 	 * Author: MagePeople Team
 	 * Author URI: http://www.mage-people.com/
 	 * Text Domain: mage-eventpress
@@ -20,6 +20,156 @@
 	}
 	if (!defined('MPWEM_PLUGIN_URL')) {
 		define('MPWEM_PLUGIN_URL', plugins_url() . '/' . plugin_basename(dirname(__FILE__)));
+	}
+	if (!defined('MPWEM_PLUGIN_VERSION')) {
+		define('MPWEM_PLUGIN_VERSION', '5.3.4');
+	}
+
+	// WooCommerce Fallback Stub Functions to prevent Fatal Errors when WooCommerce is inactive.
+	// We hook this to plugins_loaded so that WooCommerce (if active or being activated) has loaded first,
+	// preventing any redeclaration conflicts.
+	add_action( 'plugins_loaded', 'mpwem_define_woocommerce_fallbacks', 1 );
+	function mpwem_define_woocommerce_fallbacks() {
+		if ( class_exists( 'WooCommerce' ) ) {
+			return;
+		}
+
+		// Detect if WooCommerce is being activated during this request to avoid redeclaration conflicts
+		$is_activating = false;
+		if ( isset( $GLOBALS['mpwem_activating_woocommerce'] ) && $GLOBALS['mpwem_activating_woocommerce'] ) {
+			$is_activating = true;
+		}
+		if ( ! $is_activating && ( is_admin() || ( defined( 'WP_CLI' ) && WP_CLI ) || isset( $_SERVER['argv'] ) ) ) {
+			// Web activation check (single or bulk)
+			if ( isset( $_REQUEST['action'] ) && $_REQUEST['action'] === 'activate' ) {
+				if ( isset( $_REQUEST['plugin'] ) && strpos( $_REQUEST['plugin'], 'woocommerce.php' ) !== false ) {
+					$is_activating = true;
+				}
+				if ( isset( $_REQUEST['checked'] ) && is_array( $_REQUEST['checked'] ) ) {
+					foreach ( $_REQUEST['checked'] as $checked_plugin ) {
+						if ( strpos( $checked_plugin, 'woocommerce.php' ) !== false ) {
+							$is_activating = true;
+							break;
+						}
+					}
+				}
+			}
+			// CLI / script activation check
+			if ( ! $is_activating && isset( $_SERVER['argv'] ) && is_array( $_SERVER['argv'] ) ) {
+				foreach ( $_SERVER['argv'] as $arg ) {
+					if ( strpos( $arg, 'woocommerce' ) !== false ) {
+						$is_activating = true;
+						break;
+					}
+				}
+			}
+		}
+
+		if ( ! $is_activating ) {
+			if ( ! class_exists( 'MPWEM_WC_Cart_Fallback' ) ) {
+				class MPWEM_WC_Cart_Fallback {
+					public function get_cart() { return array(); }
+					public function empty_cart() {}
+				}
+			}
+			if ( ! class_exists( 'MPWEM_WC_Customer_Fallback' ) ) {
+				class MPWEM_WC_Customer_Fallback {
+					public function get_is_vat_exempt() { return false; }
+				}
+			}
+			if ( ! class_exists( 'MPWEM_WC_Fallback' ) ) {
+				class MPWEM_WC_Fallback {
+					public $cart;
+					public $customer;
+					public $version = '0.0.0';
+					public function __construct() {
+						$this->cart = new MPWEM_WC_Cart_Fallback();
+						$this->customer = new MPWEM_WC_Customer_Fallback();
+					}
+				}
+			}
+			if ( ! function_exists( 'WC' ) ) {
+				function WC() {
+					static $instance = null;
+					if ( null === $instance ) {
+						$instance = new MPWEM_WC_Fallback();
+					}
+					return $instance;
+				}
+			}
+			if ( ! function_exists( 'wc_get_orders' ) ) {
+				function wc_get_orders( $args = array() ) { return array(); }
+			}
+			if ( ! function_exists( 'wc_get_order' ) ) {
+				function wc_get_order( $order_id ) { return false; }
+			}
+			if ( ! function_exists( 'wc_get_product' ) ) {
+				function wc_get_product( $product_id ) { return false; }
+			}
+			if ( ! function_exists( 'wc_price' ) ) {
+				function wc_price( $price, $args = array() ) {
+					$amount   = (float) $price;
+					$settings = wp_parse_args(
+						(array) get_option( 'mep_currency_settings', [] ),
+						[
+							'mep_currency_symbol'       => '$',
+							'mep_currency_position'     => 'left',
+							'mep_currency_decimal_sep'  => '.',
+							'mep_currency_thousand_sep' => ',',
+							'mep_currency_num_decimals' => 2,
+						]
+					);
+					$symbol   = (string) $settings['mep_currency_symbol'];
+					$position = (string) $settings['mep_currency_position'];
+					$dec_sep  = (string) $settings['mep_currency_decimal_sep'];
+					$thou_sep = (string) $settings['mep_currency_thousand_sep'];
+					$decimals = (int) $settings['mep_currency_num_decimals'];
+					$number   = number_format( $amount, $decimals, $dec_sep, $thou_sep );
+					switch ( $position ) {
+						case 'right':       return '<span class="woocommerce-Price-amount amount">' . $number . '<span class="woocommerce-Price-currencySymbol">' . esc_html( $symbol ) . '</span></span>';
+						case 'left_space':  return '<span class="woocommerce-Price-amount amount"><span class="woocommerce-Price-currencySymbol">' . esc_html( $symbol ) . '</span>&nbsp;' . $number . '</span>';
+						case 'right_space': return '<span class="woocommerce-Price-amount amount">' . $number . '&nbsp;<span class="woocommerce-Price-currencySymbol">' . esc_html( $symbol ) . '</span></span>';
+						default:            return '<span class="woocommerce-Price-amount amount"><span class="woocommerce-Price-currencySymbol">' . esc_html( $symbol ) . '</span>' . $number . '</span>';
+					}
+				}
+			}
+			if ( ! function_exists( 'get_woocommerce_currency' ) ) {
+				function get_woocommerce_currency() { return 'USD'; }
+			}
+			if ( ! function_exists( 'get_woocommerce_currency_symbol' ) ) {
+				function get_woocommerce_currency_symbol( $currency = 'USD' ) {
+					$settings = get_option( 'mep_currency_settings', [] );
+					return isset( $settings['mep_currency_symbol'] ) ? (string) $settings['mep_currency_symbol'] : '$';
+				}
+			}
+			if ( ! function_exists( 'wc_prices_include_tax' ) ) {
+				function wc_prices_include_tax() { return false; }
+			}
+			if ( ! function_exists( 'wc_get_price_thousand_separator' ) ) {
+				function wc_get_price_thousand_separator() {
+					$settings = get_option( 'mep_currency_settings', [] );
+					return isset( $settings['mep_currency_thousand_sep'] ) ? (string) $settings['mep_currency_thousand_sep'] : ',';
+				}
+			}
+			if ( ! function_exists( 'wc_get_price_decimal_separator' ) ) {
+				function wc_get_price_decimal_separator() {
+					$settings = get_option( 'mep_currency_settings', [] );
+					return isset( $settings['mep_currency_decimal_sep'] ) ? (string) $settings['mep_currency_decimal_sep'] : '.';
+				}
+			}
+			if ( ! function_exists( 'is_woocommerce' ) ) {
+				function is_woocommerce() { return false; }
+			}
+			if ( ! function_exists( 'is_product' ) ) {
+				function is_product() { return false; }
+			}
+			if ( ! function_exists( 'wc_get_cart_url' ) ) {
+				function wc_get_cart_url() { return ''; }
+			}
+			if ( ! function_exists( 'wc_get_checkout_url' ) ) {
+				function wc_get_checkout_url() { return ''; }
+			}
+		}
 	}
 
 	if (is_plugin_active('woocommerce-event-manager-addon-recurring-event/recurring_events.php')) {
@@ -39,6 +189,20 @@
 	register_activation_hook( __FILE__, 'mpwem_on_plugin_activation' );
 	function mpwem_on_plugin_activation() {
 		set_transient( 'mpwem_plugin_activated', true, 60 );
+
+		// Re-enable the first-run "Import Dummy Events" prompt on activation when the
+		// site still has no published events. These flags otherwise persist across
+		// deactivate/reactivate, so once dismissed/imported the prompt never returns.
+		// (Query the DB directly: the mep_events post type may not be registered yet
+		// at activation time.)
+		global $wpdb;
+		$published_events = (int) $wpdb->get_var(
+			"SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'mep_events' AND post_status = 'publish'"
+		);
+		if ( 0 === $published_events ) {
+			delete_option( 'mep_dummy_already_inserted' );
+			delete_option( 'mep_dummy_import_dismissed' );
+		}
 	}
 
 	/**
@@ -50,26 +214,61 @@
 		require_once MPWEM_PLUGIN_DIR . '/inc/MPWEM_Woo_Installer.php';
 	}
 
-	if (is_plugin_active('woocommerce/woocommerce.php')) {
-		function appsero_init_tracker_mage_eventpress() {
-			if (!class_exists('Appsero\\Client')) {
-				require_once __DIR__ . '/lib/appsero/src/Client.php';
-			}
-			$client = new Appsero\Client('08cd627c-4ed9-49cf-a9b5-1536ec384a5a', 'Event Manager For Woocommerce ', __FILE__);
-			$client->insights()->init();
+	function appsero_init_tracker_mage_eventpress() {
+		if (!class_exists('Appsero\\Client')) {
+			require_once __DIR__ . '/lib/appsero/src/Client.php';
+		}
+		$client = new Appsero\Client('08cd627c-4ed9-49cf-a9b5-1536ec384a5a', 'Event Manager For Woocommerce ', __FILE__);
+		$client->insights()->init();
+	}
+
+	// add_action('activated_plugin', 'mep_event_activation_redirect');
+	require_once MPWEM_PLUGIN_DIR . '/inc/MPWEM_Dependencies.php';
+	require_once MPWEM_PLUGIN_DIR . '/inc/blocks.php';
+
+	// Register block editor assets
+	add_action('init', 'mep_register_block_assets');
+	function mep_register_block_assets() {
+		if (!function_exists('register_block_type')) {
+			return;
 		}
 
-		// add_action('activated_plugin', 'mep_event_activation_redirect');
-		require_once MPWEM_PLUGIN_DIR . '/inc/MPWEM_Dependencies.php';
-		require_once MPWEM_PLUGIN_DIR . '/inc/blocks.php';
+		// Register block editor script
+		wp_register_script(
+			'mep-blocks-editor',
+			plugins_url('assets/blocks/event-list-block.js', __FILE__),
+			array(
+				'wp-blocks',
+				'wp-i18n',
+				'wp-element',
+				'wp-editor',
+				'wp-components',
+				'wp-block-editor'
+			),
+			filemtime(plugin_dir_path(__FILE__) . 'assets/blocks/event-list-block.js'),
+			array('in_footer' => true)
+		);
 
-		// Register block editor assets
-		add_action('init', 'mep_register_block_assets');
-		function mep_register_block_assets() {
-			if (!function_exists('register_block_type')) {
-				return;
-			}
+		// Register editor styles
+		wp_register_style(
+			'mep-blocks-editor',
+			plugins_url('assets/blocks/editor.css', __FILE__),
+			array('wp-edit-blocks'),
+			filemtime(plugin_dir_path(__FILE__) . 'assets/blocks/editor.css')
+		);
 
+		// Register front-end styles
+		wp_register_style(
+			'mep-blocks-style',
+			plugins_url('assets/blocks/style.css', __FILE__),
+			array(),
+			filemtime(plugin_dir_path(__FILE__) . 'assets/blocks/style.css')
+		);
+
+		// Enqueue block editor assets
+		if (is_admin()) {
+			wp_enqueue_script('mep-blocks-editor');
+			//wp_enqueue_style('mep-blocks-editor');
 			// Register block editor script
 			wp_register_script(
 				'mep-blocks-editor',
@@ -82,7 +281,7 @@
 					'wp-components',
 					'wp-block-editor'
 				),
-				filemtime(plugin_dir_path(__FILE__) . 'assets/blocks/event-list-block.js'),
+				MPWEM_PLUGIN_VERSION,
 				array('in_footer' => true)
 			);
 
@@ -91,7 +290,7 @@
 				'mep-blocks-editor',
 				plugins_url('assets/blocks/editor.css', __FILE__),
 				array('wp-edit-blocks'),
-				filemtime(plugin_dir_path(__FILE__) . 'assets/blocks/editor.css')
+				MPWEM_PLUGIN_VERSION
 			);
 
 			// Register front-end styles
@@ -99,7 +298,7 @@
 				'mep-blocks-style',
 				plugins_url('assets/blocks/style.css', __FILE__),
 				array(),
-				filemtime(plugin_dir_path(__FILE__) . 'assets/blocks/style.css')
+				MPWEM_PLUGIN_VERSION
 			);
 
 			// Enqueue block editor assets
@@ -139,9 +338,151 @@
 			return $links_array;
 		}
 	}
-	else {
-		require_once MPWEM_PLUGIN_DIR . '/inc/MPWEM_Global_Function.php';
-		require_once MPWEM_PLUGIN_DIR . '/inc/MPWEM_Global_Style.php';
-		require_once MPWEM_PLUGIN_DIR . '/admin/MPWEM_Quick_Setup.php';
-	}
+	
 	remove_action( 'admin_init', 'mep_re_meta_boxs',200);
+
+/**
+ * Grant WooCommerce Shop Managers access to Events plugin settings and menus.
+ * Only runs when PRO version is not active to avoid conflicts.
+ */
+if ( ! function_exists( 'mep_pro_modify_admin_menu_capabilities' ) ) {
+	add_action( 'admin_menu', 'mep_modify_admin_menu_capabilities', 999 );
+	function mep_modify_admin_menu_capabilities() {
+		// Only swap manage_options → manage_woocommerce when WooCommerce is active.
+		// Without WooCommerce, manage_woocommerce is an unregistered capability so
+		// no user would have it, which hides all plugin menus for everyone.
+		if ( ! class_exists( 'WooCommerce' ) ) {
+			return;
+		}
+
+		global $menu, $submenu;
+
+		if ( ! empty( $menu ) ) {
+			foreach ( $menu as $key => $item ) {
+				if ( isset( $item[2] ) && $item[2] === 'mep_events' ) {
+					if ( isset( $item[1] ) && $item[1] === 'manage_options' ) {
+						$menu[ $key ][1] = 'manage_woocommerce';
+					}
+				}
+			}
+		}
+
+		$parents_to_modify = array( 'edit.php?post_type=mep_events', 'mep_events' );
+		foreach ( $parents_to_modify as $parent ) {
+			if ( isset( $submenu[ $parent ] ) ) {
+				foreach ( $submenu[ $parent ] as $key => $sub_item ) {
+					if ( isset( $sub_item[1] ) && $sub_item[1] === 'manage_options' ) {
+						$submenu[ $parent ][ $key ][1] = 'manage_woocommerce';
+					}
+				}
+			}
+		}
+	}
+}
+
+if ( ! function_exists( 'mep_pro_grant_shop_manager_access' ) ) {
+	add_filter( 'user_has_cap', 'mep_grant_shop_manager_access', 10, 4 );
+	function mep_grant_shop_manager_access( $allcaps, $caps, $args, $user ) {
+		// Fast exit: this filter only matters for manage_options checks.
+		if ( ! isset( $args[0] ) || $args[0] !== 'manage_options' ) {
+			return $allcaps;
+		}
+		// Fast exit: only shop managers need elevation — skip everyone else immediately.
+		if ( empty( $allcaps['manage_woocommerce'] ) ) {
+			return $allcaps;
+		}
+
+		// Cache the context result per user per request so the string comparisons
+		// below run at most ONCE per user rather than on every capability check.
+		static $mep_cap_cache = array();
+		$uid = isset( $user->ID ) ? (int) $user->ID : 0;
+		if ( isset( $mep_cap_cache[ $uid ] ) ) {
+			if ( $mep_cap_cache[ $uid ] ) {
+				$allcaps['manage_options'] = true;
+			}
+			return $allcaps;
+		}
+
+		$is_eventpress_context = false;
+
+		if ( is_admin() ) {
+			global $pagenow;
+
+			if ( isset( $_GET['page'] ) && is_string( $_GET['page'] ) ) {
+				$page = $_GET['page'];
+				if (
+					strpos( $page, 'mep_' ) === 0 ||
+					strpos( $page, 'mpwem_' ) === 0 ||
+					$page === 'attendee_list' ||
+					$page === 'mep_event_welcome_page' ||
+					$page === 'mpwem_quick_setup'
+				) {
+					$is_eventpress_context = true;
+				}
+			}
+
+			if ( isset( $_GET['post_type'] ) && ( $_GET['post_type'] === 'mep_events' || $_GET['post_type'] === 'mep_event_speaker' ) ) {
+				$is_eventpress_context = true;
+			}
+
+			if ( $pagenow === 'post.php' && isset( $_GET['post'] ) ) {
+				$post_id = absint( $_GET['post'] );
+				if ( $post_id && get_post_type( $post_id ) === 'mep_events' ) {
+					$is_eventpress_context = true;
+				}
+			}
+
+			if ( $pagenow === 'options.php' && isset( $_POST['option_page'] ) && is_string( $_POST['option_page'] ) ) {
+				$option_page = $_POST['option_page'];
+				if (
+					strpos( $option_page, 'mep_' ) === 0 ||
+					strpos( $option_page, 'mpwem_' ) === 0 ||
+					strpos( $option_page, 'general_setting_sec' ) === 0 ||
+					strpos( $option_page, 'event_list_setting_sec' ) === 0 ||
+					strpos( $option_page, 'single_event_setting_sec' ) === 0 ||
+					strpos( $option_page, 'email_setting_sec' ) === 0 ||
+					strpos( $option_page, 'style_setting_sec' ) === 0 ||
+					strpos( $option_page, 'icon_setting_sec' ) === 0 ||
+					strpos( $option_page, 'carousel_setting_sec' ) === 0 ||
+					strpos( $option_page, 'mp_slider_settings' ) === 0 ||
+					strpos( $option_page, 'mep_settings_licensing' ) === 0
+				) {
+					$is_eventpress_context = true;
+				}
+			}
+		}
+
+		if ( wp_doing_ajax() ) {
+			if ( isset( $_REQUEST['action'] ) && is_string( $_REQUEST['action'] ) ) {
+				$action = $_REQUEST['action'];
+				if (
+					strpos( $action, 'mep_' ) === 0 ||
+					strpos( $action, 'mpwem_' ) === 0 ||
+					strpos( $action, 'wbtm_' ) === 0 ||
+					strpos( $action, 'wtbm_' ) === 0 ||
+					strpos( $action, 'wbbm_' ) === 0 ||
+					$action === 'generate_attendee_pdf'
+				) {
+					$is_eventpress_context = true;
+				}
+			}
+		}
+
+		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
+			if ( isset( $_SERVER['REQUEST_URI'] ) ) {
+				if ( stripos( $_SERVER['REQUEST_URI'], '/wp-json/mep/' ) !== false || stripos( $_SERVER['REQUEST_URI'], '/wp-json/mpwem/' ) !== false ) {
+					$is_eventpress_context = true;
+				}
+			}
+		}
+
+		// Store result so all subsequent capability checks in this request are instant.
+		$mep_cap_cache[ $uid ] = $is_eventpress_context;
+
+		if ( $is_eventpress_context ) {
+			$allcaps['manage_options'] = true;
+		}
+
+		return $allcaps;
+	}
+}

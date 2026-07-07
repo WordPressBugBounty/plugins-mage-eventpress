@@ -109,18 +109,18 @@
                             </label>
 							<?php
 						}
-					} else {
-						$date         = MPWEM_Functions::get_upcoming_date_time( $event_id );
-						$date_format  = MPWEM_Global_Function::date_picker_format();
-						$now          = date_i18n( $date_format, strtotime( current_time( 'Y-m-d' ) ) );
-						$all_times    = $all_times ?? MPWEM_Functions::get_times( $event_id, $all_dates, $date );
-						$display_time = get_post_meta( $event_id, 'mep_disable_ticket_time', true );
-						$display_time = $display_time ?: 'no';
-						?>
+} else {
+					$date         = MPWEM_Functions::get_upcoming_date_time( $event_id );
+					$date_format  = MPWEM_Global_Function::date_picker_format();
+					$now          = date_i18n( $date_format, strtotime( current_time( 'Y-m-d' ) ) );
+					$all_times    = $all_times ?? MPWEM_Functions::get_times( $event_id, $all_dates, $date );
+					$display_time = get_post_meta( $event_id, 'mep_disable_ticket_time', true );
+					$display_time = $display_time ?: 'no';
+					?>
                         <div class="_dFlex">
                             <label>
                                 <input type="hidden" name="mpwem_date_time" value="" required/>
-                                <input id="mpwem_date_time" type="text" value="" class="formControl _min_250" placeholder="<?php echo esc_attr( $now ); ?>" readonly required/>
+                                <input id="mpwem_date_time" type="text" value="" class="new-date_type formControl _min_250" placeholder="<?php echo esc_attr( $now ); ?>" readonly required/>
                             </label>
 							<?php if ( $display_time != 'no' && is_array( $all_times ) && sizeof( $all_times ) > 0 ) { ?>
                                 <div class="mpwem_time_area">
@@ -128,8 +128,13 @@
 							<?php } ?>
                         </div>
 						<?php
+						// Emits an inline <script>window.mpwemDateData = {...}</script>
+						// (see MPWEM_Global_Function::enqueue_date_picker). The inline
+						// script is consumed by mpwem_load_date_picker() below to
+						// initialise the picker with off-date / off-day / special-date
+						// filtering — the same code path used on the public
+						// ticket-booking page.
 						do_action( 'mpwem_load_date_picker_js', '#mpwem_date_time', $all_dates );
-						//echo '<pre>';			print_r($all_times);			echo '</pre>';
 					}
 				}
 			}
