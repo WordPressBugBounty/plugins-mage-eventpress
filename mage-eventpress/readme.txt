@@ -284,7 +284,7 @@ vulnerabilities.
 
 
 == Changelog ==
-= 5.3.5 =
+= 5.3.6 =
 * Security Patch update
 * RSVP Events
 * Multiple Event Types – Online, Offline & Hybrid
