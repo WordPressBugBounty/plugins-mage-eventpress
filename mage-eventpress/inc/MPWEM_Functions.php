@@ -44,7 +44,7 @@
 					$url_date = isset( $_GET['date'] ) ? sanitize_text_field( wp_unslash( $_GET['date'] ) ) : null;
 					$url_date_2 = isset( $_GET['date_time'] ) ? sanitize_text_field( wp_unslash( $_GET['date_time'] ) ) : null;
 					$url_date=$url_date?:$url_date_2;
-					$url_date=$url_date ? date( 'Y-m-d H:i', strtotime( $url_date ) ) : '';
+					$url_date=$url_date ? date( 'Y-m-d H:i', $url_date ) : '';
 					$date_format = MPWEM_Global_Function::check_time_exit_date( $url_date ) ? 'Y-m-d H:i' : 'Y-m-d';
 					$url_date    = $url_date ? date( $date_format, strtotime($url_date) ) : '';
 					$all_dates   = MPWEM_Functions::get_dates( $event_id );
@@ -705,6 +705,12 @@
 				}
 				$address_type = MPWEM_Global_Function::get_post_info( $event_id, 'mep_org_address' );
 				$address      = [];
+				$location     = '';
+				$street       = '';
+				$city         = '';
+				$state        = '';
+				$zip          = '';
+				$country      = '';
 				if ( $address_type ) {
 					$org_arr  = get_the_terms( $event_id, 'mep_org' );
 					if ( is_array( $org_arr ) && ! empty( $org_arr ) ) {
