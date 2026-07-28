@@ -2,7 +2,7 @@
 Contributors: magepeopleteam, aamahin
 Tags: events, event tickets, event registration, woocommerce, booking
 Requires at least: 5.3
-Stable tag: 5.3.7
+Stable tag: 5.3.8
 Tested up to: 7.0
 WC requires at least: 3.0
 WC tested up to: 10.7
@@ -30,8 +30,8 @@ Accelerate your physical or virtual event management and offer attendees a smoot
 Whether you are a small event organizer or a large one, we have thousands of trusted businesses.
 ###  Explore The Demo:
 🌐 [Live Demo](https://wpevently.com/)
-📘 [Online Documentation](https://docs.mage-people.com/docs/plugins/wpevently/overview)
-❄️ [Available Shortcode List](https://docs.mage-people.com/docs/plugins/wpevently/shortcodes)
+📘 [Online Documentation](https://docs.mage-people.com/plugins/wpevently/overview)
+❄️ [Available Shortcode List](https://docs.mage-people.com/plugins/wpevently/shortcodes)
 🛍️ [Buy Event Booking & Management Plugin for WooCommerce – WpEvently Pro](https://mage-people.com/product/mage-woo-event-booking-manager-pro/)
 
 ### 🎯 Experience Smooth Event Management
@@ -197,7 +197,7 @@ If you want to show pagination with the event list, you can set the value to "ye
 `
 [event-list pagination='yes']
 `
-More ❄️ [Available Shortcode List](https://docs.mage-people.com/docs/plugins/wpevently/shortcodes)
+More ❄️ [Available Shortcode List](https://docs.mage-people.com/plugins/wpevently/shortcodes)
 
 
 ### Note:
@@ -286,6 +286,23 @@ Please report security bugs through the [Patchstack Vulnerability Disclosure Pro
 
 
 == Changelog ==
+
+= 5.3.8 =
+* Security Fix: Added nonce verification to the Payment Configuration save AJAX action (mep_save_payment_settings_modal), preventing forged requests from modifying payment settings.
+* Security Fix: Restricted the Payment Configuration save AJAX action to Administrators (manage_options), preventing lower-privileged roles (e.g. Contributor) from modifying site-wide payment settings.
+* Fix: Prevented the WooCommerce gateway enable/disable toggle and its Configure form's Save from racing, which could silently overwrite saved bank/instruction details.
+* Fix: Corrected ticket “sold” counts intermittently showing as zero due to inconsistent event date formatting on certain checkout paths.
+* Fix: Corrected the expiry date for multi-date/recurring events, which could show as expired weeks before the actual last occurrence.
+* Fix: Corrected wrong Revenue/Registration figures and removed PHP warnings on the Event Lists dashboard.
+* Fix: Fixed the current-page highlight being invisible in the Settings menu under some WordPress admin color schemes.
+* Fix: Fixed a fatal error when bulk-activating WooCommerce together with other plugins from the Plugins list.
+* Fix: Resolved a “Translation loading... triggered too early” notice shown on some sites.
+* Improvement: Stopped loading this plugin’s admin assets (jQuery UI, Font Awesome, Google Maps, media library, etc.) on every wp-admin page — now limited to this plugin’s own screens.
+* Fix: Restored the “Manual Entry” button and Event Type (In-Person/Online/Hybrid) selector on the classic Venue/Location tab, which were unresponsive because their supporting script only initialized when the step-by-step editor’s markup was present.
+* Fix: Corrected the classic event editor loading none of its Venue/Location enhancements when a site’s default event edit mode is set to Classic, instead of only when reached via the internal Classic-editor bypass link.
+* Improvement: Reduced the styles loaded on the classic Venue/Location tab to a smaller, dedicated stylesheet, preventing layout conflicts with unrelated fields on that tab.
+* Credit: Thanks to the Wordfence Threat Intelligence team for responsibly disclosing this issue.
+  28 July 2026*
 
 = 5.3.7 =
 * Security Fix: Hardened PHP Object Injection protection for event Timeline and F.A.Q. content (extended existing serialization guard and disabled class loading on unserialize).

@@ -465,6 +465,15 @@ if (! class_exists('MPWEM_Event_Edit_Page')) {
 
 		private function is_waitlist_addon_active(): bool
 		{
+			// The Waitlist addon now ships bundled inside mage-eventpress-pro/lib
+			// (merged from the old standalone plugin), so it no longer appears in
+			// is_plugin_active() by its old plugin file path. Detect the bundled
+			// build via a function it unconditionally defines when loaded, and
+			// keep the legacy check as a fallback for a genuine standalone install.
+			if (function_exists('mepw_get_waitlist_status')) {
+				return true;
+			}
+
 			if (! function_exists('is_plugin_active')) {
 				include_once ABSPATH . 'wp-admin/includes/plugin.php';
 			}
@@ -497,6 +506,51 @@ if (! class_exists('MPWEM_Event_Edit_Page')) {
 							</div>
 							<label class="mpwem-event-setting-card__switch">
 								<input type="checkbox" name="mep_show_waitlist" value="on" data-no-mpwem-switch="1" <?php checked($waitlist_enabled); ?> />
+								<span class="mpwem-event-setting-card__switch-ui" aria-hidden="true"></span>
+							</label>
+						</div>
+					</div>
+				</div>
+			</div>
+			<?php
+		}
+
+		private function is_review_addon_active(): bool
+		{
+			// The Review & Rating addon ships bundled inside mage-eventpress-pro/lib
+			// and only loads once WooCommerce is active (it calls wc_customer_bought_product()
+			// for the "verified purchaser" permission mode). Detect it via a function it
+			// unconditionally defines when loaded — same pattern as the Waitlist check above.
+			return function_exists('check_review_permission');
+		}
+
+		private function render_review_sidebar_option(int $post_id): void
+		{
+			if (! $this->is_review_addon_active()) {
+				return;
+			}
+
+			// Unset meta means enabled (matches merr_get_review_status()'s default in the
+			// addon), so existing events keep showing the review form until an admin
+			// explicitly turns it off.
+			$review_enabled = get_post_meta($post_id, 'mep_show_review', true) !== 'off';
+			?>
+			<div class="mpwem-display-section mpwem-display-section--review is-expanded">
+				<div class="mpwem-display-section__head">
+					<div class="mpwem-display-section__head-main">
+						<h3><?php esc_html_e('Review & Rating', 'mage-eventpress'); ?></h3>
+						<p><?php esc_html_e('Show the review form for this event when the Review & Rating addon is active.', 'mage-eventpress'); ?></p>
+					</div>
+				</div>
+				<div class="mpwem-display-section__body">
+					<div class="mpwem-event-setting-card__item">
+						<div class="mpwem-event-setting-card__item-head">
+							<div class="mpwem-event-setting-card__copy">
+								<h3><?php esc_html_e('Show Review Form', 'mage-eventpress'); ?></h3>
+								<p><?php esc_html_e('Turn this off to hide the "Write a Review" button for this event.', 'mage-eventpress'); ?></p>
+							</div>
+							<label class="mpwem-event-setting-card__switch">
+								<input type="checkbox" name="mep_show_review" value="on" data-no-mpwem-switch="1" <?php checked($review_enabled); ?> />
 								<span class="mpwem-event-setting-card__switch-ui" aria-hidden="true"></span>
 							</label>
 						</div>
@@ -1142,10 +1196,22 @@ if (! class_exists('MPWEM_Event_Edit_Page')) {
 		{
 			unset($hook);
 
-			$is_classic = $this->is_classic_bypass()
-				&& function_exists('get_current_screen')
-				&& ($screen = get_current_screen())
-				&& $screen->post_type === self::POST_TYPE;
+			// The classic screen is reached two ways: an explicit ?mpwem_classic=1
+			// bypass, or the post/site edit mode already resolving to "classic"
+			// (see maybe_redirect_edit_screen()), in which case post.php never
+			// redirects to the modern wizard and no bypass param is present.
+			$screen = function_exists('get_current_screen') ? get_current_screen() : null;
+			$is_event_post_screen = $screen && $screen->post_type === self::POST_TYPE && $screen->base === 'post';
+
+			$is_classic = false;
+			if ($is_event_post_screen) {
+				if ($this->is_classic_bypass()) {
+					$is_classic = true;
+				} else {
+					$post_id_for_mode = isset($_GET['post']) ? absint($_GET['post']) : 0;
+					$is_classic = ! $this->is_modern_mode_enabled($post_id_for_mode);
+				}
+			}
 
 			if (! $this->is_edit_screen() && ! $is_classic) {
 				return;
@@ -1159,6 +1225,18 @@ if (! class_exists('MPWEM_Event_Edit_Page')) {
 					MPWEM_PLUGIN_URL . '/assets/admin/mpwem_event_edit.css',
 					['mpwem_admin'],
 					$this->get_asset_version('assets/admin/mpwem_event_edit.css')
+				);
+			} elseif ($is_classic) {
+				// The classic screen only gets the Manual Entry / Event Type
+				// enhancements (see the classic bootstrap in mpwem_event_edit.js),
+				// so it loads a small, scoped stylesheet for just those instead
+				// of the full wizard CSS — that file has unscoped selectors
+				// (e.g. .mpev-label) that collide with unrelated classic markup.
+				wp_enqueue_style(
+					'mpwem_event_edit_classic',
+					MPWEM_PLUGIN_URL . '/assets/admin/mpwem_event_edit_classic.css',
+					['mpwem_admin'],
+					$this->get_asset_version('assets/admin/mpwem_event_edit_classic.css')
 				);
 			}
 
@@ -1836,6 +1914,7 @@ if (! class_exists('MPWEM_Event_Edit_Page')) {
 														</div>
 													</div>
 													<?php $this->render_waitlist_sidebar_option($post_id); ?>
+													<?php $this->render_review_sidebar_option($post_id); ?>
 													<div class="mpwem-card mpwem-card--danger mpwem-card--danger-advanced" id="mpwem_advanced_danger_zone">
 														<div class="mpwem-card__head">
 															<h2><?php esc_html_e('Danger Zone', 'mage-eventpress'); ?></h2>

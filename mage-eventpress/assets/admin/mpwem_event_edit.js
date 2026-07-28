@@ -3121,7 +3121,8 @@
         $venue.data('mpwemGridEnhanced', true);
     }
 
-    function enhanceEventType($root) {
+    function enhanceEventType($root, opts) {
+        const skipTicketSync = !!(opts && opts.skipTicketSync);
         const $venue = getPanel($root, '#mp_event_venue');
         if (!$venue.length) return;
 
@@ -3227,7 +3228,14 @@
             }
 
             syncHybridTicketCols(val);
-            syncTicketAdvancedColumns($root);
+            if (!skipTicketSync) {
+                // Builds/refreshes the wizard's "Simple Ticket Type" summary widget,
+                // which relies on initializeTicketPricingModal() also having run to
+                // wire up its buttons. The classic editor keeps its own separate
+                // ticket table UI, so skip this there to avoid injecting an inert
+                // duplicate widget onto that tab.
+                syncTicketAdvancedColumns($root);
+            }
 
             // Hide extra services card for virtual/online events (no physical services needed)
             var $extraServicesCard = $('#mpwem_wizard_extra_services_card');
@@ -6197,6 +6205,27 @@
                 closeStatusActionMenus();
             }
         });
+    });
+
+    // Classic event editor (post.php?...&mpwem_classic=1): the Venue/Location
+    // tab renders the same "Manual Entry" markup and hidden event-type input
+    // as the modern wizard, but there is no .mpwem-event-wizard wrapper here,
+    // so the bootstrap above never runs. Wire up just those two enhancements
+    // against the legacy .mp_event_all_meta_in_tab container instead.
+    $(function () {
+        if (getWizardRoot().length) return;
+
+        const $classicRoot = $('.mp_event_all_meta_in_tab').first();
+        if (!$classicRoot.length) return;
+
+        try {
+            enhanceVenueGrid($classicRoot);
+            enhanceEventType($classicRoot, { skipTicketSync: true });
+        } catch (error) {
+            if (window.console && window.console.error) {
+                window.console.error('MPWEM classic venue/event-type enhancement failed.', error);
+            }
+        }
     });
 
 })(jQuery);
