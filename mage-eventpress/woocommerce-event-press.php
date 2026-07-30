@@ -3,7 +3,7 @@
 	 * Plugin Name: Event Booking Manager for WooCommerce
 	 * Plugin URI: http://mage-people.com
 	 * Description: A Complete Event Solution for WordPress by MagePeople..
-	 * Version: 5.3.8
+	 * Version: 5.3.9
 	 * Author: MagePeople Team
 	 * Author URI: http://www.mage-people.com/
 	 * Text Domain: mage-eventpress
@@ -22,7 +22,7 @@
 		define('MPWEM_PLUGIN_URL', plugins_url() . '/' . plugin_basename(dirname(__FILE__)));
 	}
 	if (!defined('MPWEM_PLUGIN_VERSION')) {
-		define('MPWEM_PLUGIN_VERSION', '5.3.8');
+		define('MPWEM_PLUGIN_VERSION', '5.3.9');
 	}
 
 	// WooCommerce Fallback Stub Functions to prevent Fatal Errors when WooCommerce is inactive.
@@ -325,7 +325,7 @@
 		add_filter('plugin_row_meta', 'mep_plugin_row_meta', 10, 2);
 		function mep_plugin_row_meta($links_array, $plugin_file_name) {
 			if (strpos($plugin_file_name, basename(__FILE__))) {
-				if (!is_plugin_active('woocommerce-event-manager-pdf-ticket/tickets.php') || !is_plugin_active('woocommerce-event-manager-addon-form-builder/addon-builder.php')) {
+				if (! mep_check_plugin_installed('mage-eventpress-pro/woocommerce-event-manager-pro.php')) {
 					$wbbm_links = array(
 						'docs' => '<a href="' . esc_url("https://docs.mage-people.com/woocommerce-event-manager/") . '" target="_blank">' . __('Docs', 'mage-eventpress') . '</a>',
 						'support' => '<a href="' . esc_url("https://mage-people.com/my-account") . '" target="_blank">' . __('Support', 'mage-eventpress') . '</a>',

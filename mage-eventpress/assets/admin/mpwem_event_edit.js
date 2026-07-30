@@ -5827,19 +5827,27 @@
         }
 
         if ((action || '') !== 'trash') {
+            // Required-field checks (title/venue/virtual details/date/display)
+            // only apply when actually publishing, matching the server-side
+            // validation in handle_save() — Draft/Update saves of an existing
+            // event must not be blocked by fields the site may intentionally
+            // leave empty (e.g. virtual event details when a separate
+            // confirmation email is already handled elsewhere).
+            const isPublishAttempt = (action || '') === 'publish';
+
             // When saving from a step-specific modal (ticket/extra-service/date),
             // only validate that step's own rules. Skipping cross-step validation
             // prevents date/display failures from switching the active tab.
-            if (!options.skipOtherSteps && !validateBasicStep($root, { focus: true })) {
+            if (isPublishAttempt && !options.skipOtherSteps && !validateBasicStep($root, { focus: true })) {
                 return;
             }
             if (!validateTicketsStep($root, { focus: true, skipPaymentCheck: options.skipPaymentCheck })) {
                 return;
             }
-            if (!options.skipOtherSteps && !validateDateStep($root, { focus: true })) {
+            if (isPublishAttempt && !options.skipOtherSteps && !validateDateStep($root, { focus: true })) {
                 return;
             }
-            if (!options.skipOtherSteps && !validateDisplayStep($root, { focus: true })) {
+            if (isPublishAttempt && !options.skipOtherSteps && !validateDisplayStep($root, { focus: true })) {
                 return;
             }
         }

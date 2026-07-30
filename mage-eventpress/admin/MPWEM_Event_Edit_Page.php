@@ -40,6 +40,7 @@ if (! class_exists('MPWEM_Event_Edit_Page')) {
 			add_filter('admin_title', [$this, 'filter_admin_title'], 10, 2);
 			add_action('admin_post_mpwem_switch_event_editor', [$this, 'handle_editor_switch']);
 			add_action('admin_footer', [$this, 'render_classic_switch_title_button']);
+			add_action('mpwem_classic_editor_topbar', [$this, 'render_classic_editor_topbar_switch']);
 		}
 
 		public function register_menu(): void
@@ -1020,6 +1021,79 @@ if (! class_exists('MPWEM_Event_Edit_Page')) {
 			}
 
 			return $actions;
+		}
+
+		/**
+		 * Renders a "Switch to Modern Editor" link inside the classic editor's
+		 * own metabox content (hooked from MPWEM_Settings::event_tab()). This is
+		 * a plain server-rendered link — unlike render_classic_switch_title_button()
+		 * below, it does not depend on a .page-title-action element existing on
+		 * the page, so it can't silently fail to appear.
+		 */
+		public function render_classic_editor_topbar_switch(int $post_id): void
+		{
+			if ($post_id <= 0 || ! current_user_can('edit_post', $post_id)) {
+				return;
+			}
+
+			$switch_url = $this->get_editor_switch_url('modern', $post_id);
+			?>
+			<style>
+				.mpwem-classic-editor-switch {
+					display: flex;
+					justify-content: center;
+					margin: 0 0 14px;
+				}
+				.mpwem-classic-editor-switch__link {
+					display: inline-flex;
+					align-items: center;
+					gap: 8px;
+					padding: 8px 16px 8px 14px;
+					border-radius: 999px;
+					border: 1px solid var(--color_theme, #6046FF);
+					background: linear-gradient(135deg, var(--color_theme, #6046FF) 0%, var(--color_theme_ee, #6046FF) 100%);
+					color: #fff;
+					font-size: 13px;
+					font-weight: 600;
+					line-height: 1;
+					text-decoration: none;
+					box-shadow: 0 8px 18px -10px var(--color_theme_aa, rgba(96, 70, 255, .55));
+					transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+				}
+				.mpwem-classic-editor-switch__link .dashicons {
+					width: 15px;
+					height: 15px;
+					font-size: 15px;
+					line-height: 15px;
+					transition: transform .35s ease;
+				}
+				.mpwem-classic-editor-switch__link:hover .dashicons,
+				.mpwem-classic-editor-switch__link:focus .dashicons {
+					transform: rotate(180deg);
+				}
+				.mpwem-classic-editor-switch__link:hover,
+				.mpwem-classic-editor-switch__link:focus {
+					color: #fff;
+					transform: translateY(-1px);
+					filter: brightness(1.06);
+					box-shadow: 0 12px 24px -10px var(--color_theme_aa, rgba(96, 70, 255, .6));
+				}
+				.mpwem-classic-editor-switch__link:focus-visible {
+					outline: none;
+					box-shadow: 0 12px 24px -10px var(--color_theme_aa, rgba(96, 70, 255, .6)), 0 0 0 3px var(--color_theme_77, rgba(96, 70, 255, .25));
+				}
+				.mpwem-classic-editor-switch__link:active {
+					transform: translateY(0);
+					filter: brightness(.97);
+				}
+			</style>
+			<p class="mpwem-classic-editor-switch">
+				<a href="<?php echo esc_url($switch_url); ?>" class="mpwem-classic-editor-switch__link">
+					<span class="dashicons dashicons-update"></span>
+					<?php esc_html_e('Switch to Modern Editor', 'mage-eventpress'); ?>
+				</a>
+			</p>
+			<?php
 		}
 
 		public function render_classic_switch_title_button(): void

@@ -70,7 +70,13 @@
 			public function description( $event_id, $event_infos = [] ): void { require MPWEM_Functions::template_path( 'layout/description.php' ); }
 			public function organizer( $event_id, $event_infos = [], $only = '' ): void { require MPWEM_Functions::template_path( 'layout/organizer.php' ); }
 			public function taxonomy_filter( $taxonomy_name, $unq_id = '' ): void {
-				$taxonomies = MPWEM_Global_Function::get_taxonomy( $taxonomy_name );
+				$taxonomies    = MPWEM_Global_Function::get_taxonomy( $taxonomy_name, true );
+				$active_terms  = MPWEM_Query::get_non_expired_term_ids( $taxonomy_name );
+				if ( $taxonomies ) {
+					$taxonomies = array_filter( $taxonomies, function ( $term ) use ( $active_terms ) {
+						return in_array( $term->term_id, $active_terms );
+					} );
+				}
 				if ( $taxonomies ) {
 					?>
                     <div class="mep-events-cats-list">
@@ -590,7 +596,7 @@
                 $show_msg            = is_array($event_list_setting) && array_key_exists( 'mep_hide_event_list_msg', $event_list_setting ) ? $event_list_setting['mep_hide_event_list_msg'] : 'no';
                 if ( is_array( $all_dates ) && sizeof( $all_dates ) > 1 && $hide_date_list == 'no' && $show_date_list == 'yes' ) { ?>
                     <div class="mpwem_style mpwem_list_date_list">
-                        <button type="button" data-event-id="<?php echo esc_attr( $event_id ); ?>" class=" mpwem_get_date_list" data-collapse-target="#mpwem_more_date_<?php echo esc_attr( $event_id ); ?>" data-open-text="<?php esc_attr_e( 'Hide Date Lists', 'mage-eventpress' ); ?>" data-close-text="<?php esc_attr_e( 'View More Date', 'mage-eventpress' ); ?>"><span data-text><?php esc_html_e( 'View More Date', 'mage-eventpress' ); ?></span> <i class="fas fa-caret-down"></i></button>
+                        <button type="button" data-event-id="<?php echo esc_attr( $event_id ); ?>" class=" mpwem_get_date_list" data-collapse-target="#mpwem_more_date_<?php echo esc_attr( $event_id ); ?>" data-open-text="<?php esc_attr_e( 'Hide Date Lists', 'mage-eventpress' ); ?>" data-close-text="<?php esc_attr_e( 'View More Dates', 'mage-eventpress' ); ?>"><span data-text><?php esc_html_e( 'View More Dates', 'mage-eventpress' ); ?></span> <i class="fas fa-caret-down"></i></button>
                         <div class="date_list_area" data-collapse="#mpwem_more_date_<?php echo esc_attr( $event_id ); ?>"></div>
                     </div>
 				<?php }
