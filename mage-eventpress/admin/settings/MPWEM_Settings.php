@@ -412,6 +412,10 @@
 					update_post_meta( $post_id, 'related_section_label', $section_label );
 					update_post_meta( $post_id, 'mep_related_event_status', $event_status );
 					$speaker_title = isset( $_POST['mep_speaker_title'] ) ? sanitize_text_field( wp_unslash( $_POST['mep_speaker_title'] ) ) : '';
+					$speaker_title = trim( (string) $speaker_title );
+					if ( '' === $speaker_title ) {
+						$speaker_title = __( 'Speaker', 'mage-eventpress' );
+					}
 					$speaker_icon  = isset( $_POST['mep_event_speaker_icon'] ) ? sanitize_text_field( wp_unslash( $_POST['mep_event_speaker_icon'] ) ) : '';
 					$speakers      = isset( $_POST['mep_event_speakers_list'] ) ? array_map( 'sanitize_text_field', wp_unslash( $_POST['mep_event_speakers_list'] ) ) : [];
 					$enable_speaker = isset( $_POST['mep_event_enable_speaker'] ) && sanitize_text_field( wp_unslash( $_POST['mep_event_enable_speaker'] ) ) === 'yes' ? 'yes' : 'no';
@@ -786,13 +790,13 @@
                     'mep_eb_settings' => array(
                         array(
                             'name' => 'mp_event_eb_type',
-                            'label' => __('Early bird ticket visible option', 'mage-eventpress'),
-                            'desc' => __('select Early bird ticket visible option', 'mage-eventpress'),
+                            'label' => __('Early Bird Ticket Display', 'mage-eventpress'),
+                            'desc' => __('Choose whether early bird tickets end by time or by number of orders.', 'mage-eventpress'),
                             'type' => 'select',
                             'default' => '0',
                             'options' => array(
-                                '0' => __('Depend on time', 'mage-eventpress'),
-                                '1' => __('Depend on order', 'mage-eventpress')
+                                '0' => __('Based on time', 'mage-eventpress'),
+                                '1' => __('Based on orders', 'mage-eventpress')
                             )
                         ),
                     )

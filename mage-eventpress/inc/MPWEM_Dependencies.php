@@ -13,6 +13,7 @@
 				$this->load_file();
 				add_action( 'admin_enqueue_scripts', array( $this, 'admin_enqueue' ), 90 );
 				add_action( 'wp_enqueue_scripts', array( $this, 'frontend_enqueue' ), 90 );
+				add_action( 'enqueue_block_assets', array( $this, 'enqueue_cart_details_block_assets' ), 20 );
 				add_action( 'admin_head', array( $this, 'add_admin_head' ), 5 );
 				add_action( 'wp_head', array( $this, 'add_frontend_head' ), 5 );
 			}
@@ -92,9 +93,14 @@
 //				);
 				$fontAwesome = MPWEM_Global_Function::get_settings( 'general_setting_sec', 'mep_load_fontawesome_from_theme', 'no' );
 				if ( $fontAwesome == 'no' ) {
-					wp_enqueue_style( 'mp_font_awesome-430', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.3.0/css/font-awesome.css', array(), '4.3.0' );
-					wp_enqueue_style( 'mp_font_awesome-660', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css', array(), '6.6.0' );
-					wp_enqueue_style( 'mp_font_awesome', '//cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css', array(), '5.15.4' );
+					// Self-hosted instead of 3 redundant external CDN requests (an old
+					// v4 build nothing here actually uses, plus v5 and v6 of the same
+					// icon set). Every icon in this plugin/PRO uses the "fas" prefix,
+					// which v5.15.4 already covers, so this is a straight swap with no
+					// icon-name changes. Self-hosting also means icons no longer go
+					// blank whenever the visitor's browser/network blocks cdnjs.cloudflare.com
+					// or cdn.jsdelivr.net (ad blockers commonly target both by name).
+					wp_enqueue_style( 'mp_font_awesome', MPWEM_PLUGIN_URL . '/assets/vendor/fontawesome/css/all.min.css', array(), '5.15.4' );
 				}
 				$flatIcon = MPWEM_Global_Function::get_settings( 'general_setting_sec', 'mep_load_flaticon_from_theme', 'no' );
 				if ( $flatIcon == 'no' ) {
@@ -212,7 +218,7 @@
 				if ( $hook == 'mep_events_page_mep_event_lists' || ( isset( $_GET['post_type'] ) && $_GET['post_type'] == 'mep_events' && ( $hook == 'edit.php' || isset( $_GET['page'] ) && $_GET['page'] == 'mep_event_lists' ) ) ) {
 					$mpwem_el_js_ver  = file_exists( MPWEM_PLUGIN_DIR . '/assets/admin/mpwem_event_lists.js' ) ? filemtime( MPWEM_PLUGIN_DIR . '/assets/admin/mpwem_event_lists.js' ) : MPWEM_PLUGIN_VERSION;
 					$mpwem_el_css_ver = file_exists( MPWEM_PLUGIN_DIR . '/assets/admin/mpwem_event_lists.css' ) ? filemtime( MPWEM_PLUGIN_DIR . '/assets/admin/mpwem_event_lists.css' ) : MPWEM_PLUGIN_VERSION;
-					wp_enqueue_script( 'mpwem_event_lists', MPWEM_PLUGIN_URL . '/assets/admin/mpwem_event_lists.js', array( 'jquery' ), $mpwem_el_js_ver, true );
+					wp_enqueue_script( 'mpwem_event_lists', MPWEM_PLUGIN_URL . '/assets/admin/mpwem_event_lists.js', array( 'jquery', 'jquery-ui-datepicker' ), $mpwem_el_js_ver, true );
 					wp_localize_script( 'mpwem_event_lists', 'mep_ajax', array(
 						'url'   => admin_url( 'admin-ajax.php' ),
 						'nonce' => wp_create_nonce( 'mep_nonce' )
@@ -232,7 +238,57 @@
 
 				do_action( 'add_mpwem_admin_script' );
 			}
+			/**
+			 * Gate for the whole frontend bundle (mage-icon font, Font Awesome,
+			 * Flaticon, Slick, Owl Carousel, timeline, calendar, mixitup, moment.js...).
+			 * Opt-in via settings - default stays "load on every page" so sites
+			 * relying on a shortcode placement we can't detect here (widgets,
+			 * page builders that don't store it in post_content) don't silently
+			 * lose icons/styles. Use the mpwem_force_load_frontend_assets filter
+			 * to force-load on a page this misses once the setting is enabled.
+			 */
+			public function should_load_frontend_assets() {
+				$only_on_event_pages = MPWEM_Global_Function::get_settings( 'general_setting_sec', 'mep_load_assets_only_on_event_pages', 'no' );
+				if ( $only_on_event_pages !== 'yes' ) {
+					return true;
+				}
+				if ( apply_filters( 'mpwem_force_load_frontend_assets', false ) ) {
+					return true;
+				}
+				if ( is_singular( array( 'mep_events', 'mep_event_speaker', 'mep_events_reg_form' ) )
+					|| is_post_type_archive( 'mep_events' )
+					|| is_tax( array( 'mep_cat', 'mep_org', 'mep_tag' ) ) ) {
+					return true;
+				}
+				global $post;
+				if ( $post instanceof WP_Post ) {
+					$shortcodes = array(
+						'event-list-recurring',
+						'event-list',
+						'events_list',
+						'expire-event-list',
+						'event-add-cart-section',
+						'event-city-list',
+						'event-speaker-list',
+						'event-calendar',
+						'mep-event-calendar',
+						'mep_booking_confirmation',
+					);
+					foreach ( $shortcodes as $shortcode ) {
+						if ( has_shortcode( $post->post_content, $shortcode ) ) {
+							return true;
+						}
+					}
+					if ( function_exists( 'has_block' ) && has_block( 'mage/event-list', $post ) ) {
+						return true;
+					}
+				}
+				return false;
+			}
 			public function frontend_enqueue() {
+				if ( ! $this->should_load_frontend_assets() ) {
+					return;
+				}
 				$this->global_enqueue();
 				$is_divi = function_exists('et_divi_builder_init') || defined('ET_BUILDER_PLUGIN_ACTIVE');
 				wp_enqueue_script( 'mep-mixitup-min-js', 'https://cdnjs.cloudflare.com/ajax/libs/mixitup/3.3.0/mixitup.min.js', array(), '3.3.0', true );
@@ -252,6 +308,12 @@
 				} else {
 					wp_enqueue_style( 'mpwem_style', MPWEM_PLUGIN_URL . '/assets/frontend/mpwem_style.css', array(), MPWEM_PLUGIN_VERSION );
 				}
+				wp_enqueue_style(
+					'mep_event_list_modern',
+					MPWEM_PLUGIN_URL . '/assets/frontend/mep-event-list-modern.css',
+					array( $is_divi ? 'divi_style' : 'mpwem_style' ),
+					MPWEM_PLUGIN_VERSION
+				);
 				wp_enqueue_script( 'mpwem_script', MPWEM_PLUGIN_URL . '/assets/frontend/mpwem_script.js', array( 'jquery' ), MPWEM_PLUGIN_VERSION, true );
 				wp_localize_script( 'mpwem_script', 'mpwem_script_var', array(
 					'url'             => admin_url( 'admin-ajax.php' ),
@@ -260,8 +322,126 @@
 					'native_nonce'    => wp_create_nonce( 'mep_native_checkout_nonce' ),
 					'is_logged_in'    => is_user_logged_in() ? '1' : '0',
 				) );
+				$this->enqueue_horizon_theme_assets();
+				$this->enqueue_cart_details_assets();
 				do_action( 'add_mpwem_frontend_script' );
 
+			}
+			/**
+			 * Cart / checkout event details card styles (classic + Woo Blocks).
+			 */
+			private function enqueue_cart_details_assets() {
+				// Always load on storefront pages so Woo Blocks cart/checkout keep spacing.
+				if ( is_admin() ) {
+					return;
+				}
+				$load = true;
+				if ( function_exists( 'is_cart' ) || function_exists( 'is_checkout' ) ) {
+					$load = ( function_exists( 'is_cart' ) && is_cart() )
+						|| ( function_exists( 'is_checkout' ) && is_checkout() )
+						|| ( function_exists( 'is_account_page' ) && is_account_page() )
+						|| ( function_exists( 'has_block' ) && ( has_block( 'woocommerce/cart' ) || has_block( 'woocommerce/checkout' ) ) );
+				}
+				if ( ! $load ) {
+					return;
+				}
+				wp_enqueue_style(
+					'mep_cart_details',
+					MPWEM_PLUGIN_URL . '/assets/frontend/mep-cart-details.css',
+					array(),
+					MPWEM_PLUGIN_VERSION
+				);
+			}
+			public function enqueue_cart_details_block_assets() {
+				if ( is_admin() ) {
+					return;
+				}
+				$load = ( function_exists( 'is_cart' ) && is_cart() )
+					|| ( function_exists( 'is_checkout' ) && is_checkout() )
+					|| ( function_exists( 'is_account_page' ) && is_account_page() );
+				if ( ! $load ) {
+					return;
+				}
+				wp_enqueue_style(
+					'mep_cart_details',
+					MPWEM_PLUGIN_URL . '/assets/frontend/mep-cart-details.css',
+					array(),
+					MPWEM_PLUGIN_VERSION
+				);
+			}
+			/**
+			 * Load Horizon theme CSS/JS only when that template is active.
+			 * Keeps Default, Smart, and Virtual templates unchanged.
+			 */
+			private function enqueue_horizon_theme_assets() {
+				$event_id = 0;
+				if ( is_singular( 'mep_events' ) ) {
+					$event_id = (int) get_the_ID();
+				} elseif ( isset( $_GET['post'] ) && is_admin() ) {
+					// Skip admin — frontend only.
+					return;
+				}
+				if ( $event_id <= 0 ) {
+					return;
+				}
+				$template = MPWEM_Functions::get_details_template_name( $event_id );
+				if ( $template !== 'horizon.php' ) {
+					return;
+				}
+				add_filter( 'body_class', function ( $classes ) {
+					$classes[] = 'mep-horizon-active';
+					return $classes;
+				} );
+				wp_enqueue_style(
+					'mpwem_horizon_theme',
+					MPWEM_PLUGIN_URL . '/assets/frontend/horizon-theme.css',
+					array( 'mpwem_style' ),
+					MPWEM_PLUGIN_VERSION
+				);
+				wp_enqueue_script(
+					'mpwem_horizon_theme',
+					MPWEM_PLUGIN_URL . '/assets/frontend/horizon-theme.js',
+					array( 'jquery', 'mpwem_script' ),
+					MPWEM_PLUGIN_VERSION,
+					true
+				);
+				wp_localize_script(
+					'mpwem_horizon_theme',
+					'mep_horizon_i18n',
+					array(
+						'register'            => __( 'Reserve Tickets →', 'mage-eventpress' ),
+						'reserve'             => __( 'Reserve Tickets →', 'mage-eventpress' ),
+						'reserveTicket'       => __( 'Reserve 1 Ticket →', 'mage-eventpress' ),
+						'reserveTickets'      => __( 'Reserve %d Tickets →', 'mage-eventpress' ),
+						'available'           => __( 'Available', 'mage-eventpress' ),
+						'ticketType'          => __( 'Ticket Type', 'mage-eventpress' ),
+						'date'                => __( 'Date', 'mage-eventpress' ),
+						'time'                => __( 'Time', 'mage-eventpress' ),
+						'total'               => __( 'Total', 'mage-eventpress' ),
+						'extraService'        => __( 'Extra Service', 'mage-eventpress' ),
+						'addCalendar'         => __( 'Add to Calendar', 'mage-eventpress' ),
+						'hideCalendar'        => __( 'Hide Calendar', 'mage-eventpress' ),
+						'loadMore'            => __( 'Load more', 'mage-eventpress' ),
+						'showLess'            => __( 'Show less', 'mage-eventpress' ),
+						'attendeeDetails'     => __( 'Enter attendee details', 'mage-eventpress' ),
+						'attendeeEdit'        => __( 'Edit', 'mage-eventpress' ),
+						'attendeeDrawerTitle' => __( 'Attendee details', 'mage-eventpress' ),
+						'attendeeDrawerHelp'  => __( 'Complete the required fields for this ticket, then save.', 'mage-eventpress' ),
+						'attendeeContinue'    => __( 'Save attendee details', 'mage-eventpress' ),
+						'attendeeIncomplete'  => __( 'Required', 'mage-eventpress' ),
+						'attendeeComplete'    => __( 'Completed', 'mage-eventpress' ),
+						'attendeeMissing'     => __( 'Please complete attendee details before booking.', 'mage-eventpress' ),
+						'attendeeAdded'       => __( 'Attendee details added', 'mage-eventpress' ),
+						'attendeeForTicket'   => __( 'Attendees for %s', 'mage-eventpress' ),
+						'close'               => __( 'Close', 'mage-eventpress' ),
+						'reviewsEyebrow'      => __( 'Reviews', 'mage-eventpress' ),
+						'reviewsTitle'        => __( 'What attendees say', 'mage-eventpress' ),
+						'reviewSingular'      => __( '1 review', 'mage-eventpress' ),
+						'reviewPlural'        => __( '%d reviews', 'mage-eventpress' ),
+						'noReviewsYet'        => __( 'Be the first to share your experience.', 'mage-eventpress' ),
+						'sameAttendee'        => MPWEM_Global_Function::get_settings( 'general_setting_sec', 'mep_enable_same_attendee', 'no' ),
+					)
+				);
 			}
 			public function add_admin_head() {
 				$this->js_constant();

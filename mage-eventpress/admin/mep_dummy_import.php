@@ -371,7 +371,864 @@
 						}
 					}
 				}
+				$this->dummy_import_speakers();
+				$this->dummy_import_reg_forms();
 				$this->craete_pages();
+			}
+
+			/**
+			 * Import sample speaker posts from dummy_data().
+			 *
+			 * @return int[] Created/existing speaker IDs.
+			 */
+			public function dummy_import_speakers() {
+				$dummy_data = $this->dummy_data();
+				$speakers   = isset( $dummy_data['custom_post']['mep_event_speaker'] ) ? $dummy_data['custom_post']['mep_event_speaker'] : array();
+				$ids        = array();
+				if ( ! is_array( $speakers ) || empty( $speakers ) ) {
+					return $ids;
+				}
+				foreach ( $speakers as $speaker ) {
+					if ( empty( $speaker['name'] ) ) {
+						continue;
+					}
+					$existing = get_page_by_title( $speaker['name'], OBJECT, 'mep_event_speaker' );
+					if ( $existing ) {
+						$ids[] = (int) $existing->ID;
+						continue;
+					}
+					$post_id = wp_insert_post(
+						array(
+							'post_title'   => $speaker['name'],
+							'post_content' => isset( $speaker['content'] ) ? $speaker['content'] : '',
+							'post_excerpt' => isset( $speaker['excerpt'] ) ? $speaker['excerpt'] : '',
+							'post_status'  => 'publish',
+							'post_type'    => 'mep_event_speaker',
+						)
+					);
+					if ( is_wp_error( $post_id ) || ! $post_id ) {
+						continue;
+					}
+					$ids[] = (int) $post_id;
+					if ( isset( $speaker['post_data'] ) && is_array( $speaker['post_data'] ) ) {
+						foreach ( $speaker['post_data'] as $meta_key => $data ) {
+							if ( 'feature_image' === $meta_key && $data ) {
+								$image = media_sideload_image( $data, $post_id, null, 'id' );
+								if ( ! is_wp_error( $image ) ) {
+									set_post_thumbnail( $post_id, $image );
+								}
+							} else {
+								update_post_meta( $post_id, $meta_key, $data );
+							}
+						}
+					}
+				}
+				return $ids;
+			}
+
+			/**
+			 * Attach sample speakers to published events.
+			 *
+			 * @param int[] $speaker_ids Speaker post IDs.
+			 */
+			public function assign_speakers_to_events( $speaker_ids = array() ) {
+				if ( empty( $speaker_ids ) ) {
+					$speaker_ids = get_posts(
+						array(
+							'post_type'      => 'mep_event_speaker',
+							'post_status'    => 'publish',
+							'posts_per_page' => -1,
+							'fields'         => 'ids',
+							'orderby'        => 'ID',
+							'order'          => 'ASC',
+						)
+					);
+				}
+				$speaker_ids = array_values( array_filter( array_map( 'intval', (array) $speaker_ids ) ) );
+				if ( empty( $speaker_ids ) ) {
+					return;
+				}
+				$events = get_posts(
+					array(
+						'post_type'      => 'mep_events',
+						'post_status'    => 'publish',
+						'posts_per_page' => -1,
+						'fields'         => 'ids',
+						'orderby'        => 'ID',
+						'order'          => 'ASC',
+					)
+				);
+				if ( empty( $events ) ) {
+					return;
+				}
+				$count = count( $speaker_ids );
+				foreach ( $events as $i => $event_id ) {
+					$chunk = array();
+					for ( $n = 0; $n < 4; $n++ ) {
+						$chunk[] = (string) $speaker_ids[ ( $i * 2 + $n ) % $count ];
+					}
+					$chunk = array_values( array_unique( $chunk ) );
+					update_post_meta( $event_id, 'mep_event_enable_speaker', 'yes' );
+					update_post_meta( $event_id, 'mep_speaker_title', 'Speakers' );
+					update_post_meta( $event_id, 'mep_event_speaker_icon', 'fas fa-user-tie' );
+					update_post_meta( $event_id, 'mep_event_speakers_list', $chunk );
+				}
+			}
+
+			/**
+			 * Import sample Global Reg Form posts from dummy_data().
+			 *
+			 * @return int[] Created/existing form IDs.
+			 */
+			public function dummy_import_reg_forms() {
+				if ( ! post_type_exists( 'mep_events_reg_form' ) ) {
+					return array();
+				}
+				$dummy_data = $this->dummy_data();
+				$forms      = isset( $dummy_data['custom_post']['mep_events_reg_form'] ) ? $dummy_data['custom_post']['mep_events_reg_form'] : array();
+				$ids        = array();
+				if ( ! is_array( $forms ) || empty( $forms ) ) {
+					return $ids;
+				}
+				foreach ( $forms as $form ) {
+					if ( empty( $form['name'] ) ) {
+						continue;
+					}
+					$existing = get_page_by_title( $form['name'], OBJECT, 'mep_events_reg_form' );
+					if ( $existing ) {
+						$ids[] = (int) $existing->ID;
+						continue;
+					}
+					$post_id = wp_insert_post(
+						array(
+							'post_title'  => $form['name'],
+							'post_status' => 'publish',
+							'post_type'   => 'mep_events_reg_form',
+						)
+					);
+					if ( is_wp_error( $post_id ) || ! $post_id ) {
+						continue;
+					}
+					$ids[] = (int) $post_id;
+					if ( isset( $form['post_data'] ) && is_array( $form['post_data'] ) ) {
+						foreach ( $form['post_data'] as $meta_key => $data ) {
+							update_post_meta( $post_id, $meta_key, $data );
+						}
+					}
+				}
+				return $ids;
+			}
+
+			/**
+			 * Attach sample Global Reg Forms to published events (round-robin).
+			 *
+			 * @param int[] $form_ids Form post IDs.
+			 */
+			public function assign_reg_forms_to_events( $form_ids = array() ) {
+				if ( empty( $form_ids ) ) {
+					$form_ids = get_posts(
+						array(
+							'post_type'      => 'mep_events_reg_form',
+							'post_status'    => 'publish',
+							'posts_per_page' => 3,
+							'fields'         => 'ids',
+							'orderby'        => 'ID',
+							'order'          => 'ASC',
+						)
+					);
+				}
+				$form_ids = array_values( array_filter( array_map( 'intval', (array) $form_ids ) ) );
+				if ( empty( $form_ids ) ) {
+					return;
+				}
+				$events = get_posts(
+					array(
+						'post_type'      => 'mep_events',
+						'post_status'    => 'publish',
+						'posts_per_page' => -1,
+						'fields'         => 'ids',
+						'orderby'        => 'ID',
+						'order'          => 'ASC',
+					)
+				);
+				if ( empty( $events ) ) {
+					return;
+				}
+				$count = count( $form_ids );
+				foreach ( $events as $i => $event_id ) {
+					update_post_meta( $event_id, 'mep_event_reg_form_id', (string) $form_ids[ $i % $count ] );
+				}
+			}
+
+			/**
+			 * Import sample RSVP response posts and attach them to events.
+			 *
+			 * @return int[] Created RSVP post IDs.
+			 */
+			public function dummy_import_rsvp_responses() {
+				if ( ! post_type_exists( 'mep_rsvp_responses' ) ) {
+					return array();
+				}
+				$dummy_data = $this->dummy_data();
+				$items      = isset( $dummy_data['custom_post']['mep_rsvp_responses'] ) ? $dummy_data['custom_post']['mep_rsvp_responses'] : array();
+				$ids        = array();
+				if ( ! is_array( $items ) || empty( $items ) ) {
+					return $ids;
+				}
+				$events = get_posts(
+					array(
+						'post_type'      => 'mep_events',
+						'post_status'    => 'publish',
+						'posts_per_page' => -1,
+						'fields'         => 'ids',
+						'orderby'        => 'ID',
+						'order'          => 'ASC',
+					)
+				);
+				if ( empty( $events ) ) {
+					return $ids;
+				}
+				$event_count = count( $events );
+				foreach ( $items as $i => $item ) {
+					if ( empty( $item['name'] ) || empty( $item['email'] ) ) {
+						continue;
+					}
+					$existing = get_posts(
+						array(
+							'post_type'      => 'mep_rsvp_responses',
+							'posts_per_page' => 1,
+							'fields'         => 'ids',
+							'meta_query'     => array(
+								'relation' => 'AND',
+								array(
+									'key'   => 'ea_email',
+									'value' => $item['email'],
+								),
+								array(
+									'key'   => 'ea_event_id',
+									'value' => (int) $events[ $i % $event_count ],
+								),
+							),
+						)
+					);
+					if ( ! empty( $existing ) ) {
+						$ids[] = (int) $existing[0];
+						continue;
+					}
+					$event_id   = (int) $events[ $i % $event_count ];
+					$event_date = get_post_meta( $event_id, 'event_start_datetime', true );
+					if ( ! $event_date ) {
+						$event_date = get_post_meta( $event_id, 'event_start_date', true );
+					}
+					$user_info = array(
+						'user_name'       => $item['name'],
+						'user_email'      => $item['email'],
+						'user_phone'      => isset( $item['phone'] ) ? $item['phone'] : '',
+						'user_event_date' => $event_date,
+						'user_ticket_qty' => isset( $item['qty'] ) ? absint( $item['qty'] ) : 1,
+					);
+					if ( function_exists( 'mep_rsvp_attendee_create' ) ) {
+						$post_id = mep_rsvp_attendee_create( $event_id, $user_info );
+					} else {
+						$post_id = false;
+					}
+					if ( ! $post_id ) {
+						continue;
+					}
+					$ids[] = (int) $post_id;
+					$checkin = ( ! empty( $item['checkin'] ) && 'Yes' === $item['checkin'] ) ? 'Yes' : 'No';
+					update_post_meta( $post_id, 'mep_checkin', $checkin );
+				}
+				return $ids;
+			}
+
+			/**
+			 * Import sample Event Orders (mep_custom_order + attendees).
+			 *
+			 * @return int[] Created/existing order IDs.
+			 */
+			public function dummy_import_event_orders() {
+				if ( ! post_type_exists( 'mep_custom_order' ) ) {
+					return array();
+				}
+				$dummy_data = $this->dummy_data();
+				$items      = isset( $dummy_data['custom_post']['mep_custom_order'] ) ? $dummy_data['custom_post']['mep_custom_order'] : array();
+				$ids        = array();
+				if ( ! is_array( $items ) || empty( $items ) ) {
+					return $ids;
+				}
+				$events = get_posts(
+					array(
+						'post_type'      => 'mep_events',
+						'post_status'    => 'publish',
+						'posts_per_page' => -1,
+						'fields'         => 'ids',
+						'orderby'        => 'ID',
+						'order'          => 'ASC',
+					)
+				);
+				if ( empty( $events ) ) {
+					return $ids;
+				}
+				$event_count = count( $events );
+				$statuses    = array( 'publish', 'publish', 'publish', 'processing', 'pending', 'on-hold', 'cancelled' );
+				$gateways    = array( 'offline', 'paypal', 'stripe', 'offline', 'free' );
+
+				foreach ( $items as $i => $item ) {
+					if ( empty( $item['name'] ) || empty( $item['email'] ) ) {
+						continue;
+					}
+					$existing = get_posts(
+						array(
+							'post_type'      => 'mep_custom_order',
+							'posts_per_page' => 1,
+							'post_status'    => 'any',
+							'fields'         => 'ids',
+							'meta_query'     => array(
+								array(
+									'key'   => '_mep_customer_email',
+									'value' => $item['email'],
+								),
+								array(
+									'key'   => '_mep_sample_order',
+									'value' => 'yes',
+								),
+							),
+						)
+					);
+					if ( ! empty( $existing ) ) {
+						$ids[] = (int) $existing[0];
+						continue;
+					}
+
+					$event_id = (int) $events[ $i % $event_count ];
+					$event_date = get_post_meta( $event_id, 'event_start_datetime', true );
+					if ( ! $event_date ) {
+						$event_date = get_post_meta( $event_id, 'event_start_date', true );
+					}
+
+					$ticket_types = get_post_meta( $event_id, 'mep_event_ticket_type', true );
+					$ticket_name  = 'General Admission';
+					$ticket_price = isset( $item['price'] ) ? (float) $item['price'] : 50;
+					if ( is_array( $ticket_types ) && ! empty( $ticket_types ) ) {
+						$tt = $ticket_types[ $i % count( $ticket_types ) ];
+						if ( ! empty( $tt['option_name_t'] ) ) {
+							$ticket_name = $tt['option_name_t'];
+						}
+						if ( isset( $tt['option_price_t'] ) && '' !== $tt['option_price_t'] ) {
+							$ticket_price = (float) $tt['option_price_t'];
+						}
+					}
+					$qty   = isset( $item['qty'] ) ? max( 1, absint( $item['qty'] ) ) : 1;
+					$total = $ticket_price * $qty;
+					$order_items = array(
+						array(
+							'name'  => $ticket_name,
+							'qty'   => $qty,
+							'price' => $ticket_price,
+							'total' => $total,
+						),
+					);
+
+					$status  = isset( $item['status'] ) ? $item['status'] : $statuses[ $i % count( $statuses ) ];
+					$gateway = isset( $item['gateway'] ) ? $item['gateway'] : $gateways[ $i % count( $gateways ) ];
+					if ( 'free' === $gateway ) {
+						$total       = 0;
+						$ticket_price = 0;
+						$order_items[0]['price'] = 0;
+						$order_items[0]['total'] = 0;
+					}
+
+					$order_id = wp_insert_post(
+						array(
+							'post_title'  => sprintf( 'Order - %s', $item['name'] ),
+							'post_type'   => 'mep_custom_order',
+							'post_status' => $status,
+							'post_author' => 1,
+							'post_date'   => gmdate( 'Y-m-d H:i:s', time() - ( ( count( $items ) - $i ) * DAY_IN_SECONDS ) ),
+						)
+					);
+					if ( is_wp_error( $order_id ) || ! $order_id ) {
+						continue;
+					}
+					$ids[] = (int) $order_id;
+
+					update_post_meta( $order_id, '_mep_sample_order', 'yes' );
+					update_post_meta( $order_id, '_mep_user_id', 0 );
+					update_post_meta( $order_id, '_mep_booking_token', wp_generate_password( 32, false ) );
+					update_post_meta( $order_id, '_mep_event_id', $event_id );
+					update_post_meta( $order_id, '_mep_order_total', $total );
+					update_post_meta( $order_id, '_mep_customer_name', $item['name'] );
+					update_post_meta( $order_id, '_mep_customer_email', $item['email'] );
+					update_post_meta( $order_id, '_mep_customer_phone', isset( $item['phone'] ) ? $item['phone'] : '' );
+					update_post_meta( $order_id, '_mep_order_items', $order_items );
+					update_post_meta( $order_id, '_mep_event_date', $event_date );
+					update_post_meta( $order_id, '_mep_payment_gateway', $gateway );
+					update_post_meta(
+						$order_id,
+						'_mep_billing',
+						array(
+							'name'  => $item['name'],
+							'email' => $item['email'],
+							'phone' => isset( $item['phone'] ) ? $item['phone'] : '',
+						)
+					);
+
+					$attendee_status = ( 'publish' === $status ) ? 'completed' : $status;
+					$user_info       = array(
+						'user_name'       => $item['name'],
+						'user_email'      => $item['email'],
+						'user_phone'      => isset( $item['phone'] ) ? $item['phone'] : '',
+						'user_event_date' => $event_date,
+					);
+					$attendee_ids = array();
+					if ( function_exists( 'mep_native_ticket_attendee_create' ) ) {
+						for ( $seat = 0; $seat < $qty; $seat++ ) {
+							$ticket_info = array(
+								'ticket_name'  => $ticket_name,
+								'ticket_qty'   => 1,
+								'ticket_price' => $ticket_price,
+							);
+							$pid = mep_native_ticket_attendee_create( $event_id, $order_id, $user_info, $ticket_info, $gateway, $attendee_status );
+							if ( $pid ) {
+								$attendee_ids[] = $pid;
+								if ( ! empty( $item['checkin'] ) && 'Yes' === $item['checkin'] && 0 === $seat ) {
+									update_post_meta( $pid, 'mep_checkin', 'Yes' );
+								}
+							}
+						}
+					}
+					if ( ! empty( $attendee_ids ) ) {
+						update_post_meta( $order_id, '_mep_attendee_ids', $attendee_ids );
+					}
+				}
+				return $ids;
+			}
+
+			/**
+			 * Import sample Cancellation Request posts (linked to WooCommerce orders).
+			 *
+			 * @return int[] Created/existing cancel request IDs.
+			 */
+			public function dummy_import_cancel_requests() {
+				if ( ! function_exists( 'wc_create_order' ) ) {
+					return array();
+				}
+				$dummy_data = $this->dummy_data();
+				$items      = isset( $dummy_data['custom_post']['mep_order_cancel_req'] ) ? $dummy_data['custom_post']['mep_order_cancel_req'] : array();
+				$ids        = array();
+				if ( ! is_array( $items ) || empty( $items ) ) {
+					return $ids;
+				}
+
+				$admin_id = 1;
+				$admins   = get_users( array( 'role' => 'administrator', 'number' => 1, 'fields' => 'ID' ) );
+				if ( ! empty( $admins ) ) {
+					$admin_id = (int) $admins[0];
+				}
+
+				foreach ( $items as $i => $item ) {
+					if ( empty( $item['name'] ) || empty( $item['reason'] ) ) {
+						continue;
+					}
+					$existing = get_posts(
+						array(
+							'post_type'      => 'mep_order_cancel_req',
+							'posts_per_page' => 1,
+							'post_status'    => 'any',
+							'fields'         => 'ids',
+							'meta_query'     => array(
+								array(
+									'key'   => '_mep_sample_cancel',
+									'value' => sanitize_title( $item['name'] ),
+								),
+							),
+						)
+					);
+					if ( ! empty( $existing ) ) {
+						$ids[] = (int) $existing[0];
+						continue;
+					}
+
+					$name_parts = preg_split( '/\s+/', trim( $item['name'] ), 2 );
+					$first      = $name_parts[0];
+					$last       = isset( $name_parts[1] ) ? $name_parts[1] : '';
+					$email      = isset( $item['email'] ) ? $item['email'] : ( sanitize_title( $item['name'] ) . '@example.com' );
+					$total      = isset( $item['total'] ) ? (float) $item['total'] : 100;
+					$wc_status  = isset( $item['order_status'] ) ? $item['order_status'] : 'processing';
+					$req_status = isset( $item['status'] ) ? $item['status'] : 'pending';
+					$reason     = $item['reason'];
+
+					$order = wc_create_order();
+					if ( is_wp_error( $order ) || ! $order ) {
+						continue;
+					}
+					$order->set_billing_first_name( $first );
+					$order->set_billing_last_name( $last );
+					$order->set_billing_email( $email );
+					$order->set_billing_phone( isset( $item['phone'] ) ? $item['phone'] : '' );
+					$order->set_created_via( 'mep_sample_data' );
+					$order->set_currency( get_woocommerce_currency() );
+					$fee = new \WC_Order_Item_Fee();
+					$fee->set_name( isset( $item['ticket'] ) ? $item['ticket'] : 'Event Ticket' );
+					$fee->set_total( $total );
+					$order->add_item( $fee );
+					$order->set_total( $total );
+					$order->set_status( $wc_status );
+					$order->update_meta_data( '_mep_sample_order', 'yes' );
+					$order->save();
+					$wc_order_id = $order->get_id();
+
+					$cancel_id = wp_insert_post(
+						array(
+							'post_title'   => sprintf( 'Order Cancellation Request #%d', $wc_order_id ),
+							'post_content' => $reason,
+							'post_status'  => 'publish',
+							'post_type'    => 'mep_order_cancel_req',
+							'post_author'  => $admin_id,
+							'post_date'    => gmdate( 'Y-m-d H:i:s', time() - ( ( 12 - $i ) * DAY_IN_SECONDS ) ),
+						)
+					);
+					if ( is_wp_error( $cancel_id ) || ! $cancel_id ) {
+						continue;
+					}
+					$ids[] = (int) $cancel_id;
+					update_post_meta( $cancel_id, 'mep_cancel_order_id', $wc_order_id );
+					update_post_meta( $cancel_id, 'mep_cancel_reason', $reason );
+					update_post_meta( $cancel_id, 'mep_cancel_req_status', $req_status );
+					update_post_meta( $cancel_id, 'mep_cancel_user_id', $admin_id );
+					update_post_meta( $cancel_id, '_mep_sample_cancel', sanitize_title( $item['name'] ) );
+				}
+				return $ids;
+			}
+
+			/**
+			 * Import sample Waitlist entries.
+			 *
+			 * @return int[] Created/existing waitlist IDs.
+			 */
+			public function dummy_import_waitlist() {
+				if ( ! post_type_exists( 'mep_event_waitlist' ) ) {
+					return array();
+				}
+				$dummy_data = $this->dummy_data();
+				$items      = isset( $dummy_data['custom_post']['mep_event_waitlist'] ) ? $dummy_data['custom_post']['mep_event_waitlist'] : array();
+				$ids        = array();
+				if ( ! is_array( $items ) || empty( $items ) ) {
+					return $ids;
+				}
+				$events = get_posts(
+					array(
+						'post_type'      => 'mep_events',
+						'post_status'    => 'publish',
+						'posts_per_page' => -1,
+						'fields'         => 'ids',
+						'orderby'        => 'ID',
+						'order'          => 'ASC',
+					)
+				);
+				if ( empty( $events ) ) {
+					return $ids;
+				}
+				foreach ( $events as $event_id ) {
+					update_post_meta( $event_id, 'mep_show_waitlist', 'on' );
+				}
+				$event_count = count( $events );
+				foreach ( $items as $i => $item ) {
+					if ( empty( $item['name'] ) || empty( $item['email'] ) ) {
+						continue;
+					}
+					$event_id   = (int) $events[ $i % $event_count ];
+					$event_date = get_post_meta( $event_id, 'event_start_datetime', true );
+					if ( ! $event_date ) {
+						$event_date = get_post_meta( $event_id, 'event_start_date', true );
+					}
+					$existing = get_posts(
+						array(
+							'post_type'      => 'mep_event_waitlist',
+							'posts_per_page' => 1,
+							'fields'         => 'ids',
+							'meta_query'     => array(
+								'relation' => 'AND',
+								array(
+									'key'   => 'user_email',
+									'value' => $item['email'],
+								),
+								array(
+									'key'   => 'event_id',
+									'value' => $event_id,
+								),
+								array(
+									'key'   => 'status',
+									'value' => 1,
+								),
+							),
+						)
+					);
+					if ( ! empty( $existing ) ) {
+						$ids[] = (int) $existing[0];
+						continue;
+					}
+					$wt = array(
+						'event_id'       => $event_id,
+						'user_name'      => $item['name'],
+						'user_email'     => $item['email'],
+						'user_phone'     => isset( $item['phone'] ) ? $item['phone'] : '',
+						'ticket_qty'     => isset( $item['qty'] ) ? absint( $item['qty'] ) : 1,
+						'event_datetime' => $event_date,
+						'status'         => 1,
+						'email_status'   => isset( $item['email_status'] ) ? absint( $item['email_status'] ) : 0,
+					);
+					if ( function_exists( 'mep_wl_create_new_waitlist' ) ) {
+						$pid = mep_wl_create_new_waitlist( $wt );
+					} else {
+						$pid = wp_insert_post(
+							array(
+								'post_title'  => $item['name'] . ' - ' . get_the_title( $event_id ),
+								'post_status' => 'publish',
+								'post_type'   => 'mep_event_waitlist',
+								'post_author' => 1,
+							)
+						);
+						if ( $pid && ! is_wp_error( $pid ) ) {
+							foreach ( $wt as $meta_key => $meta_val ) {
+								update_post_meta( $pid, $meta_key, $meta_val );
+							}
+						} else {
+							$pid = false;
+						}
+					}
+					if ( $pid ) {
+						$ids[] = (int) $pid;
+						update_post_meta( $pid, 'email_processed', 'yes' );
+						update_post_meta( $pid, '_mep_sample_waitlist', 'yes' );
+					}
+				}
+				return $ids;
+			}
+
+			/**
+			 * Import 55 sample Event Attendee List records.
+			 *
+			 * @return int[] Created/existing attendee IDs.
+			 */
+			public function dummy_import_attendees() {
+				if ( ! post_type_exists( 'mep_events_attendees' ) ) {
+					return array();
+				}
+				$dummy_data = $this->dummy_data();
+				$items      = isset( $dummy_data['custom_post']['mep_events_attendees'] ) ? $dummy_data['custom_post']['mep_events_attendees'] : array();
+				$ids        = array();
+				if ( ! is_array( $items ) || empty( $items ) ) {
+					return $ids;
+				}
+				$events = get_posts(
+					array(
+						'post_type'      => 'mep_events',
+						'post_status'    => 'publish',
+						'posts_per_page' => -1,
+						'fields'         => 'ids',
+						'orderby'        => 'ID',
+						'order'          => 'ASC',
+					)
+				);
+				if ( empty( $events ) ) {
+					return $ids;
+				}
+				$event_count = count( $events );
+				$statuses    = array( 'completed', 'completed', 'completed', 'processing', 'pending', 'completed', 'on-hold' );
+				$gateways    = array( 'offline', 'paypal', 'stripe', 'offline', 'woocommerce' );
+
+				foreach ( $items as $i => $item ) {
+					if ( empty( $item['name'] ) || empty( $item['email'] ) ) {
+						continue;
+					}
+					$sample_key = isset( $item['key'] ) ? $item['key'] : ( 'attendee-' . ( $i + 1 ) );
+					$existing   = get_posts(
+						array(
+							'post_type'      => 'mep_events_attendees',
+							'posts_per_page' => 1,
+							'fields'         => 'ids',
+							'meta_query'     => array(
+								array(
+									'key'   => '_mep_sample_attendee',
+									'value' => $sample_key,
+								),
+							),
+						)
+					);
+					if ( ! empty( $existing ) ) {
+						$ids[] = (int) $existing[0];
+						continue;
+					}
+
+					$event_id   = (int) $events[ $i % $event_count ];
+					$event_date = get_post_meta( $event_id, 'event_start_datetime', true );
+					if ( ! $event_date ) {
+						$event_date = get_post_meta( $event_id, 'event_start_date', true );
+					}
+
+					$ticket_types = get_post_meta( $event_id, 'mep_event_ticket_type', true );
+					$ticket_name  = 'General Admission';
+					$ticket_price = 100;
+					if ( is_array( $ticket_types ) && ! empty( $ticket_types ) ) {
+						$tt = $ticket_types[ $i % count( $ticket_types ) ];
+						if ( ! empty( $tt['option_name_t'] ) ) {
+							$ticket_name = $tt['option_name_t'];
+						}
+						if ( isset( $tt['option_price_t'] ) && '' !== $tt['option_price_t'] ) {
+							$ticket_price = (float) $tt['option_price_t'];
+						}
+					}
+
+					$status  = isset( $item['status'] ) ? $item['status'] : $statuses[ $i % count( $statuses ) ];
+					$gateway = isset( $item['gateway'] ) ? $item['gateway'] : $gateways[ $i % count( $gateways ) ];
+					$user_info = array(
+						'user_name'       => $item['name'],
+						'user_email'      => $item['email'],
+						'user_phone'      => isset( $item['phone'] ) ? $item['phone'] : '',
+						'user_event_date' => $event_date,
+					);
+					$ticket_info = array(
+						'ticket_name'  => $ticket_name,
+						'ticket_qty'   => 1,
+						'ticket_price' => $ticket_price,
+					);
+
+					if ( function_exists( 'mep_native_ticket_attendee_create' ) ) {
+						$pid = mep_native_ticket_attendee_create( $event_id, 0, $user_info, $ticket_info, $gateway, $status );
+					} else {
+						$pid = false;
+					}
+					if ( ! $pid ) {
+						continue;
+					}
+					$ids[] = (int) $pid;
+					update_post_meta( $pid, '_mep_sample_attendee', $sample_key );
+					update_post_meta( $pid, 'ea_flag', 'sample_attendee' );
+					if ( ! empty( $item['checkin'] ) && 'Yes' === $item['checkin'] ) {
+						update_post_meta( $pid, 'mep_checkin', 'Yes' );
+					}
+					if ( ! empty( $item['company'] ) ) {
+						update_post_meta( $pid, 'ea_company', $item['company'] );
+					}
+					if ( ! empty( $item['desg'] ) ) {
+						update_post_meta( $pid, 'ea_desg', $item['desg'] );
+					}
+				}
+				return $ids;
+			}
+
+			/**
+			 * Build 55 sample attendee people for dummy_data().
+			 *
+			 * @return array
+			 */
+			private static function sample_attendee_people() {
+				$first = array(
+					'Aaron', 'Bella', 'Cameron', 'Diana', 'Elliot', 'Fiona', 'George', 'Holly', 'Ian', 'Julia',
+					'Kevin', 'Laura', 'Miles', 'Naomi', 'Oscar', 'Penny', 'Quincy', 'Rachel', 'Steven', 'Tara',
+					'Uma', 'Victor', 'Wendy', 'Xavier', 'Yvonne', 'Zach', 'Andrea', 'Blake', 'Celia', 'Derek',
+					'Erin', 'Felix', 'Gloria', 'Hugo', 'Iris', 'Jason', 'Kate', 'Leon', 'Mona', 'Nate',
+					'Olive', 'Paul', 'Queen', 'Roger', 'Sara', 'Tom', 'Una', 'Vince', 'Willa', 'Xander',
+					'Yasmin', 'Zane', 'Amy', 'Brett', 'Claire',
+				);
+				$last = array(
+					'Adams', 'Baker', 'Carter', 'Davis', 'Edwards', 'Fisher', 'Green', 'Hayes', 'Ingram', 'Jones',
+					'Kelly', 'Lopez', 'Miller', 'Nelson', 'Owens', 'Parker', 'Quinn', 'Roberts', 'Smith', 'Taylor',
+					'Underwood', 'Vargas', 'Walker', 'Xu', 'Young', 'Zimmerman', 'Allen', 'Brooks', 'Clark', 'Dixon',
+					'Ellis', 'Ford', 'Garcia', 'Hill', 'Ivy', 'Jenkins', 'King', 'Lewis', 'Moore', 'Norris',
+					'Ortiz', 'Perez', 'Queen', 'Reed', 'Stewart', 'Turner', 'Upton', 'Vaughn', 'White', 'York',
+					'Abbott', 'Bishop', 'Cohen', 'Drake', 'Evans',
+				);
+				$companies = array( 'Acme Corp', 'Bright Labs', 'Northwind', 'Summit Group', 'Blue Peak', 'Orbit Inc', 'Cascade Co' );
+				$roles     = array( 'Manager', 'Developer', 'Designer', 'Analyst', 'Director', 'Consultant', 'Coordinator' );
+				$people    = array();
+				for ( $i = 0; $i < 55; $i++ ) {
+					$fname = $first[ $i % count( $first ) ];
+					$lname = $last[ ( $i * 3 ) % count( $last ) ];
+					$name  = $fname . ' ' . $lname;
+					$people[ $i ] = array(
+						'key'     => 'attendee-' . ( $i + 1 ),
+						'name'    => $name,
+						'email'   => strtolower( $fname . '.' . $lname . '.' . ( $i + 1 ) ) . '@example.com',
+						'phone'   => sprintf( '+1 646-555-%04d', 500 + $i ),
+						'company' => $companies[ $i % count( $companies ) ],
+						'desg'    => $roles[ $i % count( $roles ) ],
+						'checkin' => ( 0 === $i % 3 ) ? 'Yes' : 'No',
+					);
+				}
+				return $people;
+			}
+
+			/**
+			 * Import sample Review & Rating posts and attach them to events.
+			 *
+			 * @return int[] Created/existing review IDs.
+			 */
+			public function dummy_import_reviews() {
+				if ( ! post_type_exists( 'mep_events_review' ) ) {
+					return array();
+				}
+				$dummy_data = $this->dummy_data();
+				$reviews    = isset( $dummy_data['custom_post']['mep_events_review'] ) ? $dummy_data['custom_post']['mep_events_review'] : array();
+				$ids        = array();
+				if ( ! is_array( $reviews ) || empty( $reviews ) ) {
+					return $ids;
+				}
+				$events = get_posts(
+					array(
+						'post_type'      => 'mep_events',
+						'post_status'    => 'publish',
+						'posts_per_page' => -1,
+						'fields'         => 'ids',
+						'orderby'        => 'ID',
+						'order'          => 'ASC',
+					)
+				);
+				if ( empty( $events ) ) {
+					return $ids;
+				}
+				$event_count = count( $events );
+				foreach ( $events as $event_id ) {
+					update_post_meta( $event_id, 'mep_show_review', 'on' );
+				}
+				foreach ( $reviews as $i => $review ) {
+					if ( empty( $review['name'] ) ) {
+						continue;
+					}
+					$existing = get_page_by_title( $review['name'], OBJECT, 'mep_events_review' );
+					if ( $existing ) {
+						$ids[] = (int) $existing->ID;
+						continue;
+					}
+					$event_id = (int) $events[ $i % $event_count ];
+					$post_id  = wp_insert_post(
+						array(
+							'post_title'   => $review['name'],
+							'post_content' => isset( $review['content'] ) ? $review['content'] : '',
+							'post_status'  => 'publish',
+							'post_type'    => 'mep_events_review',
+							'post_author'  => 0,
+						)
+					);
+					if ( is_wp_error( $post_id ) || ! $post_id ) {
+						continue;
+					}
+					$ids[] = (int) $post_id;
+					$meta  = isset( $review['post_data'] ) && is_array( $review['post_data'] ) ? $review['post_data'] : array();
+					$meta['mep_event_id'] = $event_id;
+					if ( empty( $meta['mep_event_rating'] ) ) {
+						$meta['mep_event_rating'] = '5';
+					}
+					if ( empty( $meta['mep_event_review_cust_ID'] ) ) {
+						$meta['mep_event_review_cust_ID'] = 0;
+					}
+					foreach ( $meta as $meta_key => $data ) {
+						update_post_meta( $post_id, $meta_key, $data );
+					}
+				}
+				return $ids;
 			}
 
 			public function dummy_import_event($index) {
@@ -440,6 +1297,14 @@
 
 				$this->add_gallery_images('mep_events', $gallery_images);
 				$this->add_related_events('mep_events', $related_events);
+				$this->assign_speakers_to_events();
+				$this->assign_reg_forms_to_events();
+				$this->dummy_import_reviews();
+				$this->dummy_import_rsvp_responses();
+				$this->dummy_import_event_orders();
+				$this->dummy_import_cancel_requests();
+				$this->dummy_import_waitlist();
+				$this->dummy_import_attendees();
 
 				update_option('mep_dummy_already_inserted', 'yes');
 			}
@@ -503,6 +1368,13 @@
 							6 => ['name' => 'Other Event'],
 							7 => ['name' => 'Press Conference Event'],
 							8 => ['name' => 'Reunion Event'],
+						],
+						'mep_tag' => [
+							0 => ['name' => 'Music'],
+							1 => ['name' => 'Festival'],
+							2 => ['name' => 'Concert'],
+							3 => ['name' => 'Networking'],
+							4 => ['name' => 'Workshop'],
 						],
 						'mep_org' => [
 							0 => ['name' => 'Best Buy Ltd'],
@@ -1541,12 +2413,18 @@
 									0 => array(
 										'taxonomy_name' => 'mep_cat',
 										'terms' => array(
-											0 => 'Business Event',
-											1 => 'Cooking Class',
-											2 => 'Home Event',
+											0 => 'Live Event',
+											1 => 'Home Event',
 										)
 									),
 									1 => array(
+										'taxonomy_name' => 'mep_tag',
+										'terms' => array(
+											0 => 'Music',
+											1 => 'Concert',
+										)
+									),
+									2 => array(
 										'taxonomy_name' => 'mep_org',
 										'terms' => array(
 											0 => 'Duperstar LLC',
@@ -1726,11 +2604,18 @@
 									0 => array(
 										'taxonomy_name' => 'mep_cat',
 										'terms' => array(
-											0 => 'Home Event',
+											0 => 'Live Event',
 											1 => 'Indoor Games',
 										)
 									),
 									1 => array(
+										'taxonomy_name' => 'mep_tag',
+										'terms' => array(
+											0 => 'Music',
+											1 => 'Festival',
+										)
+									),
+									2 => array(
 										'taxonomy_name' => 'mep_org',
 										'terms' => array(
 											0 => 'Cooking Studio',
@@ -2141,7 +3026,782 @@
 									'mep_total_seat_left' => '0',
 								],
 							],
+							8 => [
+								'name' => 'Summer Music Festival & Outdoor Concert',
+								'content' => '
+
+                            Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+                            
+                            Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt. Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit, sed quia non numquam eius modi tempora incidunt ut labore et dolore magnam aliquam quaerat voluptatem. Ut enim ad minima veniam, quis nostrum exercitationem ullam corporis suscipit laboriosam, nisi ut aliquid ex ea commodi consequatur? Quis autem vel eum iure reprehenderit qui in ea voluptate velit esse quam nihil molestiae consequatur, vel illum qui dolorem eum fugiat quo voluptas nulla pariatur.
+                            ',
+								'taxonomy_terms' => [
+									0 => array(
+										'taxonomy_name' => 'mep_cat',
+										'terms' => array(
+											0 => 'Live Event',
+											1 => 'Other Event',
+										)
+									),
+									1 => array(
+										'taxonomy_name' => 'mep_tag',
+										'terms' => array(
+											0 => 'Music',
+											1 => 'Festival',
+											2 => 'Concert',
+										)
+									),
+									2 => array(
+										'taxonomy_name' => 'mep_org',
+										'terms' => array(
+											0 => 'MyPeople Inc',
+											1 => 'Duperstar LLC',
+										)
+									)
+								],
+								'post_data' => [
+									'feature_image' => 'https://raw.githubusercontent.com/magepeopleteam/dummy-images/main/eventpress/event-11.jpg',
+									'mep_event_type' => 'off',
+									'mp_event_virtual_type_des' => '',
+									'mep_org_address' => '0',
+									'mep_location_venue' => 'Central Park Great Lawn, New York, NY, USA',
+									'mep_street' => '',
+									'mep_city' => '',
+									'mep_state' => '',
+									'mep_postcode' => '',
+									'mep_country' => '',
+									'mep_sgm' => '1',
+									'mep_reg_status' => 'on',
+									'mep_display_slider' => 'off',
+									'mep_show_advance_col_status' => 'off',
+									'mep_event_ticket_type' => array(
+										0 => array(
+											'option_name_t' => 'General Admission',
+											'option_details_t' => 'Access to all outdoor stages and festival grounds.',
+											'option_price_t' => '75',
+											'option_qty_t' => '500',
+											'option_rsv_t' => '0',
+											'option_default_qty_t' => '0',
+											'option_qty_t_type' => 'inputbox',
+											'option_sale_end_date' => '',
+											'option_sale_end_time' => '',
+											'option_sale_end_date_t' => date('Y-m-d', strtotime('+45 days', time())) . ' 19:00:00',
+										),
+										1 => array(
+											'option_name_t' => 'VIP Front Stage',
+											'option_details_t' => 'Front-stage viewing area with complimentary drinks.',
+											'option_price_t' => '180',
+											'option_qty_t' => '150',
+											'option_rsv_t' => '0',
+											'option_default_qty_t' => '0',
+											'option_qty_t_type' => 'inputbox',
+											'option_sale_end_date' => '',
+											'option_sale_end_time' => '',
+											'option_sale_end_date_t' => date('Y-m-d', strtotime('+45 days', time())) . ' 19:00:00',
+										),
+									),
+									'mep_events_extra_prices' => array(
+										0 => array(
+											'option_name' => 'Festival T-Shirt',
+											'option_price' => '35',
+											'option_qty' => '200',
+											'option_qty_type' => 'inputbox',
+										),
+										1 => array(
+											'option_name' => 'Picnic Blanket',
+											'option_price' => '25',
+											'option_qty' => '100',
+											'option_qty_type' => 'inputbox',
+										),
+									),
+									'mep_enable_custom_dt_format' => 'off',
+									'mep_event_date_format' => 'F j, Y',
+									'mep_event_time_format' => 'g:i a',
+									'mep_event_custom_date_format' => 'F j, Y',
+									'mep_custom_event_time_format' => 'g:i a',
+									'mep_time_zone_display' => 'no',
+									'event_start_date' => $start_date = date('Y-m-d', strtotime('+20 days', time())),
+									'event_start_time' => $start_time = '14:00',
+									'event_end_date' => $end_date = date('Y-m-d', strtotime('+22 days', time())),
+									'event_end_time' => $end_time = '23:00',
+									'event_start_datetime' => $start_date . ' ' . $start_time . ':00',
+									'event_end_datetime' => $end_date . ' ' . $end_time . ':00',
+									'event_expire_datetime' => $end_date . ' ' . $end_time . ':00',
+									'_sku' => '',
+									'mep_show_end_datetime' => 'yes',
+									'mep_available_seat' => 'on',
+									'mep_reset_status' => 'off',
+									'mep_member_only_event' => 'for_all',
+									'mep_member_only_user_role' => array(0 => 'all'),
+									'mep_rich_text_status' => 'enable',
+									'mep_event_cc_email_text' => '
+												<h2>Your Ticket for {event}</h2>
+												<p>Hi <strong>{name}</strong>,</p>
+												<p>Thank you for registering for <strong>{event}</strong>!</p>
+												<p><strong>Details of Your Ticket:</strong></p>
+												<ul>
+													<li>Ticket Type:<strong>{ticket_type}</strong></li>
+													<li>Event Date:<strong>{event_date}</strong></li>
+													<li>Start Time:<strong>{event_time}</strong></li>
+												</ul>
+												<p>We look forward to seeing you there!</p>
+												<p>Best regards,<br>[Your Event Team]</p>
+											',
+									'mep_related_event_status' => 'on',
+									'related_section_label' => 'Releted Events',
+									'event_list' => array(),
+									'mep_event_template' => 'default-theme.php',
+									'mep_faq_description' => 'Explore essential details and clear up any doubts about the event.',
+									'mep_event_faq' => array(
+										0 => array(
+											'mep_faq_title' => 'Who can attend this event?',
+											'mep_faq_content' => 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
+										),
+										1 => array(
+											'mep_faq_title' => 'What should I bring?',
+											'mep_faq_content' => 'Bring sunscreen, water, and a picnic blanket. Outside food is welcome in designated areas.',
+										),
+									),
+									'mep_event_day' => array(
+										[
+											'mep_day_title' => 'Gates Open',
+											'mep_day_time' => '2:00 PM - 4:00 PM',
+											'mep_day_content' => 'Doors open, vendor booths, soundcheck on main stage.',
+										],
+										[
+											'mep_day_title' => 'Main Stage Performances',
+											'mep_day_time' => '4:00 PM - 10:00 PM',
+											'mep_day_content' => 'Live bands, DJ sets, and special guest appearances.',
+										],
+										[
+											'mep_day_title' => 'Closing Fireworks',
+											'mep_day_time' => '10:00 PM - 11:00 PM',
+											'mep_day_content' => 'Festival finale with fireworks and final encore.',
+										],
+									),
+									'mep_gallery_images' => Array(),
+									'mep_list_thumbnail' => '',
+									'mep_total_seat_left' => '0',
+								],
+							],
+							9 => [
+								'name' => 'Jazz Night & Acoustic Sessions',
+								'content' => '
+
+                            Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+                            
+                            Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt. Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit, sed quia non numquam eius modi tempora incidunt ut labore et dolore magnam aliquam quaerat voluptatem. Ut enim ad minima veniam, quis nostrum exercitationem ullam corporis suscipit laboriosam, nisi ut aliquid ex ea commodi consequatur? Quis autem vel eum iure reprehenderit qui in ea voluptate velit esse quam nihil molestiae consequatur, vel illum qui dolorem eum fugiat quo voluptas nulla pariatur.
+                            ',
+								'taxonomy_terms' => [
+									0 => array(
+										'taxonomy_name' => 'mep_cat',
+										'terms' => array(
+											0 => 'Live Event',
+											1 => 'Indoor Games',
+										)
+									),
+									1 => array(
+										'taxonomy_name' => 'mep_tag',
+										'terms' => array(
+											0 => 'Music',
+											1 => 'Concert',
+										)
+									),
+									2 => array(
+										'taxonomy_name' => 'mep_org',
+										'terms' => array(
+											0 => 'Cooking Studio',
+											1 => 'RTC Consultants LLC',
+										)
+									)
+								],
+								'post_data' => [
+									'feature_image' => 'https://raw.githubusercontent.com/magepeopleteam/dummy-images/main/eventpress/event-12.jpg',
+									'mep_event_type' => 'off',
+									'mp_event_virtual_type_des' => '',
+									'mep_org_address' => '0',
+									'mep_location_venue' => 'Blue Note Jazz Club, Greenwich Village, New York, NY, USA',
+									'mep_street' => '',
+									'mep_city' => '',
+									'mep_state' => '',
+									'mep_postcode' => '',
+									'mep_country' => '',
+									'mep_sgm' => '1',
+									'mep_reg_status' => 'on',
+									'mep_display_slider' => 'off',
+									'mep_show_advance_col_status' => 'off',
+									'mep_event_ticket_type' => array(
+										0 => array(
+											'option_name_t' => 'Standard Seat',
+											'option_details_t' => 'Reserved seating for the evening jazz program.',
+											'option_price_t' => '55',
+											'option_qty_t' => '120',
+											'option_rsv_t' => '0',
+											'option_default_qty_t' => '0',
+											'option_qty_t_type' => 'inputbox',
+											'option_sale_end_date' => '',
+											'option_sale_end_time' => '',
+											'option_sale_end_date_t' => date('Y-m-d', strtotime('+30 days', time())) . ' 21:00:00',
+										),
+										1 => array(
+											'option_name_t' => 'Premium Table',
+											'option_details_t' => 'Table seating near the stage with one complimentary drink.',
+											'option_price_t' => '120',
+											'option_qty_t' => '40',
+											'option_rsv_t' => '0',
+											'option_default_qty_t' => '0',
+											'option_qty_t_type' => 'inputbox',
+											'option_sale_end_date' => '',
+											'option_sale_end_time' => '',
+											'option_sale_end_date_t' => date('Y-m-d', strtotime('+30 days', time())) . ' 21:00:00',
+										),
+									),
+									'mep_events_extra_prices' => array(
+										0 => array(
+											'option_name' => 'Welcome Drink',
+											'option_price' => '15',
+											'option_qty' => '100',
+											'option_qty_type' => 'inputbox',
+										),
+										1 => array(
+											'option_name' => 'Artist Meet & Greet',
+											'option_price' => '40',
+											'option_qty' => '30',
+											'option_qty_type' => 'inputbox',
+										),
+									),
+									'mep_enable_custom_dt_format' => 'off',
+									'mep_event_date_format' => 'F j, Y',
+									'mep_event_time_format' => 'g:i a',
+									'mep_event_custom_date_format' => 'F j, Y',
+									'mep_custom_event_time_format' => 'g:i a',
+									'mep_time_zone_display' => 'no',
+									'event_start_date' => $start_date = date('Y-m-d', strtotime('+28 days', time())),
+									'event_start_time' => $start_time = '19:00',
+									'event_end_date' => $end_date = date('Y-m-d', strtotime('+28 days', time())),
+									'event_end_time' => $end_time = '23:00',
+									'event_start_datetime' => $start_date . ' ' . $start_time . ':00',
+									'event_end_datetime' => $end_date . ' ' . $end_time . ':00',
+									'event_expire_datetime' => $end_date . ' ' . $end_time . ':00',
+									'_sku' => '',
+									'mep_show_end_datetime' => 'yes',
+									'mep_available_seat' => 'on',
+									'mep_reset_status' => 'off',
+									'mep_member_only_event' => 'for_all',
+									'mep_member_only_user_role' => array(0 => 'all'),
+									'mep_rich_text_status' => 'enable',
+									'mep_event_cc_email_text' => '
+												<h2>Your Ticket for {event}</h2>
+												<p>Hi <strong>{name}</strong>,</p>
+												<p>Thank you for registering for <strong>{event}</strong>!</p>
+												<p><strong>Details of Your Ticket:</strong></p>
+												<ul>
+													<li>Ticket Type:<strong>{ticket_type}</strong></li>
+													<li>Event Date:<strong>{event_date}</strong></li>
+													<li>Start Time:<strong>{event_time}</strong></li>
+												</ul>
+												<p>We look forward to seeing you there!</p>
+												<p>Best regards,<br>[Your Event Team]</p>
+											',
+									'mep_related_event_status' => 'on',
+									'related_section_label' => 'Releted Events',
+									'event_list' => array(),
+									'mep_event_template' => 'default-theme.php',
+									'mep_faq_description' => 'Explore essential details and clear up any doubts about the event.',
+									'mep_event_faq' => array(
+										0 => array(
+											'mep_faq_title' => 'Is there a dress code?',
+											'mep_faq_content' => 'Smart casual is recommended. Formal attire is welcome but not required.',
+										),
+										1 => array(
+											'mep_faq_title' => 'Are food and drinks available?',
+											'mep_faq_content' => 'A full bar and light dinner menu will be available throughout the evening.',
+										),
+									),
+									'mep_event_day' => array(
+										[
+											'mep_day_title' => 'Doors & Seating',
+											'mep_day_time' => '7:00 PM - 7:30 PM',
+											'mep_day_content' => 'Check-in, table seating, and welcome cocktails.',
+										],
+										[
+											'mep_day_title' => 'Acoustic Opening Set',
+											'mep_day_time' => '7:30 PM - 8:30 PM',
+											'mep_day_content' => 'Intimate acoustic performances by featured artists.',
+										],
+										[
+											'mep_day_title' => 'Headliner Jazz Ensemble',
+											'mep_day_time' => '9:00 PM - 11:00 PM',
+											'mep_day_content' => 'Main jazz ensemble with guest soloists and encore.',
+										],
+									),
+									'mep_gallery_images' => Array(),
+									'mep_list_thumbnail' => '',
+									'mep_total_seat_left' => '0',
+								],
+							],
+							10 => [
+								'name' => 'Electronic Dance Music Carnival',
+								'content' => '
+
+                            Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+                            
+                            Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt. Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit, sed quia non numquam eius modi tempora incidunt ut labore et dolore magnam aliquam quaerat voluptatem. Ut enim ad minima veniam, quis nostrum exercitationem ullam corporis suscipit laboriosam, nisi ut aliquid ex ea commodi consequatur? Quis autem vel eum iure reprehenderit qui in ea voluptate velit esse quam nihil molestiae consequatur, vel illum qui dolorem eum fugiat quo voluptas nulla pariatur.
+                            ',
+								'taxonomy_terms' => [
+									0 => array(
+										'taxonomy_name' => 'mep_cat',
+										'terms' => array(
+											0 => 'Live Event',
+											1 => 'Online Event',
+										)
+									),
+									1 => array(
+										'taxonomy_name' => 'mep_tag',
+										'terms' => array(
+											0 => 'Music',
+											1 => 'Festival',
+										)
+									),
+									2 => array(
+										'taxonomy_name' => 'mep_org',
+										'terms' => array(
+											0 => 'Myamazon Inc',
+											1 => 'Doogle Inc',
+										)
+									)
+								],
+								'post_data' => [
+									'feature_image' => 'https://raw.githubusercontent.com/magepeopleteam/dummy-images/main/eventpress/event-1.jpg',
+									'mep_event_type' => 'off',
+									'mp_event_virtual_type_des' => '',
+									'mep_org_address' => '0',
+									'mep_location_venue' => 'Ultra Beach Arena, Miami, FL, USA',
+									'mep_street' => '',
+									'mep_city' => '',
+									'mep_state' => '',
+									'mep_postcode' => '',
+									'mep_country' => '',
+									'mep_sgm' => '1',
+									'mep_reg_status' => 'on',
+									'mep_display_slider' => 'off',
+									'mep_show_advance_col_status' => 'off',
+									'mep_event_ticket_type' => array(
+										0 => array(
+											'option_name_t' => 'GA Dance Floor',
+											'option_details_t' => 'General admission access to the main dance floor and stages.',
+											'option_price_t' => '90',
+											'option_qty_t' => '800',
+											'option_rsv_t' => '0',
+											'option_default_qty_t' => '0',
+											'option_qty_t_type' => 'inputbox',
+											'option_sale_end_date' => '',
+											'option_sale_end_time' => '',
+											'option_sale_end_date_t' => date('Y-m-d', strtotime('+55 days', time())) . ' 23:00:00',
+										),
+										1 => array(
+											'option_name_t' => 'VIP Lounge',
+											'option_details_t' => 'VIP lounge access, express entry, and complimentary drink tokens.',
+											'option_price_t' => '220',
+											'option_qty_t' => '200',
+											'option_rsv_t' => '0',
+											'option_default_qty_t' => '0',
+											'option_qty_t_type' => 'inputbox',
+											'option_sale_end_date' => '',
+											'option_sale_end_time' => '',
+											'option_sale_end_date_t' => date('Y-m-d', strtotime('+55 days', time())) . ' 23:00:00',
+										),
+										2 => array(
+											'option_name_t' => 'Backstage Pass',
+											'option_details_t' => 'Backstage artist area access with photo opportunity.',
+											'option_price_t' => '350',
+											'option_qty_t' => '50',
+											'option_rsv_t' => '0',
+											'option_default_qty_t' => '0',
+											'option_qty_t_type' => 'inputbox',
+											'option_sale_end_date' => '',
+											'option_sale_end_time' => '',
+											'option_sale_end_date_t' => date('Y-m-d', strtotime('+55 days', time())) . ' 23:00:00',
+										),
+									),
+									'mep_events_extra_prices' => array(
+										0 => array(
+											'option_name' => 'Glow Stick Pack',
+											'option_price' => '12',
+											'option_qty' => '300',
+											'option_qty_type' => 'inputbox',
+										),
+										1 => array(
+											'option_name' => 'Event Hoodie',
+											'option_price' => '55',
+											'option_qty' => '150',
+											'option_qty_type' => 'inputbox',
+										),
+										2 => array(
+											'option_name' => 'Hydration Pack',
+											'option_price' => '20',
+											'option_qty' => '200',
+											'option_qty_type' => 'inputbox',
+										),
+									),
+									'mep_enable_custom_dt_format' => 'off',
+									'mep_event_date_format' => 'F j, Y',
+									'mep_event_time_format' => 'g:i a',
+									'mep_event_custom_date_format' => 'F j, Y',
+									'mep_custom_event_time_format' => 'g:i a',
+									'mep_time_zone_display' => 'no',
+									'event_start_date' => $start_date = date('Y-m-d', strtotime('+40 days', time())),
+									'event_start_time' => $start_time = '16:00',
+									'event_end_date' => $end_date = date('Y-m-d', strtotime('+41 days', time())),
+									'event_end_time' => $end_time = '02:00',
+									'event_start_datetime' => $start_date . ' ' . $start_time . ':00',
+									'event_end_datetime' => $end_date . ' ' . $end_time . ':00',
+									'event_expire_datetime' => $end_date . ' ' . $end_time . ':00',
+									'_sku' => '',
+									'mep_show_end_datetime' => 'yes',
+									'mep_available_seat' => 'on',
+									'mep_reset_status' => 'off',
+									'mep_member_only_event' => 'for_all',
+									'mep_member_only_user_role' => array(0 => 'all'),
+									'mep_rich_text_status' => 'enable',
+									'mep_event_cc_email_text' => '
+												<h2>Your Ticket for {event}</h2>
+												<p>Hi <strong>{name}</strong>,</p>
+												<p>Thank you for registering for <strong>{event}</strong>!</p>
+												<p><strong>Details of Your Ticket:</strong></p>
+												<ul>
+													<li>Ticket Type:<strong>{ticket_type}</strong></li>
+													<li>Event Date:<strong>{event_date}</strong></li>
+													<li>Start Time:<strong>{event_time}</strong></li>
+												</ul>
+												<p>We look forward to seeing you there!</p>
+												<p>Best regards,<br>[Your Event Team]</p>
+											',
+									'mep_related_event_status' => 'on',
+									'related_section_label' => 'Releted Events',
+									'event_list' => array(),
+									'mep_event_template' => 'default-theme.php',
+									'mep_faq_description' => 'Explore essential details and clear up any doubts about the event.',
+									'mep_event_faq' => array(
+										0 => array(
+											'mep_faq_title' => 'What is the age requirement?',
+											'mep_faq_content' => 'Attendees must be 18+ with a valid photo ID at the entrance.',
+										),
+										1 => array(
+											'mep_faq_title' => 'Is re-entry allowed?',
+											'mep_faq_content' => 'Re-entry is available with a valid wristband scanned at the gate.',
+										),
+									),
+									'mep_event_day' => array(
+										[
+											'mep_day_title' => 'Opening Sets',
+											'mep_day_time' => '4:00 PM - 7:00 PM',
+											'mep_day_content' => 'Warm-up DJs across beach and main stages.',
+										],
+										[
+											'mep_day_title' => 'Peak Hours',
+											'mep_day_time' => '7:00 PM - 12:00 AM',
+											'mep_day_content' => 'Headliner DJ performances with full production lights and visuals.',
+										],
+										[
+											'mep_day_title' => 'After Hours',
+											'mep_day_time' => '12:00 AM - 2:00 AM',
+											'mep_day_content' => 'Closing carnival set and late-night chill zone.',
+										],
+									),
+									'mep_gallery_images' => Array(),
+									'mep_list_thumbnail' => '',
+									'mep_total_seat_left' => '0',
+								],
+							],
 						],
+						'mep_event_speaker' => [
+							0 => [
+								'name' => 'Alex Rivera',
+								'excerpt' => 'Keynote Speaker · CEO, TechVision',
+								'content' => 'Alex Rivera is a keynote speaker and CEO of TechVision, known for translating complex product strategy into practical growth playbooks for event audiences.',
+								'post_data' => [
+									'feature_image' => 'https://randomuser.me/api/portraits/men/32.jpg',
+								],
+							],
+							1 => [
+								'name' => 'Maya Chen',
+								'excerpt' => 'Product Strategist · NorthPeak Labs',
+								'content' => 'Maya Chen leads product strategy at NorthPeak Labs and helps teams design customer journeys that convert curiosity into long-term engagement.',
+								'post_data' => [
+									'feature_image' => 'https://randomuser.me/api/portraits/women/44.jpg',
+								],
+							],
+							2 => [
+								'name' => 'Jordan Blake',
+								'excerpt' => 'AI Researcher · OpenForge AI',
+								'content' => 'Jordan Blake researches applied machine learning and speaks about responsible AI adoption for businesses of every size.',
+								'post_data' => [
+									'feature_image' => 'https://randomuser.me/api/portraits/men/11.jpg',
+								],
+							],
+							3 => [
+								'name' => 'Sofia Alvarez',
+								'excerpt' => 'UX Director · BrightCanvas',
+								'content' => 'Sofia Alvarez is a UX director focused on inclusive design systems, accessibility, and memorable brand experiences.',
+								'post_data' => [
+									'feature_image' => 'https://randomuser.me/api/portraits/women/68.jpg',
+								],
+							],
+							4 => [
+								'name' => 'Liam Okonkwo',
+								'excerpt' => 'Cloud Architect · NimbusWorks',
+								'content' => 'Liam Okonkwo designs scalable cloud platforms and shares practical guidance on reliability, cost control, and modern infrastructure.',
+								'post_data' => [
+									'feature_image' => 'https://randomuser.me/api/portraits/men/75.jpg',
+								],
+							],
+							5 => [
+								'name' => 'Priya Nair',
+								'excerpt' => 'Growth Lead · Orbit Commerce',
+								'content' => 'Priya Nair specializes in growth marketing loops, lifecycle automation, and data-backed campaign experimentation.',
+								'post_data' => [
+									'feature_image' => 'https://randomuser.me/api/portraits/women/21.jpg',
+								],
+							],
+						],
+						'mep_events_reg_form' => [
+							0 => [
+								'name' => 'Standard Attendee Form',
+								'post_data' => [
+									'mep_full_name'       => '1',
+									'mep_reg_email'       => '1',
+									'mep_reg_phone'       => '1',
+									'mep_reg_address'     => '',
+									'mep_reg_designation' => '',
+									'mep_reg_website'     => '',
+									'mep_reg_veg'         => '',
+									'mep_reg_company'     => '',
+									'mep_reg_gender'      => '',
+									'mep_reg_tshirtsize'  => '',
+									'mep_name_label'      => 'Full Name',
+									'mep_email_label'     => 'Email Address',
+									'mep_phone_label'     => 'Phone Number',
+									'mep_form_builder_data' => [
+										[
+											'mep_fbc_id'       => 'how-did-you-hear',
+											'mep_fbc_label'    => 'How did you hear about this event?',
+											'mep_fbc_type'     => 'select',
+											'mep_fbc_required' => '',
+											'mep_fbc_dp_data'  => 'Social Media,Friend Referral,Email Newsletter,Search Engine,Other',
+										],
+										[
+											'mep_fbc_id'       => 'special-notes',
+											'mep_fbc_label'    => 'Special requests or notes',
+											'mep_fbc_type'     => 'textarea',
+											'mep_fbc_required' => '',
+										],
+									],
+								],
+							],
+							1 => [
+								'name' => 'Business Conference Form',
+								'post_data' => [
+									'mep_full_name'       => '1',
+									'mep_reg_email'       => '1',
+									'mep_reg_phone'       => '1',
+									'mep_reg_address'     => '',
+									'mep_reg_designation' => '1',
+									'mep_reg_website'     => '1',
+									'mep_reg_veg'         => '',
+									'mep_reg_company'     => '1',
+									'mep_reg_gender'      => '',
+									'mep_reg_tshirtsize'  => '',
+									'mep_name_label'      => 'Full Name',
+									'mep_email_label'     => 'Work Email',
+									'mep_phone_label'     => 'Mobile Number',
+									'mep_desg_label'      => 'Job Title',
+									'mep_company_label'   => 'Company / Organization',
+									'mep_website_label'   => 'Company Website',
+									'mep_form_builder_data' => [
+										[
+											'mep_fbc_id'       => 'industry',
+											'mep_fbc_label'    => 'Industry',
+											'mep_fbc_type'     => 'select',
+											'mep_fbc_required' => '1',
+											'mep_fbc_dp_data'  => 'Technology,Finance,Healthcare,Education,Retail,Other',
+										],
+										[
+											'mep_fbc_id'       => 'networking-goals',
+											'mep_fbc_label'    => 'What are your networking goals?',
+											'mep_fbc_type'     => 'textarea',
+											'mep_fbc_required' => '',
+										],
+										[
+											'mep_fbc_id'       => 'linkedin-profile',
+											'mep_fbc_label'    => 'LinkedIn Profile URL',
+											'mep_fbc_type'     => 'text',
+											'mep_fbc_required' => '',
+										],
+									],
+								],
+							],
+							2 => [
+								'name' => 'Workshop Registration Form',
+								'post_data' => [
+									'mep_full_name'            => '1',
+									'mep_reg_email'            => '1',
+									'mep_reg_phone'            => '1',
+									'mep_reg_address'          => '1',
+									'mep_reg_designation'      => '',
+									'mep_reg_website'          => '',
+									'mep_reg_veg'              => '1',
+									'mep_reg_company'          => '',
+									'mep_reg_gender'           => '1',
+									'mep_reg_tshirtsize'       => '1',
+									'mep_reg_tshirtsize_list'  => 'S,M,L,XL,XXL',
+									'mep_name_label'           => 'Participant Name',
+									'mep_email_label'          => 'Email',
+									'mep_phone_label'          => 'Phone',
+									'mep_address_label'        => 'Mailing Address',
+									'mep_veg_label'            => 'Meal Preference',
+									'mep_gender_label'         => 'Gender',
+									'mep_tshirt_label'         => 'T-Shirt Size',
+									'mep_form_builder_data'    => [
+										[
+											'mep_fbc_id'       => 'experience-level',
+											'mep_fbc_label'    => 'Experience Level',
+											'mep_fbc_type'     => 'radio',
+											'mep_fbc_required' => '1',
+											'mep_fbc_dp_data'  => 'Beginner,Intermediate,Advanced',
+										],
+										[
+											'mep_fbc_id'       => 'session-interest',
+											'mep_fbc_label'    => 'Preferred Session Track',
+											'mep_fbc_type'     => 'select',
+											'mep_fbc_required' => '',
+											'mep_fbc_dp_data'  => 'Design,Development,Marketing,Leadership',
+										],
+										[
+											'mep_fbc_id'       => 'emergency-contact',
+											'mep_fbc_label'    => 'Emergency Contact Name & Phone',
+											'mep_fbc_type'     => 'text',
+											'mep_fbc_required' => '1',
+										],
+									],
+								],
+							],
+						],
+						'mep_events_review' => [
+							0 => [
+								'name' => 'Outstanding experience overall',
+								'content' => 'The event was beautifully organized from check-in to the closing session. Speakers were engaging and the venue setup made networking effortless.',
+								'post_data' => [
+									'mep_event_rating'            => '5',
+									'mep_event_review_cust_name'  => 'Hannah Brooks',
+									'mep_event_review_cust_email' => 'hannah.brooks@example.com',
+								],
+							],
+							1 => [
+								'name' => 'Great speakers and atmosphere',
+								'content' => 'I attended for the keynotes and left with practical takeaways I could use immediately. The staff was helpful and the schedule ran on time.',
+								'post_data' => [
+									'mep_event_rating'            => '5',
+									'mep_event_review_cust_name'  => 'Daniel Okoro',
+									'mep_event_review_cust_email' => 'daniel.okoro@example.com',
+								],
+							],
+							2 => [
+								'name' => 'Well organized networking event',
+								'content' => 'Plenty of opportunities to meet peers and partners. The registration process was smooth and the breakout rooms were easy to find.',
+								'post_data' => [
+									'mep_event_rating'            => '4',
+									'mep_event_review_cust_name'  => 'Sophie Laurent',
+									'mep_event_review_cust_email' => 'sophie.laurent@example.com',
+								],
+							],
+							3 => [
+								'name' => 'Informative sessions with minor delays',
+								'content' => 'Content quality was excellent. A few sessions started a little late, but the hosts recovered well and kept energy high throughout the day.',
+								'post_data' => [
+									'mep_event_rating'            => '4',
+									'mep_event_review_cust_name'  => 'Michael Trent',
+									'mep_event_review_cust_email' => 'michael.trent@example.com',
+								],
+							],
+							4 => [
+								'name' => 'Solid value for the ticket price',
+								'content' => 'Worth attending if you want industry updates and practical workshops. Catering was good and the Q&A segments were especially useful.',
+								'post_data' => [
+									'mep_event_rating'            => '5',
+									'mep_event_review_cust_name'  => 'Priya Desai',
+									'mep_event_review_cust_email' => 'priya.desai@example.com',
+								],
+							],
+							5 => [
+								'name' => 'Enjoyable but could improve seating',
+								'content' => 'I enjoyed the program and met interesting people. Seating in the main hall felt tight during peak sessions, but otherwise a strong event.',
+								'post_data' => [
+									'mep_event_rating'            => '3',
+									'mep_event_review_cust_name'  => 'James Carter',
+									'mep_event_review_cust_email' => 'james.carter@example.com',
+								],
+							],
+						],
+						'mep_rsvp_responses' => [
+							0  => [ 'name' => 'Emma Thompson',      'email' => 'emma.thompson@example.com',      'phone' => '+1 202-555-0101', 'qty' => 1, 'checkin' => 'Yes' ],
+							1  => [ 'name' => 'Noah Patel',         'email' => 'noah.patel@example.com',         'phone' => '+1 202-555-0102', 'qty' => 2, 'checkin' => 'Yes' ],
+							2  => [ 'name' => 'Olivia Martinez',    'email' => 'olivia.martinez@example.com',    'phone' => '+1 202-555-0103', 'qty' => 1, 'checkin' => 'No' ],
+							3  => [ 'name' => 'Liam Chen',          'email' => 'liam.chen@example.com',          'phone' => '+1 202-555-0104', 'qty' => 3, 'checkin' => 'Yes' ],
+							4  => [ 'name' => 'Ava Johnson',        'email' => 'ava.johnson@example.com',        'phone' => '+1 202-555-0105', 'qty' => 1, 'checkin' => 'No' ],
+							5  => [ 'name' => 'William Garcia',     'email' => 'william.garcia@example.com',     'phone' => '+1 202-555-0106', 'qty' => 2, 'checkin' => 'Yes' ],
+							6  => [ 'name' => 'Sophia Nguyen',      'email' => 'sophia.nguyen@example.com',      'phone' => '+1 202-555-0107', 'qty' => 1, 'checkin' => 'No' ],
+							7  => [ 'name' => 'James Wilson',       'email' => 'james.wilson@example.com',       'phone' => '+1 202-555-0108', 'qty' => 4, 'checkin' => 'Yes' ],
+							8  => [ 'name' => 'Isabella Rossi',     'email' => 'isabella.rossi@example.com',     'phone' => '+1 202-555-0109', 'qty' => 1, 'checkin' => 'No' ],
+							9  => [ 'name' => 'Benjamin Kim',       'email' => 'benjamin.kim@example.com',       'phone' => '+1 202-555-0110', 'qty' => 2, 'checkin' => 'Yes' ],
+							10 => [ 'name' => 'Mia Andersson',      'email' => 'mia.andersson@example.com',      'phone' => '+1 202-555-0111', 'qty' => 1, 'checkin' => 'No' ],
+							11 => [ 'name' => 'Lucas Brown',        'email' => 'lucas.brown@example.com',        'phone' => '+1 202-555-0112', 'qty' => 2, 'checkin' => 'Yes' ],
+							12 => [ 'name' => 'Charlotte Dubois',   'email' => 'charlotte.dubois@example.com',   'phone' => '+1 202-555-0113', 'qty' => 1, 'checkin' => 'No' ],
+							13 => [ 'name' => 'Henry Silva',        'email' => 'henry.silva@example.com',        'phone' => '+1 202-555-0114', 'qty' => 3, 'checkin' => 'Yes' ],
+							14 => [ 'name' => 'Amelia Wright',      'email' => 'amelia.wright@example.com',      'phone' => '+1 202-555-0115', 'qty' => 1, 'checkin' => 'No' ],
+							15 => [ 'name' => 'Alexander Müller',   'email' => 'alexander.muller@example.com',   'phone' => '+1 202-555-0116', 'qty' => 2, 'checkin' => 'Yes' ],
+							16 => [ 'name' => 'Harper Lee',         'email' => 'harper.lee@example.com',         'phone' => '+1 202-555-0117', 'qty' => 1, 'checkin' => 'No' ],
+							17 => [ 'name' => 'Evelyn Park',        'email' => 'evelyn.park@example.com',        'phone' => '+1 202-555-0118', 'qty' => 2, 'checkin' => 'Yes' ],
+							18 => [ 'name' => 'Jack Rivera',        'email' => 'jack.rivera@example.com',        'phone' => '+1 202-555-0119', 'qty' => 1, 'checkin' => 'No' ],
+							19 => [ 'name' => 'Grace Okafor',       'email' => 'grace.okafor@example.com',       'phone' => '+1 202-555-0120', 'qty' => 3, 'checkin' => 'Yes' ],
+							20 => [ 'name' => 'Sebastian Torres',   'email' => 'sebastian.torres@example.com',   'phone' => '+1 202-555-0121', 'qty' => 1, 'checkin' => 'No' ],
+							21 => [ 'name' => 'Chloe Bennett',      'email' => 'chloe.bennett@example.com',      'phone' => '+1 202-555-0122', 'qty' => 2, 'checkin' => 'Yes' ],
+						],
+						'mep_custom_order' => [
+							0  => [ 'name' => 'Ryan Cooper',       'email' => 'ryan.cooper@example.com',       'phone' => '+1 415-555-0201', 'qty' => 1, 'status' => 'publish',    'gateway' => 'offline', 'checkin' => 'Yes' ],
+							1  => [ 'name' => 'Natalie Cruz',      'email' => 'natalie.cruz@example.com',      'phone' => '+1 415-555-0202', 'qty' => 2, 'status' => 'publish',    'gateway' => 'paypal',  'checkin' => 'Yes' ],
+							2  => [ 'name' => 'Ethan Brooks',      'email' => 'ethan.brooks.ord@example.com',  'phone' => '+1 415-555-0203', 'qty' => 1, 'status' => 'processing', 'gateway' => 'stripe' ],
+							3  => [ 'name' => 'Zoe Mitchell',      'email' => 'zoe.mitchell@example.com',      'phone' => '+1 415-555-0204', 'qty' => 3, 'status' => 'publish',    'gateway' => 'offline', 'checkin' => 'No' ],
+							4  => [ 'name' => 'Caleb Foster',      'email' => 'caleb.foster@example.com',      'phone' => '+1 415-555-0205', 'qty' => 1, 'status' => 'pending',    'gateway' => 'paypal' ],
+							5  => [ 'name' => 'Layla Hughes',      'email' => 'layla.hughes@example.com',      'phone' => '+1 415-555-0206', 'qty' => 2, 'status' => 'publish',    'gateway' => 'stripe',  'checkin' => 'Yes' ],
+							6  => [ 'name' => 'Owen Reed',         'email' => 'owen.reed@example.com',         'phone' => '+1 415-555-0207', 'qty' => 1, 'status' => 'on-hold',    'gateway' => 'offline' ],
+							7  => [ 'name' => 'Aria Collins',      'email' => 'aria.collins@example.com',      'phone' => '+1 415-555-0208', 'qty' => 2, 'status' => 'publish',    'gateway' => 'free',    'checkin' => 'No' ],
+							8  => [ 'name' => 'Mason Price',       'email' => 'mason.price@example.com',       'phone' => '+1 415-555-0209', 'qty' => 1, 'status' => 'cancelled',  'gateway' => 'paypal' ],
+							9  => [ 'name' => 'Isla Morgan',       'email' => 'isla.morgan@example.com',       'phone' => '+1 415-555-0210', 'qty' => 4, 'status' => 'publish',    'gateway' => 'offline', 'checkin' => 'Yes' ],
+							10 => [ 'name' => 'Leo Sanders',       'email' => 'leo.sanders@example.com',       'phone' => '+1 415-555-0211', 'qty' => 1, 'status' => 'publish',    'gateway' => 'stripe' ],
+							11 => [ 'name' => 'Nora Bennett',      'email' => 'nora.bennett.ord@example.com',  'phone' => '+1 415-555-0212', 'qty' => 2, 'status' => 'processing', 'gateway' => 'offline' ],
+						],
+						'mep_order_cancel_req' => [
+							0  => [ 'name' => 'Alice Morgan',    'email' => 'alice.morgan@example.com',    'phone' => '+1 212-555-0301', 'total' => 100, 'ticket' => 'VIP Pass',              'order_status' => 'processing', 'status' => 'pending',  'reason' => 'Travel plans changed and I can no longer attend the event.' ],
+							1  => [ 'name' => 'Brian Scott',     'email' => 'brian.scott@example.com',     'phone' => '+1 212-555-0302', 'total' => 200, 'ticket' => 'General Admission x2', 'order_status' => 'processing', 'status' => 'pending',  'reason' => 'Bought the wrong ticket type by mistake and need a refund.' ],
+							2  => [ 'name' => 'Clara Diaz',      'email' => 'clara.diaz@example.com',      'phone' => '+1 212-555-0303', 'total' => 150, 'ticket' => 'Early Bird',           'order_status' => 'completed',  'status' => 'Approved', 'reason' => 'Medical appointment conflict on the event date.' ],
+							3  => [ 'name' => 'Derek Quinn',     'email' => 'derek.quinn@example.com',     'phone' => '+1 212-555-0304', 'total' => 100, 'ticket' => 'Standard Ticket',      'order_status' => 'processing', 'status' => 'pending',  'reason' => 'Company travel policy changed and the trip was cancelled.' ],
+							4  => [ 'name' => 'Elena Vargas',    'email' => 'elena.vargas@example.com',    'phone' => '+1 212-555-0305', 'total' => 300, 'ticket' => 'VIP Pass x3',          'order_status' => 'completed',  'status' => 'Rejected', 'reason' => 'Found a scheduling conflict with another conference.' ],
+							5  => [ 'name' => 'Frank Liu',       'email' => 'frank.liu@example.com',       'phone' => '+1 212-555-0306', 'total' => 100, 'ticket' => 'Workshop Seat',        'order_status' => 'processing', 'status' => 'pending',  'reason' => 'Family emergency — please cancel and refund if possible.' ],
+							6  => [ 'name' => 'Gina Patel',      'email' => 'gina.patel@example.com',      'phone' => '+1 212-555-0307', 'total' => 80,  'ticket' => 'Student Ticket',       'order_status' => 'on-hold',    'status' => 'pending',  'reason' => 'Duplicate booking created while checking out twice.' ],
+							7  => [ 'name' => 'Harry Cole',      'email' => 'harry.cole@example.com',      'phone' => '+1 212-555-0308', 'total' => 120, 'ticket' => 'General Admission',    'order_status' => 'completed',  'status' => 'Approved', 'reason' => 'Visa application delayed; cannot travel in time.' ],
+							8  => [ 'name' => 'Ivy Chen',        'email' => 'ivy.chen@example.com',        'phone' => '+1 212-555-0309', 'total' => 100, 'ticket' => 'Standard Ticket',      'order_status' => 'processing', 'status' => 'pending',  'reason' => 'Need to transfer attendance to a colleague instead.' ],
+							9  => [ 'name' => 'Jake Romero',     'email' => 'jake.romero@example.com',     'phone' => '+1 212-555-0310', 'total' => 250, 'ticket' => 'VIP Pass x2',          'order_status' => 'completed',  'status' => 'Rejected', 'reason' => 'Event date no longer works with my project deadline.' ],
+							10 => [ 'name' => 'Kara Singh',      'email' => 'kara.singh@example.com',      'phone' => '+1 212-555-0311', 'total' => 100, 'ticket' => 'General Admission',    'order_status' => 'processing', 'status' => 'pending',  'reason' => 'Accidental purchase while testing the checkout flow.' ],
+							11 => [ 'name' => 'Leo Hartmann',    'email' => 'leo.hartmann@example.com',    'phone' => '+1 212-555-0312', 'total' => 180, 'ticket' => 'Premium Seat',         'order_status' => 'completed',  'status' => 'Approved', 'reason' => 'Hotel booking fell through; unable to attend in person.' ],
+						],
+						'mep_event_waitlist' => [
+							0  => [ 'name' => 'Nina Alvarez',     'email' => 'nina.alvarez@example.com',     'phone' => '+1 312-555-0401', 'qty' => 2 ],
+							1  => [ 'name' => 'Omar Hassan',      'email' => 'omar.hassan@example.com',      'phone' => '+1 312-555-0402', 'qty' => 1 ],
+							2  => [ 'name' => 'Paula Berg',       'email' => 'paula.berg@example.com',       'phone' => '+1 312-555-0403', 'qty' => 3 ],
+							3  => [ 'name' => 'Quinn Adler',      'email' => 'quinn.adler@example.com',      'phone' => '+1 312-555-0404', 'qty' => 1 ],
+							4  => [ 'name' => 'Rita Kowalski',    'email' => 'rita.kowalski@example.com',    'phone' => '+1 312-555-0405', 'qty' => 2 ],
+						],
+						'mep_events_attendees' => self::sample_attendee_people(),
 					],
 				];
 			}

@@ -124,8 +124,16 @@
 		$expire_on = function_exists( 'mep_get_option' )
 			? mep_get_option( 'mep_event_expire_on_datetimes', 'general_setting_sec', 'event_start_datetime' )
 			: 'event_start_datetime';
+		// Normalize the legacy option value to the current one - the settings UI
+		// has saved 'event_expire_datetime' for "Event End Time" for a long time
+		// (MPWEM_General_Settings_UI.php, MPWEM_Quick_Setup.php, admin_setting_panel.php),
+		// same as every other reader of this option (MPWEM_Query.php, MPWEM_Calendar.php,
+		// mep_functions.php...). Comparing against 'event_end_datetime' here never
+		// matched, so "Expire on: Event End Time" was silently ignored on this page -
+		// it always expired at event start instead.
+		$expire_on    = $expire_on === 'event_end_datetime' ? 'event_expire_datetime' : $expire_on;
 		$reference_dt = $user_date;
-		if ( $expire_on === 'event_end_datetime' ) {
+		if ( $expire_on === 'event_expire_datetime' ) {
 			$end_ref = $event_type === 'no' ? get_post_meta( $event_id, 'event_end_datetime', true ) : '';
 			if ( empty( $end_ref ) ) {
 				$end_time = get_post_meta( $event_id, 'event_end_time', true );
@@ -144,7 +152,30 @@
 	if ( $event_id > 0 ) {
 		$reg_status = MPWEM_Global_Function::get_post_info( $event_id, 'mep_reg_status', 'on' );
 		if ( $reg_status == 'on' && $selected_date_expired ) {
-			MPWEM_Layout::msg( esc_html__( 'Sorry, this date has expired and is no longer available for booking.', 'mage-eventpress' ), 'mpwem_date_expired_msg' );
+			$expired_date_label = '';
+			$expired_date_src   = ! empty( $user_date ) ? $user_date : $date;
+			if ( ! empty( $expired_date_src ) && strtotime( $expired_date_src ) ) {
+				$expired_date_label = MPWEM_Global_Function::date_format( $expired_date_src, 'full', $event_id );
+			}
+			?>
+			<div class="mpwem_date_expired_msg" role="status" aria-live="polite">
+				<div class="mpwem_date_expired_msg__inner">
+					<span class="mpwem_date_expired_msg__icon" aria-hidden="true">
+						<i class="far fa-calendar-times"></i>
+					</span>
+					<div class="mpwem_date_expired_msg__body">
+						<strong class="mpwem_date_expired_msg__title"><?php esc_html_e( 'Date unavailable', 'mage-eventpress' ); ?></strong>
+						<p class="mpwem_date_expired_msg__text"><?php esc_html_e( 'Sorry, this date has expired and is no longer available for booking.', 'mage-eventpress' ); ?></p>
+						<?php if ( $expired_date_label ) : ?>
+							<span class="mpwem_date_expired_msg__meta">
+								<i class="far fa-clock" aria-hidden="true"></i>
+								<?php echo esc_html( $expired_date_label ); ?>
+							</span>
+						<?php endif; ?>
+					</div>
+				</div>
+			</div>
+			<?php
 		} elseif ( $reg_status == 'on' ) {
 			$full_location = MPWEM_Functions::get_location( $event_id );
 			$total_sold      = mep_ticket_type_sold( $event_id, '', $date );

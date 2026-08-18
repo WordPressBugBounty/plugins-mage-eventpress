@@ -142,7 +142,9 @@
         const toastType = type || 'info';
         const iconClass = toastType === 'error'
             ? 'dashicons-warning'
-            : (toastType === 'warning' ? 'dashicons-info-outline' : 'dashicons-update-alt');
+            : (toastType === 'warning'
+                ? 'dashicons-info-outline'
+                : (toastType === 'success' ? 'dashicons-yes-alt' : 'dashicons-update-alt'));
 
         if ($toast.length === 0) {
             $toast = $(`
@@ -163,7 +165,7 @@
 
         const timer = window.setTimeout(function() {
             $toast.removeClass('show');
-        }, toastType === 'error' ? 4200 : (toastType === 'warning' ? 3600 : 2600));
+        }, toastType === 'error' ? 4200 : (toastType === 'warning' ? 3600 : (toastType === 'success' ? 3200 : 2600)));
 
         $toast.data('mpwemToastTimer', timer);
     }
@@ -260,6 +262,374 @@
         if ($panel.parent()[0] !== $mount[0]) {
             $panel.addClass('mpwem-embedded-panel').detach().appendTo($mount).show();
         }
+    }
+
+    function initSpeakerPicker($root) {
+        const $panels = $root.find('.mpwem_speaker_settings');
+        if (!$panels.length) {
+            return;
+        }
+
+        const cfg = getConfig();
+        const strings = cfg.speaker || {};
+        let speakerModalSaving = false;
+        let speakerMediaFrame = null;
+
+        const escapeHtml = function(value) {
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        };
+
+        const updateCount = function($panel) {
+            const count = $panel.find('.mpwem-speaker-option input[type="checkbox"]:checked').length;
+            const $badge = $panel.find('[data-speaker-count]');
+            if ($badge.length) {
+                $badge.text(count + ' selected');
+            }
+        };
+
+        const getSpeakerModal = function() {
+            return document.getElementById('mpwem-event-speaker-modal');
+        };
+
+        const setSpeakerImagePreview = function(url, id) {
+            const preview = document.getElementById('mpwem-event-speaker-image-preview');
+            const removeBtn = document.getElementById('mpwem-event-speaker-image-remove');
+            const selectBtn = document.getElementById('mpwem-event-speaker-image-select');
+            const idInput = document.getElementById('mpwem-event-speaker-image-id');
+            if (!preview || !idInput) {
+                return;
+            }
+            idInput.value = String(id || 0);
+            if (url) {
+                preview.classList.add('has-image');
+                preview.innerHTML = '<img src="' + escapeHtml(url) + '" alt="" />';
+                if (removeBtn) {
+                    removeBtn.hidden = false;
+                }
+                if (selectBtn) {
+                    selectBtn.textContent = strings.imageChange || 'Change Image';
+                }
+            } else {
+                preview.classList.remove('has-image');
+                preview.innerHTML = '<span class="dashicons dashicons-format-image"></span>';
+                if (removeBtn) {
+                    removeBtn.hidden = true;
+                }
+                if (selectBtn) {
+                    selectBtn.textContent = strings.imageSelect || 'Select Image';
+                }
+            }
+        };
+
+        const setSpeakerModalStatus = function(message, type) {
+            const status = document.getElementById('mpwem-event-speaker-modal-status');
+            if (!status) {
+                return;
+            }
+            if (!message) {
+                status.hidden = true;
+                status.textContent = '';
+                status.className = 'mpwem-speaker-modal__status';
+                return;
+            }
+            status.hidden = false;
+            status.textContent = message;
+            status.className = 'mpwem-speaker-modal__status is-' + (type || 'error');
+        };
+
+        const closeSpeakerModal = function() {
+            const modal = getSpeakerModal();
+            if (!modal) {
+                return;
+            }
+            modal.classList.remove('is-open');
+            modal.setAttribute('aria-hidden', 'true');
+            document.body.classList.remove('mpwem-speaker-modal-open');
+            speakerModalSaving = false;
+        };
+
+        const resetSpeakerModalForm = function() {
+            const form = document.getElementById('mpwem-event-speaker-create-form');
+            if (form) {
+                form.reset();
+            }
+            setSpeakerImagePreview('', 0);
+            setSpeakerModalStatus('', '');
+            const saveBtn = document.getElementById('mpwem-event-speaker-save-btn');
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.textContent = strings.save || 'Create Speaker';
+            }
+        };
+
+        const openSpeakerMedia = function() {
+            if (typeof wp === 'undefined' || !wp.media) {
+                return;
+            }
+            if (!speakerMediaFrame) {
+                speakerMediaFrame = wp.media({
+                    title: strings.imageSelect || 'Select Image',
+                    button: { text: strings.imageSelect || 'Select Image' },
+                    library: { type: 'image' },
+                    multiple: false
+                });
+                speakerMediaFrame.on('select', function() {
+                    const attachment = speakerMediaFrame.state().get('selection').first().toJSON();
+                    const url = (attachment.sizes && attachment.sizes.thumbnail)
+                        ? attachment.sizes.thumbnail.url
+                        : attachment.url;
+                    setSpeakerImagePreview(url, attachment.id);
+                });
+            }
+            speakerMediaFrame.open();
+        };
+
+        const ensureSpeakerSelectGrid = function($panel) {
+            let $select = $panel.find('.mpwem-speaker-select').first();
+            if (!$select.length) {
+                $panel.find('.mpwem-speaker-select__empty-state').remove();
+                $select = $(
+                    '<div class="mpwem-speaker-select">' +
+                        '<div class="mpwem-speaker-select__grid"></div>' +
+                    '</div>'
+                );
+                $panel.find('.mpwem-speaker-picker').append($select);
+            }
+            return $select.find('.mpwem-speaker-select__grid').first();
+        };
+
+        const appendSpeakerOption = function($panel, data) {
+            const id = parseInt(data.id, 10) || 0;
+            if (!id) {
+                return;
+            }
+            if ($panel.find('.mpwem-speaker-option input[value="' + id + '"]').length) {
+                $panel.find('.mpwem-speaker-option input[value="' + id + '"]').prop('checked', true).trigger('change');
+                return;
+            }
+
+            const name = data.name || '';
+            const role = data.role || '';
+            const imageUrl = data.image_url || '';
+            const initial = name ? name.charAt(0).toUpperCase() : '?';
+            const avatarHtml = imageUrl
+                ? '<img src="' + escapeHtml(imageUrl) + '" alt="" />'
+                : '<span class="mpwem-speaker-option__initial">' + escapeHtml(initial) + '</span>';
+
+            const $option = $(
+                '<label class="mpwem-speaker-option is-selected">' +
+                    '<input type="checkbox" name="mep_event_speakers_list[]" value="' + id + '" checked="checked" data-no-mpwem-switch="1" />' +
+                    '<span class="mpwem-speaker-option__avatar' + (imageUrl ? ' has-image' : '') + '" aria-hidden="true">' +
+                        avatarHtml +
+                        '<span class="mpwem-speaker-option__check"><span class="dashicons dashicons-yes"></span></span>' +
+                    '</span>' +
+                    '<span class="mpwem-speaker-option__meta">' +
+                        '<span class="mpwem-speaker-option__name">' + escapeHtml(name) + '</span>' +
+                        (role ? '<span class="mpwem-speaker-option__role">' + escapeHtml(role) + '</span>' : '') +
+                    '</span>' +
+                '</label>'
+            );
+
+            const $grid = ensureSpeakerSelectGrid($panel);
+            $grid.prepend($option);
+            updateCount($panel);
+        };
+
+        const submitSpeakerForm = function(event) {
+            event.preventDefault();
+            if (speakerModalSaving) {
+                return;
+            }
+
+            const nameInput = document.getElementById('mpwem-event-speaker-name');
+            const name = nameInput ? nameInput.value.trim() : '';
+            if (!name) {
+                setSpeakerModalStatus(strings.nameRequired || 'Please enter a speaker name.', 'error');
+                if (nameInput) {
+                    nameInput.focus();
+                }
+                return;
+            }
+
+            speakerModalSaving = true;
+            setSpeakerModalStatus('', '');
+            const saveBtn = document.getElementById('mpwem-event-speaker-save-btn');
+            if (saveBtn) {
+                saveBtn.disabled = true;
+                saveBtn.textContent = strings.saving || 'Creating…';
+            }
+
+            const body = new FormData();
+            body.append('action', 'mpwem_speaker_create');
+            body.append('nonce', cfg.speaker_nonce || '');
+            body.append('name', name);
+            body.append('excerpt', (document.getElementById('mpwem-event-speaker-role') || {}).value || '');
+            body.append('description', (document.getElementById('mpwem-event-speaker-desc') || {}).value || '');
+            body.append('image_id', (document.getElementById('mpwem-event-speaker-image-id') || {}).value || '0');
+            body.append('status', (document.getElementById('mpwem-event-speaker-status') || {}).value || 'publish');
+
+            fetch(cfg.ajax_url || window.ajaxurl || '', {
+                method: 'POST',
+                credentials: 'same-origin',
+                body: body
+            })
+                .then(function(res) {
+                    return res.json();
+                })
+                .then(function(json) {
+                    if (!json || !json.success) {
+                        const msg = (json && json.data) ? json.data : (strings.createError || 'Could not create speaker.');
+                        throw new Error(typeof msg === 'string' ? msg : (strings.createError || 'Could not create speaker.'));
+                    }
+                    const data = json.data || {};
+                    $panels.each(function() {
+                        appendSpeakerOption($(this), data);
+                    });
+                    closeSpeakerModal();
+                    if (typeof showToast === 'function') {
+                        showToast(data.message || strings.createSuccess || 'Speaker created successfully.', 'success');
+                    }
+                })
+                .catch(function(err) {
+                    setSpeakerModalStatus(err.message || strings.createError || 'Could not create speaker.', 'error');
+                    speakerModalSaving = false;
+                    if (saveBtn) {
+                        saveBtn.disabled = false;
+                        saveBtn.textContent = strings.save || 'Create Speaker';
+                    }
+                });
+        };
+
+        const ensureSpeakerModal = function() {
+            let modal = getSpeakerModal();
+            if (modal) {
+                return modal;
+            }
+
+            modal = document.createElement('div');
+            modal.id = 'mpwem-event-speaker-modal';
+            modal.className = 'mpwem-speaker-modal';
+            modal.setAttribute('aria-hidden', 'true');
+            modal.innerHTML =
+                '<div class="mpwem-speaker-modal__backdrop" data-event-speaker-modal-close="1"></div>' +
+                '<div class="mpwem-speaker-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="mpwem-event-speaker-modal-title">' +
+                    '<button type="button" class="mpwem-speaker-modal__close" data-event-speaker-modal-close="1" aria-label="' + escapeHtml(strings.cancel || 'Cancel') + '">' +
+                        '<span class="dashicons dashicons-no-alt"></span>' +
+                    '</button>' +
+                    '<div class="mpwem-speaker-modal__header">' +
+                        '<span class="mpwem-speaker-modal__icon dashicons dashicons-groups" aria-hidden="true"></span>' +
+                        '<div>' +
+                            '<h2 id="mpwem-event-speaker-modal-title">' + escapeHtml(strings.modalTitle || 'Add New Speaker') + '</h2>' +
+                            '<p>' + escapeHtml(strings.modalSubtitle || 'Create a speaker profile and assign it to this event.') + '</p>' +
+                        '</div>' +
+                    '</div>' +
+                    '<form id="mpwem-event-speaker-create-form" class="mpwem-speaker-modal__form" novalidate>' +
+                        '<div class="mpwem-speaker-modal__grid">' +
+                            '<div class="mpwem-speaker-modal__field mpwem-speaker-modal__field--full">' +
+                                '<label for="mpwem-event-speaker-name">' + escapeHtml(strings.nameLabel || 'Speaker Name') + ' <span>*</span></label>' +
+                                '<input type="text" id="mpwem-event-speaker-name" name="name" required maxlength="200" placeholder="' + escapeHtml(strings.namePlaceholder || '') + '" />' +
+                            '</div>' +
+                            '<div class="mpwem-speaker-modal__field mpwem-speaker-modal__field--full">' +
+                                '<label for="mpwem-event-speaker-role">' + escapeHtml(strings.roleLabel || 'Role / Title') + '</label>' +
+                                '<input type="text" id="mpwem-event-speaker-role" name="excerpt" maxlength="200" placeholder="' + escapeHtml(strings.rolePlaceholder || '') + '" />' +
+                            '</div>' +
+                            '<div class="mpwem-speaker-modal__field mpwem-speaker-modal__field--full">' +
+                                '<label for="mpwem-event-speaker-desc">' + escapeHtml(strings.descLabel || 'Description') + '</label>' +
+                                '<textarea id="mpwem-event-speaker-desc" name="description" rows="4" placeholder="' + escapeHtml(strings.descPlaceholder || '') + '"></textarea>' +
+                            '</div>' +
+                            '<div class="mpwem-speaker-modal__field">' +
+                                '<label>' + escapeHtml(strings.imageLabel || 'Featured Image') + '</label>' +
+                                '<div class="mpwem-speaker-modal__image">' +
+                                    '<div class="mpwem-speaker-modal__preview" id="mpwem-event-speaker-image-preview">' +
+                                        '<span class="dashicons dashicons-format-image"></span>' +
+                                    '</div>' +
+                                    '<div class="mpwem-speaker-modal__image-actions">' +
+                                        '<button type="button" class="button" id="mpwem-event-speaker-image-select">' + escapeHtml(strings.imageSelect || 'Select Image') + '</button>' +
+                                        '<button type="button" class="button-link-delete" id="mpwem-event-speaker-image-remove" hidden>' + escapeHtml(strings.imageRemove || 'Remove') + '</button>' +
+                                        '<input type="hidden" id="mpwem-event-speaker-image-id" name="image_id" value="0" />' +
+                                    '</div>' +
+                                '</div>' +
+                            '</div>' +
+                            '<div class="mpwem-speaker-modal__field">' +
+                                '<label for="mpwem-event-speaker-status">' + escapeHtml(strings.statusLabel || 'Status') + '</label>' +
+                                '<select id="mpwem-event-speaker-status" name="status">' +
+                                    '<option value="publish">' + escapeHtml(strings.statusPublish || 'Publish') + '</option>' +
+                                    '<option value="draft">' + escapeHtml(strings.statusDraft || 'Draft') + '</option>' +
+                                '</select>' +
+                            '</div>' +
+                        '</div>' +
+                        '<div class="mpwem-speaker-modal__status" id="mpwem-event-speaker-modal-status" hidden></div>' +
+                        '<div class="mpwem-speaker-modal__actions">' +
+                            '<button type="button" class="button" data-event-speaker-modal-close="1">' + escapeHtml(strings.cancel || 'Cancel') + '</button>' +
+                            '<button type="submit" class="button button-primary" id="mpwem-event-speaker-save-btn">' + escapeHtml(strings.save || 'Create Speaker') + '</button>' +
+                        '</div>' +
+                    '</form>' +
+                '</div>';
+
+            document.body.appendChild(modal);
+
+            modal.addEventListener('click', function(event) {
+                if (event.target.closest('[data-event-speaker-modal-close]')) {
+                    closeSpeakerModal();
+                }
+            });
+            document.getElementById('mpwem-event-speaker-image-select').addEventListener('click', openSpeakerMedia);
+            document.getElementById('mpwem-event-speaker-image-remove').addEventListener('click', function() {
+                setSpeakerImagePreview('', 0);
+            });
+            document.getElementById('mpwem-event-speaker-create-form').addEventListener('submit', submitSpeakerForm);
+            document.addEventListener('keydown', function(event) {
+                if (event.key === 'Escape' && modal.classList.contains('is-open')) {
+                    closeSpeakerModal();
+                }
+            });
+
+            return modal;
+        };
+
+        const openSpeakerModal = function() {
+            const modal = ensureSpeakerModal();
+            resetSpeakerModalForm();
+            modal.classList.add('is-open');
+            modal.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('mpwem-speaker-modal-open');
+            window.setTimeout(function() {
+                const nameInput = document.getElementById('mpwem-event-speaker-name');
+                if (nameInput) {
+                    nameInput.focus();
+                }
+            }, 30);
+        };
+
+        $panels.each(function() {
+            const $panel = $(this);
+            updateCount($panel);
+
+            // Classic editor still uses the nested enable toggle; the modern
+            // wizard card owns enable/disable and strips this control's name.
+            if ($panel.hasClass('mpwem-embedded-panel')) {
+                $panel.find('#mep_event_enable_speaker').removeAttr('name');
+                $panel.find('#mpwem-speaker-fields').show();
+            }
+        });
+
+        $root.off('click.mpwemSpeakerAdd', '[data-mpwem-speaker-add]')
+            .on('click.mpwemSpeakerAdd', '[data-mpwem-speaker-add]', function(event) {
+                event.preventDefault();
+                openSpeakerModal();
+            });
+
+        $root.off('change.mpwemSpeakerSelect', '.mpwem-speaker-option input[type="checkbox"]')
+            .on('change.mpwemSpeakerSelect', '.mpwem-speaker-option input[type="checkbox"]', function() {
+                const $option = $(this).closest('.mpwem-speaker-option');
+                $option.toggleClass('is-selected', $(this).is(':checked'));
+                updateCount($option.closest('.mpwem_speaker_settings'));
+            });
     }
 
     function normalizePanelLabel(text) {
@@ -472,6 +842,18 @@
         
         // Mount into Tickets Step
         mountPanel($root, '#mpwem_ticket_pricing_settings', 'mpwem_wizard_tickets_mount');
+
+        // Only rendered by the legacy hook when WooCommerce "Enable taxes" is on.
+        mountPanel($root, '#mp_event_tax_settings', 'mpwem_wizard_tax_mount');
+        const $taxMount = $('#mpwem_wizard_tax_mount');
+        if ($taxMount.children().length) {
+            const $taxPanel = $taxMount.children('.mp_tab_item').first();
+            // Our card head already shows "Tax Settings" - hide the legacy
+            // tab title/description and the inner banner that repeat it.
+            $taxPanel.children('h3, p').hide();
+            $taxPanel.find('section.bg-light').first().hide();
+            $('#mpwem_wizard_tax_card').show();
+        }
 
         const $ticketPricingPanel = getPanel($root, '#mpwem_ticket_pricing_settings');
         decorateMinMaxSettings($root);
@@ -1833,6 +2215,7 @@
 
         window.setTimeout(function() {
             enhanceDateFields($root);
+            enhanceCustomCalendar($root);
             initializeParticularDateTableDragScroll($root);
             syncDateWiseGlobalQtyColumns($root);
             syncParticularDateModalFooter($root);
@@ -1938,6 +2321,7 @@
         context.$modalMount.find('.mep-special-datetime section.bg-light').hide();
         decorateDateSections(context.$modalMount);
         enhanceDateFields(context.$modalMount);
+        enhanceCustomCalendar(context.$modalMount);
         enhanceOffDayPicker(context.$modalMount);
         enhanceRepeatedScheduleLayout(context.$modalMount);
         ensureParticularDateTableHints($root);
@@ -2159,6 +2543,8 @@
         }
         initializeParticularDateTableDragScroll($root);
         syncDateWiseGlobalQtyColumns($root);
+        enhanceDateFields(context.$modalMount);
+        enhanceCustomCalendar(context.$modalMount);
 
         context.$modal.attr('aria-hidden', 'false').addClass('is-open');
         lockBodyScroll();
@@ -2256,6 +2642,7 @@
 
         decorateDateSections(context.$modalMount);
         enhanceDateFields(context.$modalMount);
+        enhanceCustomCalendar(context.$modalMount);
         enhanceOffDayPicker(context.$modalMount);
         enhanceRepeatedScheduleLayout(context.$modalMount);
         ensureParticularDateTableHints($root);
@@ -2580,14 +2967,14 @@
 
             $mount.addClass('mpwem-display-section ' + section.className);
             if (!$mount.children('.mpwem-display-section__head').length) {
+                const $badge = $('<span class="mpwem-display-section__badge" aria-hidden="true"></span>')
+                    .append($('<span class="dashicons"></span>').addClass(section.icon || 'dashicons-admin-generic'));
+                const $headMain = $('<div class="mpwem-display-section__head-main"></div>')
+                    .append($badge)
+                    .append($('<h3></h3>').text(section.title))
+                    .append($('<p></p>').text(section.desc));
                 $mount.prepend(
-                    $('<div class="mpwem-display-section__head"></div>')
-                        .append($('<div class="mpwem-display-section__head-main"></div>')
-                        .append($('<span class="mpwem-display-section__badge" aria-hidden="true"></span>')
-                        .append($('<span class="dashicons"></span>')
-                        .addClass(section.icon || 'dashicons-admin-generic')))
-                        .append($('<h3></h3>').text(section.title))
-                        .append($('<p></p>').text(section.desc)))
+                    $('<div class="mpwem-display-section__head"></div>').append($headMain)
                 );
             }
 
@@ -2646,10 +3033,36 @@
                 };
 
                 $toggle.off('change.mpwemSectionToggle').on('change.mpwemSectionToggle', function() {
-                    syncAttendeeFormToggle($(this).is(':checked'), true);
+                    const isExpanded = $(this).is(':checked');
+                    syncAttendeeFormToggle(isExpanded, true);
+                    if (isExpanded && typeof window.mepFbEventBuilderInit === 'function') {
+                        window.setTimeout(function() {
+                            window.mepFbEventBuilderInit(true);
+                        }, 240);
+                    }
                 });
 
                 syncAttendeeFormToggle(isInitiallyEnabled, false);
+                // If a saved/custom form is already selected, keep the section open so the
+                // canvas can paint on first Advanced visit (status checkbox can be off).
+                const $formSelect = $body.find('#mep_event_reg_form_list').first();
+                const selectVal = $formSelect.length ? String($formSelect.val() || '') : '';
+                const cfgSource = (window.mepFbEventBuilder && window.mepFbEventBuilder.formSource)
+                    ? String(window.mepFbEventBuilder.formSource)
+                    : '';
+                const hasFormChoice = selectVal === 'custom_form'
+                    || (/^\d+$/.test(selectVal) && parseInt(selectVal, 10) > 0)
+                    || (cfgSource && cfgSource !== 'custom_form');
+                if (!isInitiallyEnabled && hasFormChoice) {
+                    syncAttendeeFormToggle(true, false);
+                }
+                if ((isInitiallyEnabled || hasFormChoice) && $root.find('.mpwem-step[data-step-key="display"]').hasClass('is-active')) {
+                    window.setTimeout(function() {
+                        if (typeof window.mepFbEventBuilderInit === 'function') {
+                            window.mepFbEventBuilderInit(true);
+                        }
+                    }, 80);
+                }
             }
 
             if (
@@ -3484,7 +3897,12 @@
 
         return $select.closest('#mp_event_custom_form_table, .mp_event_custom_form_table').length > 0
             || $select.closest('#mpwem_wizard_attendee_form_mount table, .mpwem-display-section--attendee-form table').length > 0
+            || $select.closest('.mep_condition_item, .mep_conditional_form_hidden, .conditional_form_area').length > 0
             || name === 'mep_event_reg_form_id'
+            || name === 'mep_type_condition[]'
+            || name === 'mep_conditional_parent[]'
+            || name === 'mep_conditional_parent_value[]'
+            || name === 'mep_conditional_child[]'
             || /\[mep_global_single_template\]$/.test(name);
     }
 
@@ -3800,6 +4218,8 @@
 
             $label.data('mpwemDateEnhanced', true);
         });
+
+        enhanceCustomTimePicker($panel);
     }
 
     function parseIsoDate(value) {
@@ -4128,6 +4548,8 @@
     }
 
     function openCustomCalendar($input) {
+        closeCustomTimePicker();
+
         if ($.datepicker && $input.hasClass('hasDatepicker')) {
             try {
                 $input.datepicker('destroy');
@@ -4249,6 +4671,7 @@
             e.stopPropagation();
             const $label = $(this).closest('label');
             $label.find('.mpwem-time-input').first().val('').trigger('change');
+            closeCustomTimePicker();
         });
 
         $(document).on('input change', '.mpwem-event-wizard input[name="event_start_date_everyday"], .mpwem-event-wizard input[name="event_end_date_everyday"]', function() {
@@ -4281,15 +4704,25 @@
 
         $(document).on('mousedown', function(e) {
             const $target = $(e.target);
-            if ($target.closest('.mpwem-custom-calendar, .mpwem-date-input-wrap').length) return;
-            closeCustomCalendar();
+            if (!$target.closest('.mpwem-custom-calendar, .mpwem-date-input-wrap').length) {
+                closeCustomCalendar();
+            }
+            if (!$target.closest('.mpwem-custom-time-picker, .mpwem-time-input-wrap').length) {
+                closeCustomTimePicker();
+            }
         });
 
         $(window).on('resize scroll', function() {
             const $calendar = $('#mpwem_custom_calendar.is-open');
-            const state = $calendar.data('mpwemState');
-            if ($calendar.length && state && state.$input) {
-                positionCustomCalendar($calendar, state.$input);
+            const calendarState = $calendar.data('mpwemState');
+            if ($calendar.length && calendarState && calendarState.$input) {
+                positionCustomCalendar($calendar, calendarState.$input);
+            }
+
+            const $picker = $('#mpwem_custom_time_picker.is-open');
+            const timeState = $picker.data('mpwemState');
+            if ($picker.length && timeState && timeState.$input) {
+                positionCustomTimePicker($picker, timeState.$input);
             }
         });
 
@@ -4313,6 +4746,366 @@
 
             $input.attr('autocomplete', 'off');
             $input.data('mpwemCustomCalendar', true);
+        });
+        enhanceCustomTimePicker($panel);
+    }
+
+    function parseTimeValue(value) {
+        const raw = (value || '').toString().trim();
+        if (!raw) return null;
+
+        const match24 = raw.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+        if (match24) {
+            let hour = parseInt(match24[1], 10);
+            const minute = parseInt(match24[2], 10);
+            if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+                return { hour: hour, minute: minute };
+            }
+        }
+
+        const match12 = raw.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+        if (match12) {
+            let hour = parseInt(match12[1], 10);
+            const minute = parseInt(match12[2], 10);
+            const period = match12[3].toUpperCase();
+            if (hour >= 1 && hour <= 12 && minute >= 0 && minute <= 59) {
+                if (period === 'AM') {
+                    hour = hour === 12 ? 0 : hour;
+                } else {
+                    hour = hour === 12 ? 12 : hour + 12;
+                }
+                return { hour: hour, minute: minute };
+            }
+        }
+
+        return null;
+    }
+
+    function formatTimeValue(hour, minute) {
+        return String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0');
+    }
+
+    function formatTimeDisplay(hour, minute) {
+        const period = hour >= 12 ? 'PM' : 'AM';
+        let hour12 = hour % 12;
+        if (hour12 === 0) hour12 = 12;
+        return String(hour12).padStart(2, '0') + ':' + String(minute).padStart(2, '0') + ' ' + period;
+    }
+
+    function toPickerParts(hour24, minute) {
+        const period = hour24 >= 12 ? 'PM' : 'AM';
+        let hour12 = hour24 % 12;
+        if (hour12 === 0) hour12 = 12;
+        return { hour12: hour12, minute: minute, period: period };
+    }
+
+    function fromPickerParts(hour12, minute, period) {
+        let hour24 = hour12 % 12;
+        if (period === 'PM') hour24 += 12;
+        return { hour: hour24, minute: minute };
+    }
+
+    function ensureCustomTimePicker() {
+        let $picker = $('#mpwem_custom_time_picker');
+        if ($picker.length) return $picker;
+
+        const hourButtons = [];
+        for (let h = 1; h <= 12; h++) {
+            hourButtons.push('<button type="button" class="mpwem-custom-time-picker__chip" data-time-hour="' + h + '">' + String(h).padStart(2, '0') + '</button>');
+        }
+
+        const minuteButtons = [];
+        for (let m = 0; m < 60; m += 5) {
+            minuteButtons.push('<button type="button" class="mpwem-custom-time-picker__chip" data-time-minute="' + m + '">' + String(m).padStart(2, '0') + '</button>');
+        }
+
+        $picker = $(
+            '<div id="mpwem_custom_time_picker" class="mpwem-custom-time-picker" role="dialog" aria-modal="false" aria-label="Choose time">' +
+            '  <div class="mpwem-custom-time-picker__preview" aria-live="polite">' +
+            '    <span class="mpwem-custom-time-picker__preview-hour">12</span>' +
+            '    <span class="mpwem-custom-time-picker__preview-colon">:</span>' +
+            '    <span class="mpwem-custom-time-picker__preview-minute">00</span>' +
+            '    <span class="mpwem-custom-time-picker__preview-period">AM</span>' +
+            '  </div>' +
+            '  <div class="mpwem-custom-time-picker__period" role="group" aria-label="AM or PM">' +
+            '    <button type="button" class="mpwem-custom-time-picker__period-btn" data-time-period="AM">AM</button>' +
+            '    <button type="button" class="mpwem-custom-time-picker__period-btn" data-time-period="PM">PM</button>' +
+            '  </div>' +
+            '  <div class="mpwem-custom-time-picker__grid">' +
+            '    <div class="mpwem-custom-time-picker__section">' +
+            '      <div class="mpwem-custom-time-picker__label">Hour</div>' +
+            '      <div class="mpwem-custom-time-picker__hours">' + hourButtons.join('') + '</div>' +
+            '    </div>' +
+            '    <div class="mpwem-custom-time-picker__section">' +
+            '      <div class="mpwem-custom-time-picker__label">Minute</div>' +
+            '      <div class="mpwem-custom-time-picker__minutes">' + minuteButtons.join('') + '</div>' +
+            '    </div>' +
+            '  </div>' +
+            '  <div class="mpwem-custom-time-picker__presets" role="group" aria-label="Quick times">' +
+            '    <button type="button" class="mpwem-custom-time-picker__preset" data-preset="09:00">9:00 AM</button>' +
+            '    <button type="button" class="mpwem-custom-time-picker__preset" data-preset="12:00">12:00 PM</button>' +
+            '    <button type="button" class="mpwem-custom-time-picker__preset" data-preset="15:00">3:00 PM</button>' +
+            '    <button type="button" class="mpwem-custom-time-picker__preset" data-preset="18:00">6:00 PM</button>' +
+            '    <button type="button" class="mpwem-custom-time-picker__preset" data-preset="20:00">8:00 PM</button>' +
+            '  </div>' +
+            '  <div class="mpwem-custom-time-picker__foot">' +
+            '    <button type="button" class="mpwem-custom-time-picker__now">Now</button>' +
+            '    <div class="mpwem-custom-time-picker__foot-actions">' +
+            '      <button type="button" class="mpwem-custom-time-picker__clear">Clear</button>' +
+            '      <button type="button" class="mpwem-custom-time-picker__done">Done</button>' +
+            '    </div>' +
+            '  </div>' +
+            '</div>'
+        );
+
+        $('body').append($picker);
+        return $picker;
+    }
+
+    function positionCustomTimePicker($picker, $input) {
+        const offset = $input.offset();
+        const wasOpen = $picker.hasClass('is-open');
+        const previousVisibility = $picker.css('visibility');
+
+        if (!wasOpen) {
+            $picker.css('visibility', 'hidden').addClass('is-open');
+        }
+
+        const width = $picker.outerWidth();
+        const height = $picker.outerHeight();
+        const inputHeight = $input.outerHeight();
+        const scrollTop = $(window).scrollTop();
+        const viewportRight = $(window).scrollLeft() + $(window).width();
+        const viewportBottom = scrollTop + $(window).height();
+        const spaceBelow = viewportBottom - (offset.top + inputHeight);
+        const spaceAbove = offset.top - scrollTop;
+        let left = offset.left;
+        let top = offset.top + inputHeight + 8;
+
+        if (left + width > viewportRight - 12) {
+            left = Math.max(12, viewportRight - width - 12);
+        }
+
+        if (height && spaceBelow < height + 12 && spaceAbove > spaceBelow) {
+            top = Math.max(scrollTop + 12, offset.top - height - 8);
+        }
+
+        $picker.css({
+            top: top,
+            left: left
+        });
+
+        if (!wasOpen) {
+            $picker.removeClass('is-open').css('visibility', previousVisibility);
+        }
+    }
+
+    function renderCustomTimePicker($picker) {
+        const state = $picker.data('mpwemState');
+        if (!state) return;
+
+        const parts = toPickerParts(state.hour, state.minute);
+        $picker.find('.mpwem-custom-time-picker__preview-hour').text(String(parts.hour12).padStart(2, '0'));
+        $picker.find('.mpwem-custom-time-picker__preview-minute').text(String(parts.minute).padStart(2, '0'));
+        $picker.find('.mpwem-custom-time-picker__preview-period').text(parts.period);
+
+        $picker.find('[data-time-hour]').removeClass('is-selected').filter('[data-time-hour="' + parts.hour12 + '"]').addClass('is-selected');
+        $picker.find('[data-time-minute]').removeClass('is-selected').filter('[data-time-minute="' + parts.minute + '"]').addClass('is-selected');
+        $picker.find('[data-time-period]').removeClass('is-selected').filter('[data-time-period="' + parts.period + '"]').addClass('is-selected');
+
+        const $minutes = $picker.find('.mpwem-custom-time-picker__minutes');
+        $minutes.find('[data-time-minute].is-custom').remove();
+        if (parts.minute % 5 !== 0) {
+            const $custom = $('<button type="button" class="mpwem-custom-time-picker__chip is-custom is-selected"></button>')
+                .attr('data-time-minute', parts.minute)
+                .text(String(parts.minute).padStart(2, '0'));
+            $minutes.append($custom);
+        }
+    }
+
+    function applyCustomTimePickerValue($picker, closeAfter) {
+        const state = $picker.data('mpwemState');
+        if (!state || !state.$input) return;
+
+        state.$input.val(formatTimeValue(state.hour, state.minute)).trigger('change');
+        if (closeAfter) closeCustomTimePicker();
+    }
+
+    function openCustomTimePicker($input) {
+        closeCustomCalendar();
+
+        const $picker = ensureCustomTimePicker();
+        const parsed = parseTimeValue($input.val());
+        const now = new Date();
+        const hour = parsed ? parsed.hour : now.getHours();
+        const minute = parsed ? parsed.minute : Math.round(now.getMinutes() / 5) * 5 % 60;
+
+        $picker.data('mpwemState', {
+            $input: $input,
+            hour: hour,
+            minute: minute
+        });
+
+        renderCustomTimePicker($picker);
+        positionCustomTimePicker($picker, $input);
+        $picker.addClass('is-open');
+        $input.addClass('is-time-picker-open');
+    }
+
+    function closeCustomTimePicker() {
+        const $picker = $('#mpwem_custom_time_picker');
+        const state = $picker.data('mpwemState');
+        if (state && state.$input) {
+            state.$input.removeClass('is-time-picker-open');
+        }
+        $picker.removeClass('is-open');
+    }
+
+    function bindCustomTimePicker() {
+        if (window.mpwemCustomTimePickerBound) return;
+
+        $(document).on('mousedown click focus', '.mpwem-time-input.mpwem-custom-time-enabled', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const $input = $(this);
+            const $picker = $('#mpwem_custom_time_picker');
+            const state = $picker.data('mpwemState');
+            if ($picker.hasClass('is-open') && state && state.$input && state.$input[0] === $input[0]) {
+                return;
+            }
+            if (typeof this.blur === 'function') {
+                this.blur();
+            }
+            openCustomTimePicker($input);
+        });
+
+        $(document).on('keydown', '.mpwem-time-input.mpwem-custom-time-enabled', function(e) {
+            if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                openCustomTimePicker($(this));
+            } else if (e.key === 'Escape') {
+                closeCustomTimePicker();
+            } else if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete') {
+                // Keep the field keyboard-locked; the custom picker owns edits.
+                e.preventDefault();
+            }
+        });
+
+        $(document).on('click', '.mpwem-custom-time-picker__chip[data-time-hour]', function(e) {
+            e.preventDefault();
+            const $picker = $('#mpwem_custom_time_picker');
+            const state = $picker.data('mpwemState');
+            if (!state) return;
+
+            const parts = toPickerParts(state.hour, state.minute);
+            const next = fromPickerParts(parseInt($(this).data('time-hour'), 10), parts.minute, parts.period);
+            state.hour = next.hour;
+            state.minute = next.minute;
+            $picker.data('mpwemState', state);
+            renderCustomTimePicker($picker);
+            applyCustomTimePickerValue($picker, false);
+        });
+
+        $(document).on('click', '.mpwem-custom-time-picker__chip[data-time-minute]', function(e) {
+            e.preventDefault();
+            const $picker = $('#mpwem_custom_time_picker');
+            const state = $picker.data('mpwemState');
+            if (!state) return;
+
+            state.minute = parseInt($(this).data('time-minute'), 10);
+            $picker.data('mpwemState', state);
+            renderCustomTimePicker($picker);
+            applyCustomTimePickerValue($picker, false);
+        });
+
+        $(document).on('click', '.mpwem-custom-time-picker__period-btn', function(e) {
+            e.preventDefault();
+            const $picker = $('#mpwem_custom_time_picker');
+            const state = $picker.data('mpwemState');
+            if (!state) return;
+
+            const parts = toPickerParts(state.hour, state.minute);
+            const next = fromPickerParts(parts.hour12, parts.minute, $(this).data('time-period'));
+            state.hour = next.hour;
+            state.minute = next.minute;
+            $picker.data('mpwemState', state);
+            renderCustomTimePicker($picker);
+            applyCustomTimePickerValue($picker, false);
+        });
+
+        $(document).on('click', '.mpwem-custom-time-picker__preset', function(e) {
+            e.preventDefault();
+            const $picker = $('#mpwem_custom_time_picker');
+            const state = $picker.data('mpwemState');
+            const parsed = parseTimeValue($(this).data('preset'));
+            if (!state || !parsed) return;
+
+            state.hour = parsed.hour;
+            state.minute = parsed.minute;
+            $picker.data('mpwemState', state);
+            renderCustomTimePicker($picker);
+            applyCustomTimePickerValue($picker, true);
+        });
+
+        $(document).on('click', '.mpwem-custom-time-picker__now', function(e) {
+            e.preventDefault();
+            const $picker = $('#mpwem_custom_time_picker');
+            const state = $picker.data('mpwemState');
+            if (!state) return;
+
+            const now = new Date();
+            state.hour = now.getHours();
+            state.minute = Math.round(now.getMinutes() / 5) * 5 % 60;
+            $picker.data('mpwemState', state);
+            renderCustomTimePicker($picker);
+            applyCustomTimePickerValue($picker, true);
+        });
+
+        $(document).on('click', '.mpwem-custom-time-picker__clear', function(e) {
+            e.preventDefault();
+            const $picker = $('#mpwem_custom_time_picker');
+            const state = $picker.data('mpwemState');
+            if (!state || !state.$input) return;
+
+            state.$input.val('').trigger('change');
+            closeCustomTimePicker();
+        });
+
+        $(document).on('click', '.mpwem-custom-time-picker__done', function(e) {
+            e.preventDefault();
+            applyCustomTimePickerValue($('#mpwem_custom_time_picker'), true);
+        });
+
+        window.mpwemCustomTimePickerBound = true;
+    }
+
+    function enhanceCustomTimePicker($panel) {
+        bindCustomTimePicker();
+        $panel.find('input[type="time"]').each(function() {
+            const $input = $(this);
+            if ($input.data('mpwemCustomTime')) return;
+
+            const $label = $input.closest('label');
+            if ($label.length) {
+                $label.addClass('mpwem-time-input-wrap');
+            } else if (!$input.parent().hasClass('mpwem-time-input-wrap')) {
+                $input.wrap('<span class="mpwem-time-input-wrap"></span>');
+            }
+
+            $input
+                .addClass('mpwem-time-input mpwem-custom-time-enabled')
+                .attr({
+                    autocomplete: 'off',
+                    readonly: 'readonly',
+                    inputmode: 'none'
+                })
+                .data('mpwemCustomTime', true);
+
+            if (this.addEventListener) {
+                this.addEventListener('showPicker', function(event) {
+                    event.preventDefault();
+                });
+            }
         });
     }
 
@@ -4841,6 +5634,34 @@
             enhanceTaxonomyCard($root);
             if (stepKey === 'date') {
                 enhanceDateStep($root);
+            }
+            // Attendee Form (PRO formBuilder) must init only when Advanced is painted —
+            // building while the step is display:none leaves an empty canvas.
+            if (stepKey === 'display') {
+                // Expand Attendee Form when a registration form is already selected/saved,
+                // then init formBuilder after the step has been painted.
+                window.requestAnimationFrame(function() {
+                    window.setTimeout(function() {
+                        const $attendeeMount = $root.find('#mpwem_wizard_attendee_form_mount').first();
+                        const hasSavedForm = !!(window.mepFbEventBuilder && window.mepFbEventBuilder.formSource && String(window.mepFbEventBuilder.formSource) !== 'custom_form');
+                        const $formSelect = $attendeeMount.find('#mep_event_reg_form_list').first();
+                        const selectVal = $formSelect.length ? String($formSelect.val() || '') : '';
+                        const hasFormChoice = hasSavedForm || selectVal === 'custom_form' || (/^\d+$/.test(selectVal) && parseInt(selectVal, 10) > 0);
+                        if ($attendeeMount.length && hasFormChoice && $attendeeMount.hasClass('is-collapsed')) {
+                            const $toggle = $attendeeMount.find('.mpwem-display-toggle').first();
+                            if ($toggle.length) {
+                                $toggle.prop('checked', true).trigger('change');
+                            } else {
+                                $attendeeMount.removeClass('is-collapsed').addClass('is-expanded');
+                                $attendeeMount.children('.mpwem-display-section__body').first().show();
+                            }
+                        }
+                        if (typeof window.mepFbEventBuilderInit === 'function') {
+                            window.mepFbEventBuilderInit(true);
+                        }
+                        $(document).trigger('mpwem:display-step-active', [$root, $panel]);
+                    }, 120);
+                });
             }
         }
 
@@ -5957,10 +6778,56 @@
         const syncSpeakerToggle = function() {
             const $toggle = $root.find('#mpwem_enable_speaker_toggle');
             if (!$toggle.length) return;
-            $root.find('#mpwem_speaker_card_body').toggle($toggle.is(':checked'));
+            const enabled = $toggle.is(':checked');
+            $root.find('#mpwem_speaker_card_body').toggle(enabled);
+            // Card-head toggle owns the saved value in the modern editor; strip
+            // the nested panel control so we never submit two same-named fields.
+            const $nested = $root.find('#mpwem_wizard_speaker_mount #mep_event_enable_speaker');
+            if ($nested.length) {
+                $nested.prop('checked', enabled).attr('value', enabled ? 'yes' : 'no').removeAttr('name');
+            }
+            $root.find('#mpwem_wizard_speaker_mount #mpwem-speaker-fields').toggle(enabled);
         };
         $root.on('change', '#mpwem_enable_speaker_toggle', syncSpeakerToggle);
         syncSpeakerToggle();
+        initSpeakerPicker($root);
+
+        // Description editor: keep visual padding inside the TinyMCE content area.
+        (function padDescriptionEditor() {
+            const applyPadding = function(editor) {
+                if (!editor || !editor.getBody) {
+                    return;
+                }
+                const body = editor.getBody();
+                if (!body) {
+                    return;
+                }
+                body.style.padding = '16px 18px';
+                body.style.margin = '0';
+                body.style.boxSizing = 'border-box';
+            };
+
+            if (window.tinymce) {
+                const existing = window.tinymce.get('mpwem_wizard_content');
+                if (existing) {
+                    if (existing.initialized) {
+                        applyPadding(existing);
+                    } else {
+                        existing.on('init', function() {
+                            applyPadding(existing);
+                        });
+                    }
+                }
+                window.tinymce.on('AddEditor', function(event) {
+                    if (!event || !event.editor || event.editor.id !== 'mpwem_wizard_content') {
+                        return;
+                    }
+                    event.editor.on('init', function() {
+                        applyPadding(event.editor);
+                    });
+                });
+            }
+        })();
 
         // Clear the required-field highlight as soon as the user fills the field.
         $root.on('input change', '.mpwem-field-error', function() {
@@ -6023,42 +6890,58 @@
 
         // Show a success popup with a "Preview" button right after a
         // publish/update/save redirect (see $notice_key in handle_save()).
+        // Prefer the server-rendered data-save-notice attribute so the modal
+        // still appears if the query string is altered before JS runs.
         (function() {
-            let params;
-            try {
-                params = new URLSearchParams(window.location.search);
-            } catch (e) {
-                return;
-            }
-
             const successMessages = {
                 published: ['Event published', 'Your event is live. Attendees can now view and register for it.'],
                 drafted: ['Event switched to draft', 'Your event is saved as a draft and is not visible to the public yet.'],
                 saved: ['Event saved', 'Your changes have been saved successfully.']
             };
 
-            let noticeKey = '';
-            for (const key in successMessages) {
-                if (params.get(key) === '1') {
-                    noticeKey = key;
-                    break;
-                }
+            let noticeKey = ($root.attr('data-save-notice') || '').toString();
+            if (!successMessages[noticeKey]) {
+                noticeKey = '';
+            }
+
+            let params = null;
+            try {
+                params = new URLSearchParams(window.location.search);
+            } catch (e) {
+                params = null;
+            }
+
+            if (!noticeKey && params) {
+                Object.keys(successMessages).some(function(key) {
+                    const val = params.get(key);
+                    if (val === '1' || val === 'true') {
+                        noticeKey = key;
+                        return true;
+                    }
+                    return false;
+                });
             }
             if (!noticeKey) return;
 
             // Strip the notice param so refreshing the page doesn't re-show the popup.
-            params.delete(noticeKey);
-            const cleanedSearch = params.toString();
-            const cleanedUrl = window.location.pathname + (cleanedSearch ? '?' + cleanedSearch : '') + window.location.hash;
-            if (window.history && window.history.replaceState) {
-                window.history.replaceState(null, '', cleanedUrl);
+            if (params) {
+                params.delete(noticeKey);
+                const cleanedSearch = params.toString();
+                const cleanedUrl = window.location.pathname + (cleanedSearch ? '?' + cleanedSearch : '') + window.location.hash;
+                if (window.history && window.history.replaceState) {
+                    window.history.replaceState(null, '', cleanedUrl);
+                }
             }
+            $root.removeAttr('data-save-notice');
 
-            const previewUrl = ($root.data('frontend-url') || '').toString();
-            const [title, message] = successMessages[noticeKey];
+            const previewUrl = ($root.attr('data-frontend-url') || $root.data('frontendUrl') || '').toString();
+            const pair = successMessages[noticeKey];
+            const title = pair[0];
+            const message = pair[1];
             window.setTimeout(function() {
                 showSaveSuccessModal(title, message, previewUrl);
-            }, 400);
+                showNotice($root, message, 'success');
+            }, 500);
         })();
 
         try {
@@ -6120,13 +7003,13 @@
             }
         });
 
-        // Topbar "Save" Button Handler
+        // Topbar "Save as Draft" — keep status as draft and show the drafted notice.
         $root.on('click', '.mpwem-wizard-save-draft', function(e) {
             e.preventDefault();
             if (!validateDateWiseGlobalQty($root)) {
                 return;
             }
-            submitEventForm($root, '');
+            submitEventForm($root, 'draft');
         });
 
         $root.on('click', '.mpwem-status-actions__primary', function(e) {
@@ -6229,6 +7112,7 @@
         try {
             enhanceVenueGrid($classicRoot);
             enhanceEventType($classicRoot, { skipTicketSync: true });
+            initSpeakerPicker($classicRoot);
         } catch (error) {
             if (window.console && window.console.error) {
                 window.console.error('MPWEM classic venue/event-type enhancement failed.', error);
