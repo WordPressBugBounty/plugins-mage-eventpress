@@ -2,7 +2,7 @@
 Contributors: magepeopleteam, aamahin
 Tags: events, event tickets, event registration, woocommerce, booking
 Requires at least: 5.3
-Stable tag: 5.5.0
+Stable tag: 5.6.0
 Tested up to: 7.0
 WC requires at least: 3.0
 WC tested up to: 10.7
@@ -286,6 +286,22 @@ Please report security bugs through the [Patchstack Vulnerability Disclosure Pro
 
 
 == Changelog ==
+
+= 5.6.0 =
+* Security Fix: Restricted the payment gateway settings save handler and credential modals to Administrators — a Contributor-level user could previously overwrite or read live PayPal/Stripe credentials and other site-wide payment settings.
+* Security Fix: Added a missing capability check to the RSVP responses AJAX handler and moved admin RSVP endpoints onto a dedicated nonce — a logged-in Subscriber could previously read every RSVP submission (name, email, phone) on the site using the nonce issued to the public RSVP form.
+* Fix: Corrected recurring calendar events drifting onto the wrong weekday from the second month onward.
+* Fix: Corrected events with multiple added dates showing only their first date on the calendar, and events whose first date had passed being dropped from the calendar entirely.
+* Fix: Corrected Calendar Settings colors (header, today highlight, borders, buttons, events) and the Language setting having no effect on the frontend.
+* Fix: Corrected admin "Book an Event" orders omitting attendee details (ticket type, price, registration-form fields, extra services, location) from order emails, and made order meta reachable under High-Performance Order Storage.
+* Fix: Corrected the admin script handle registration so scripts that depend on it (e.g. the Pro admin bundle) load on every admin screen instead of only this plugin's own pages.
+* Fix: Event descriptions are now always rendered in full instead of being truncated out of the page, keeping hidden content available to search engines, screen readers, and interactive blocks.
+* Fix: Corrected the Modern Editor's Advanced and Global settings not being saved.
+* Fix: Corrected the attendee registration form's disabled state being lost after certain Modern Editor interactions.
+* Fix: The "event already added to cart" notice is now translatable, and shoppers are redirected to the cart when a duplicate add-to-cart is rejected instead of the page silently reloading with no message.
+* Fix: Regenerated the translation template (POT) against the current version and stopped exposing 1,000+ FontAwesome icon slugs as translatable strings, which had been crowding out real UI strings (e.g. "Book") in translation tools.
+* Fix: Corrected inline validation feedback not appearing for malformed attendee field values (e.g. email) in the Horizon theme's booking drawer.
+* Improvement: Added a mpwem_settings_group_children filter so add-ons can nest their own settings pages under Events → Settings instead of registering a separate top-level menu.
 
 = 5.5.0 =
 * Fix: Corrected a critical performance issue where the event list's expiry filtering built a database query WordPress could not optimize, causing full-table scans against post meta on sites with a large postmeta table. Rewrote it as a targeted, indexed lookup.

@@ -213,6 +213,12 @@
 		}
 
 		function render_gateway_modals() {
+			// These modals expose live gateway credentials and a save nonce, so
+			// they are limited to the capability that owns the Payment settings
+			// page. The event screens only require edit_posts.
+			if ( ! current_user_can( 'manage_options' ) ) {
+				return;
+			}
 			$screen = get_current_screen();
 			if ( ! $screen || ! in_array( $screen->id, array( 'mep_events_page_mep_event_settings_page', 'mep_events', 'mep_events_page_mpwem_event_edit' ), true ) ) {
 				return;
@@ -595,15 +601,15 @@
 
 		function ajax_save_gateway_settings() {
 			check_ajax_referer( 'mep_save_gateway', 'nonce' );
-			// The PayPal/Stripe Configure modals are reachable from both the Global
-			// Payment Settings page (manage_options) and the Event Edit → Payment
-			// Configuration modal (edit_posts). Allow either so the real-time save
-			// works in both contexts.
-			if ( ! current_user_can( 'manage_options' ) && ! current_user_can( 'edit_posts' ) ) {
+			// This writes the site-wide payment_setting_sec option (gateway
+			// credentials and enable flags), so it requires the same capability as
+			// the Payment settings page that owns those values. The Configure
+			// modals are only rendered for that capability as well.
+			if ( ! current_user_can( 'manage_options' ) ) {
 				wp_send_json_error( __( 'Permission denied.', 'mage-eventpress' ) );
 			}
 			$gateway  = sanitize_key( $_POST['gateway'] ?? '' );
-			$fields   = $_POST['fields'] ?? array();
+			$fields   = isset( $_POST['fields'] ) && is_array( $_POST['fields'] ) ? wp_unslash( $_POST['fields'] ) : array();
 			$existing = get_option( 'payment_setting_sec', array() );
 			if ( ! is_array( $existing ) ) {
 				$existing = array();
@@ -1518,7 +1524,7 @@ tr.payment_tabs_html { display: none !important; }
 								'label'   => __( 'Google Map Type', 'mage-eventpress' ),
 								'desc'    => __( 'Choose how maps appear on the site. API maps are more accurate and support drag-and-drop.', 'mage-eventpress' ),
 								'type'    => 'select',
-								'default' => 'yes',
+								'default' => 'iframe',
 								'options' => array(
 									''       => 'Please Select a Map Type',
 									'api'    => 'API',
@@ -1537,7 +1543,7 @@ tr.payment_tabs_html { display: none !important; }
 								'label'   => __( 'Event Expiry Time', 'mage-eventpress' ),
 								'desc'    => __( 'When the event should stop accepting bookings.', 'mage-eventpress' ),
 								'type'    => 'select',
-								'default' => 'mep_event_start_date',
+								'default' => 'event_start_datetime',
 								'options' => array(
 									'event_start_datetime'  => 'Event Start Time',
 									'event_expire_datetime' => 'Event End Time'
@@ -1857,7 +1863,7 @@ tr.payment_tabs_html { display: none !important; }
 								'label'   => __( 'Date Picker Format', 'mage-eventpress' ),
 								'desc'    => __( 'Date format for the date picker. Avoid text-based formats on non-English sites.', 'mage-eventpress' ),
 								'type'    => 'select',
-								'default' => 'no',
+								'default' => 'yy-mm-dd',
 								'options' => array(
 									'yy-mm-dd'   => $current_date,
 									'yy/mm/dd'   => date( 'Y/m/d', strtotime( $current_date ) ),
@@ -2110,6 +2116,27 @@ tr.payment_tabs_html { display: none !important; }
 								)
 							),
 							array(
+								'name'    => 'mep_enable_description_read_more',
+								'label'   => __( 'Collapse Long Event Descriptions', 'mage-eventpress' ),
+								'desc'    => __( 'Show a Read More control for long event descriptions. Content is collapsed only between complete blocks so interactive blocks keep working.', 'mage-eventpress' ),
+								'type'    => 'select',
+								'default' => 'yes',
+								'options' => array(
+									'yes' => 'Yes',
+									'no'  => 'No'
+								)
+							),
+							array(
+								'name'    => 'mep_description_read_more_word_limit',
+								'label'   => __( 'Description Read More Word Limit', 'mage-eventpress' ),
+								'desc'    => __( 'Collapse descriptions longer than this many words. The visible excerpt may include a few extra words so HTML and interactive blocks are never split.', 'mage-eventpress' ),
+								'type'    => 'number',
+								'default' => 200,
+								'min'     => 1,
+								'max'     => 5000,
+								'step'    => 1,
+							),
+							array(
 								'name'    => 'mep_event_hide_description_title',
 								'label'   => __( 'Hide Description Title', 'mage-eventpress' ),
 								'desc'    => __( 'Choose Yes to hide this on the event page, or No to show it.', 'mage-eventpress' ),
@@ -2305,7 +2332,7 @@ tr.payment_tabs_html { display: none !important; }
 								'label'   => __( 'Auto Play', 'mage-eventpress' ),
 								'desc'    => __( 'Automatically advance carousel slides.', 'mage-eventpress' ),
 								'type'    => 'select',
-								'default' => 'yes',
+								'default' => 'true',
 								'options' => array(
 									'true'  => 'Yes',
 									'false' => 'No'
@@ -2316,7 +2343,7 @@ tr.payment_tabs_html { display: none !important; }
 								'label'   => __( 'Infinite Loop', 'mage-eventpress' ),
 								'desc'    => __( 'Restart the carousel after the last slide.', 'mage-eventpress' ),
 								'type'    => 'select',
-								'default' => 'yes',
+								'default' => 'true',
 								'options' => array(
 									'true'  => 'Yes',
 									'false' => 'No'
