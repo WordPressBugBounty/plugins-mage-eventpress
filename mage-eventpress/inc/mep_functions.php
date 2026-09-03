@@ -253,30 +253,51 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 			return $qty;
 		}
 	}
-	function mep_get_page_by_slug( $page_slug, $output = OBJECT, $post_type = 'page' ) {
-		global $wpdb;
-		if ( is_array( $post_type ) ) {
-			$post_type           = esc_sql( $post_type );
-			$post_type_in_string = "'" . implode( "','", $post_type ) . "'";
-			$sql                 = $wpdb->prepare( "
-			SELECT ID
-			FROM $wpdb->posts
-			WHERE post_name = %s
-			AND post_type IN ($post_type_in_string)
-		", $page_slug );
-		} else {
-			$sql = $wpdb->prepare( "
-			SELECT ID
-			FROM $wpdb->posts
-			WHERE post_name = %s
-			AND post_type = %s
-		", $page_slug, $post_type );
+	/**
+	 * Look a page up by slug, optionally across several post types.
+	 *
+	 * The post types used to be interpolated into the statement and only $page_slug was
+	 * passed to prepare(), which left the SQL depending on esc_sql() rather than on the
+	 * placeholder machinery, and gave prepare() a single placeholder to fill. If a caller
+	 * ever passed an array of slugs, prepare() saw one placeholder against several
+	 * arguments, logged "The query only expected one placeholder, but an array of multiple
+	 * placeholders was sent" and returned null - so get_var() ran an empty query and the
+	 * lookup silently found nothing. Every value is a placeholder now, and the slug is
+	 * forced to a single scalar.
+	 *
+	 * Guarded with function_exists() as well: the name is generic and was declared
+	 * unconditionally here while a second, different implementation further down this
+	 * same file was already guarded, so anything else defining it first fatally clashed.
+	 *
+	 * @param string       $page_slug
+	 * @param string       $output
+	 * @param string|array $post_type
+	 * @return WP_Post|array|null
+	 */
+	if ( ! function_exists( 'mep_get_page_by_slug' ) ) {
+		function mep_get_page_by_slug( $page_slug, $output = OBJECT, $post_type = 'page' ) {
+			global $wpdb;
+			if ( is_array( $page_slug ) ) {
+				$page_slug = reset( $page_slug );
+			}
+			if ( ! is_scalar( $page_slug ) || '' === (string) $page_slug ) {
+				return null;
+			}
+			$post_types = array_values( array_filter( array_map( 'strval', (array) $post_type ) ) );
+			if ( ! $post_types ) {
+				$post_types = array( 'page' );
+			}
+			$placeholders = implode( ', ', array_fill( 0, count( $post_types ), '%s' ) );
+			$sql          = $wpdb->prepare(
+				"SELECT ID FROM {$wpdb->posts} WHERE post_name = %s AND post_type IN ( $placeholders )", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- placeholders only
+				array_merge( array( (string) $page_slug ), $post_types )
+			);
+			$page = $wpdb->get_var( $sql );
+			if ( $page ) {
+				return get_post( $page, $output );
+			}
+			return null;
 		}
-		$page = $wpdb->get_var( $sql );
-		if ( $page ) {
-			return get_post( $page, $output );
-		}
-		return null;
 	}
 	function mep_add_event_into_feed_request( $qv ) {
 		if ( isset( $qv['feed'] ) ) {
@@ -375,7 +396,7 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 		function mep_get_attendee_info_query( $event_id, $order_id ) {
 			$_user_set_status    = mep_get_option( 'seat_reserved_order_status', 'general_setting_sec', array( 'processing', 'completed' ) );
 			$_order_status       = ! empty( $_user_set_status ) ? $_user_set_status : array( 'processing', 'completed' );
-			$order_status        = array_values( $_order_status );
+			$order_status        = array_values( array_filter( (array) $_order_status ) ?: array( 'processing', 'completed' ) );
 			$order_status_filter = array(
 				'key'     => 'ea_order_status',
 				'value'   => $order_status,
@@ -844,6 +865,120 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 		}
 	}
 
+	if ( ! function_exists( 'mep_normalize_order_status_list' ) ) {
+		/**
+		 * Reduce a stored multicheck value to a plain list of status slugs.
+		 *
+		 * These settings are declared as multicheck, so a saved value is normally
+		 * a slug => slug map. Values written by the addon upgrade routines are
+		 * plain strings instead, which a naive is_array() check throws away. Take
+		 * both shapes, plus a comma separated string, and return one list.
+		 *
+		 * @param mixed $value Raw option value.
+		 * @return array List of sanitized status keys.
+		 */
+		function mep_normalize_order_status_list( $value ) {
+			if ( is_string( $value ) ) {
+				$value = '' === trim( $value ) ? array() : explode( ',', $value );
+			}
+
+			if ( ! is_array( $value ) ) {
+				return array();
+			}
+
+			// Legacy "off" sentinel from older defaults — never a real order status.
+			unset( $value['disable_email'] );
+
+			$statuses = array_map( 'sanitize_key', array_values( $value ) );
+			$statuses = array_filter( $statuses, function ( $status ) {
+				return '' !== $status && 'disable_email' !== $status;
+			} );
+
+			return array_values( array_unique( $statuses ) );
+		}
+	}
+
+	if ( ! function_exists( 'mep_get_email_sending_order_statuses' ) ) {
+		/**
+		 * Order statuses that trigger the event confirmation email.
+		 *
+		 * The settings screen renders "Completed" ticked whenever the key has
+		 * never been saved, while every runtime caller defaulted to a
+		 * `disable_email` sentinel. A site that never opened that panel therefore
+		 * showed the trigger as on and sent nothing. Both sides now resolve from
+		 * here: a missing key means the default the screen displays, and a key
+		 * saved empty means the admin deliberately unticked every status.
+		 *
+		 * @return array List of sanitized order status keys.
+		 */
+		function mep_get_email_sending_order_statuses() {
+			$section  = get_option( 'email_setting_sec' );
+			$section  = is_array( $section ) ? $section : array();
+			$statuses = array_key_exists( 'mep_email_sending_order_status', $section )
+				? mep_normalize_order_status_list( $section['mep_email_sending_order_status'] )
+				: array( 'completed' );
+
+			$statuses = apply_filters( 'mep_email_sending_order_statuses', $statuses );
+
+			return is_array( $statuses ) ? array_values( $statuses ) : array();
+		}
+	}
+
+	if ( ! function_exists( 'mep_get_pdf_email_statuses' ) ) {
+		/**
+		 * Order statuses that send the PDF ticket email.
+		 *
+		 * The upgrade routine writes this key as a plain string, while the
+		 * settings screen reads it as a multicheck map and discarded anything
+		 * that was not already an array — so a migrated site saw every box
+		 * unticked while the sender was still bound to the migrated status, and
+		 * saving that panel wiped the binding for good. Normalize instead of
+		 * discarding. There is no invented default: an unset key means off, which
+		 * is what the screen has always shown.
+		 *
+		 * @return array List of sanitized status keys.
+		 */
+		function mep_get_pdf_email_statuses() {
+			$section = get_option( 'mep_pdf_email_settings' );
+			$section = is_array( $section ) ? $section : array();
+			$value   = array_key_exists( 'mep_pdf_email_status', $section ) ? $section['mep_pdf_email_status'] : array();
+
+			return mep_normalize_order_status_list( $value );
+		}
+	}
+
+	if ( ! function_exists( 'mep_get_confirmation_email_subject' ) ) {
+		/**
+		 * Subject line for the event confirmation email.
+		 *
+		 * The sender fell back to "Confirmation Email" while the settings screen
+		 * advertised "Event Notification", so an admin who never saved a subject
+		 * was shown a subject their customers never received. The sender's string
+		 * wins because that is what has actually been delivered; the screen now
+		 * resolves the same way instead of the default being written twice.
+		 *
+		 * @return string
+		 */
+		function mep_get_confirmation_email_subject() {
+			$subject = mep_get_option( 'mep_email_subject', 'email_setting_sec', '' );
+			$subject = is_string( $subject ) ? trim( $subject ) : '';
+
+			return '' !== $subject ? $subject : __( 'Confirmation Email', 'mage-eventpress' );
+		}
+	}
+
+	if ( ! function_exists( 'mep_email_sends_on_order_status' ) ) {
+		/**
+		 * Whether the confirmation email is configured to fire on this status.
+		 *
+		 * @param string $order_status WooCommerce/native order status.
+		 * @return bool
+		 */
+		function mep_email_sends_on_order_status( $order_status ) {
+			return in_array( sanitize_key( $order_status ), mep_get_email_sending_order_statuses(), true );
+		}
+	}
+
 	if ( ! function_exists( 'mep_should_send_billing_confirmation' ) ) {
 		/**
 		 * Whether the global confirmation settings allow a billing email now.
@@ -856,10 +991,7 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 				return false;
 			}
 
-			$statuses = mep_get_option( 'mep_email_sending_order_status', 'email_setting_sec', array( 'disable_email' => 'disable_email' ) );
-			$statuses = is_array( $statuses ) ? $statuses : array();
-
-			return in_array( sanitize_key( $order_status ), array_map( 'sanitize_key', $statuses ), true );
+			return mep_email_sends_on_order_status( $order_status );
 		}
 	}
 
@@ -870,13 +1002,12 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 			$global_email_text       = mep_get_option( 'mep_confirmation_email_text', 'email_setting_sec', '' );
 			$global_email_form_email = mep_get_option( 'mep_email_form_email', 'email_setting_sec', '' );
 			$global_email_form_name  = mep_get_option( 'mep_email_form_name', 'email_setting_sec', '' );
-			$global_email_subject    = mep_get_option( 'mep_email_subject', 'email_setting_sec', '' );
 			// Site Info
 			$admin_email = get_option( 'admin_email' );
 			$site_name   = get_option( 'blogname' );
 			$form_email  = ! empty( $global_email_form_email ) ? $global_email_form_email : $admin_email;
 			$form_name   = ! empty( $global_email_form_name ) ? $global_email_form_name : $site_name;
-			$email_sub   = ! empty( $global_email_subject ) ? $global_email_subject : 'Confirmation Email';
+			$email_sub   = mep_get_confirmation_email_subject();
 			$email_body = mep_resolve_confirmation_email_body( $event_id, $global_email_text );
 			// Dynamic Content Replace
 			$email_body = mep_email_dynamic_content( $email_body, $event_id, $order_id, $attendee_id, $event_ticket_info_arr );
@@ -1417,7 +1548,7 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 					)
 				)
 			);
-			$loop                     = new WP_Query( $args );
+			$loop = new WP_Query( mep_as_count_query_args( $args ) );
 			return $loop->post_count;
 		}
 	}
@@ -2308,12 +2439,43 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 			}
 		}
 	}
+	if ( ! function_exists( 'mep_as_count_query_args' ) ) {
+		/**
+		 * Turn a WP_Query argument set into a count-only query.
+		 *
+		 * Several places in this plugin build a full WP_Query — usually with
+		 * `posts_per_page => -1` — and then read nothing but `post_count`. That
+		 * hydrates every matching post object and primes its meta and terms just
+		 * to arrive at a number. On an event with thousands of attendees, and
+		 * called once per ticket type per event date, it is the single most
+		 * expensive thing the plugin does.
+		 *
+		 * Passing the arguments through here keeps the query — every meta_query
+		 * clause, every filter hook that extends it — and only stops the result
+		 * from being hydrated.
+		 *
+		 * @param array $args WP_Query arguments.
+		 * @return array
+		 */
+		function mep_as_count_query_args( $args ) {
+			$args = is_array( $args ) ? $args : array();
+
+			$args['fields']                 = 'ids';
+			$args['no_found_rows']          = true;
+			$args['update_post_meta_cache'] = false;
+			$args['update_post_term_cache'] = false;
+			$args['ignore_sticky_posts']    = true;
+			$args['cache_results']          = false;
+
+			return $args;
+		}
+	}
 	if ( ! function_exists( 'mep_ticket_type_sold' ) ) {
 		function mep_ticket_type_sold( $event_id, $type = '', $date = '' ) {
 			$type             = ! empty( $type ) ? $type : '';
 			$_user_set_status = mep_get_option( 'seat_reserved_order_status', 'general_setting_sec', array( 'processing', 'completed' ) );
 			$_order_status    = ! empty( $_user_set_status ) ? $_user_set_status : array( 'processing', 'completed' );
-			$order_status     = array_values( $_order_status );
+			$order_status     = array_values( array_filter( (array) $_order_status ) ?: array( 'processing', 'completed' ) );
 			if ( count( $order_status ) > 1 ) { // check if more then one tag
 				$order_status_filter['relation'] = 'OR';
 				foreach ( $order_status as $tag ) { // create a LIKE-comparison for every single tag
@@ -2350,7 +2512,7 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 					$order_status_filter
 				)
 			);
-			$loop        = new WP_Query( $args );
+			$loop = new WP_Query( mep_as_count_query_args( $args ) );
 			return $loop->post_count;
 		}
 	}
@@ -5605,12 +5767,7 @@ function mep_change_date_status() {
                         }
                     }
                 }
-                $url_date = isset( $_GET['date'] ) ? sanitize_text_field( wp_unslash( $_GET['date'] ) ) : null;
-                $url_date_2 = isset( $_GET['date_time'] ) ? sanitize_text_field( wp_unslash( $_GET['date_time'] ) ) : null;
-                $url_date=$url_date?:$url_date_2;
-                $url_date=$url_date ? date( 'Y-m-d H:i', $url_date ) : '';
-                $date_format = MPWEM_Global_Function::check_time_exit_date( $url_date ) ? 'Y-m-d H:i' : 'Y-m-d';
-                $url_date    = $url_date ? date( $date_format, strtotime($url_date) ) : '';
+                $url_date = MPWEM_Functions::get_requested_date();
                 $all_dates   = MPWEM_Functions::get_dates( $event_id );
                 $all_times   = MPWEM_Functions::get_times( $event_id, $all_dates, $url_date );
                 $upcoming_date                           =isset( $_POST['dates'] ) ? sanitize_text_field( wp_unslash( $_POST['dates'] ) ) : '';
@@ -5958,7 +6115,7 @@ function mep_change_date_status() {
                     )
                 );
             }
-            $loop = new WP_Query( $args );
+            $loop = new WP_Query( mep_as_count_query_args( $args ) );
             return $loop->post_count;
         }
     }

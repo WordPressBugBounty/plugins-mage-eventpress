@@ -94,14 +94,75 @@ function mpwem_mark_attendee_form_columns(parent) {
         $card.toggleClass('mep-form--cols-2', fieldCount > 4);
     });
 }
+/**
+ * Turn a freshly cloned attendee block back into real, submittable inputs.
+ *
+ * The blocks are cloned from .mep_attendee_info_hidden, whose controls are kept
+ * disabled (see mpwem_attendee_management), so every copy inherits that flag and
+ * has to be re-enabled once it lands in a real attendee container.
+ */
+function mpwem_enable_attendee_clone(target) {
+    if (!target || !target.length) {
+        return;
+    }
+    target.find('.mep-template-disabled')
+        .removeClass('mep-template-disabled')
+        .prop('disabled', false)
+        .removeAttr('disabled');
+}
+/**
+ * Make the booking form validatable, immediately before the browser validates it.
+ *
+ * Constraint validation runs *before* the submit event, so the submit handler further
+ * down cannot help here: when a required control sits in a display:none block the
+ * browser has nowhere to show the error, so it refuses to submit and tells the visitor
+ * nothing at all. The booking button just goes dead and only the console says why
+ * ("An invalid form control with name='user_name[]' is not focusable").
+ *
+ * The two blocks that can hold such a control are both ones the plugin itself marks as
+ * inert - the clone source and a conditional field whose condition is not met - so only
+ * those are touched, and only when the control is still empty. A value the visitor
+ * typed is never disabled, because disabled controls are left out of the posted data.
+ * Anything that becomes visible later is re-enabled by the code that reveals it.
+ */
+function mpwem_prepare_form_for_validation(parent) {
+    if (!parent || !parent.length) {
+        return;
+    }
+    parent.find('.mep_attendee_info_hidden').find('input, select, textarea').each(function () {
+        if (!jQuery(this).prop('disabled')) {
+            jQuery(this).addClass('mep-template-disabled').prop('disabled', true);
+        }
+    });
+    parent.find('.dNone').find('input, select, textarea').each(function () {
+        if (!this.required || this.disabled || this.type === 'hidden') {
+            return;
+        }
+        if (jQuery.trim(this.value || '') !== '') {
+            return;
+        }
+        jQuery(this).prop('disabled', true);
+    });
+}
 function mpwem_attendee_management(parent, total_qty) {
     let form_target = parent.find('.mep_attendee_info');
     let same_attendee = parent.find('[name="mep_same_attendee"]').val();
-    
+
     // Strip required attributes from hidden template inputs to avoid "invalid form control is not focusable" error
     parent.find('.mep_attendee_info_hidden').find('input, select, textarea').each(function () {
         if (jQuery(this).prop('required')) {
             jQuery(this).removeAttr('required').addClass('mep-originally-required');
+        }
+        // The hidden block is only a clone source, never something the visitor fills in,
+        // but it lives inside the registration form so its empty controls are posted
+        // alongside the real ones. Themes that move the attendee blocks further down the
+        // document - Horizon puts them in a drawer after </form> and re-attaches them with
+        // the form attribute, and form data is built in document order - then get that
+        // blank value at index 0 of every attendee array, which shifts every answer onto
+        // the wrong attendee and drops the last one's answers entirely. Disabled controls
+        // are left out of the submitted form data, so the template stops interfering.
+        if (!jQuery(this).prop('disabled')) {
+            jQuery(this).addClass('mep-template-disabled').attr('disabled', 'disabled');
         }
     });
 
@@ -124,6 +185,7 @@ function mpwem_attendee_management(parent, total_qty) {
                             hidden_target.find('.mep_form_item').attr('data-seat_name', seat_name);
                             hidden_target.find('.mpwem_ticket_count').html(seat_name).promise().done(function () {
                                 form_target.append(hidden_target.html());
+                                mpwem_enable_attendee_clone(form_target);
                                 form_target.find('.mep-originally-required').attr('required', 'required');
                             }).promise().done(function () {
                                 mpwem_load_date_picker(parent);
@@ -169,6 +231,7 @@ function mpwem_attendee_management(parent, total_qty) {
                                 hidden_target.find('.mpwem_ticket_name').html(ticket_name);
                                 hidden_target.find('.mpwem_ticket_count').html(i + 1).promise().done(function () {
                                     form_target.append(hidden_target.html()).promise().done(function () {
+                                        mpwem_enable_attendee_clone(jQuery(this));
                                         jQuery(this).find('.mep-originally-required').attr('required', 'required');
                                         jQuery(this).find('.mp_form_item').each(function () {
                                             let condition_type = jQuery(this).attr('data-depend');
@@ -432,9 +495,11 @@ function mpwem_attendee_management(parent, total_qty) {
                     if (total_qty < min_qty) {
                         alert('must buy minimum number of ticket : ' + min_qty);
                     } else {
+                        mpwem_prepare_form_for_validation(parent);
                         parent.find('.mpwem_add_to_cart').trigger('click');
                     }
                 } else {
+                    mpwem_prepare_form_for_validation(parent);
                     parent.find('.mpwem_add_to_cart').trigger('click');
                 }
             } else {
@@ -444,6 +509,17 @@ function mpwem_attendee_management(parent, total_qty) {
                 return false;
             }
         }
+    });
+    /**
+     * Last line of defence before the booking is posted: whichever code path cloned the
+     * attendee blocks, the clone source must not reach the server and every real attendee
+     * control must. Without this the attendee answers can be posted one index out of step
+     * (see mpwem_attendee_management), which silently files each answer against the wrong
+     * attendee and loses the last attendee's answers altogether.
+     */
+    $(document).on('submit', 'form#mpwem_registration', function () {
+        $(this).find('.mep_attendee_info_hidden').find('input, select, textarea').prop('disabled', true);
+        mpwem_enable_attendee_clone($('.mep_attendee_info'));
     });
     $(document).on('change', '.mpwem_registration_area [name="event_extra_service_qty[]"]', function () {
         let parent = $(this).closest('.mpwem_registration_area');
