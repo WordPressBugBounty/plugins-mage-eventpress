@@ -8,7 +8,25 @@
 	} // Cannot access pages directly.
 	if ( ! class_exists( 'MPWEM_Woocommerce' ) ) {
 		class MPWEM_Woocommerce {
+			/**
+			 * The single live instance, kept so background jobs can reach the very same
+			 * handler the checkout uses instead of constructing a second one - the
+			 * constructor registers every hook, so `new MPWEM_Woocommerce()` would
+			 * double-register all of them for the rest of the request.
+			 *
+			 * @var MPWEM_Woocommerce|null
+			 */
+			private static $instance = null;
+
+			/**
+			 * @return MPWEM_Woocommerce|null Null until the plugin has booted.
+			 */
+			public static function instance() {
+				return self::$instance;
+			}
+
 			public function __construct() {
+				self::$instance = $this;
 				add_filter( 'woocommerce_is_purchasable', array( $this, 'make_event_product_purchasable' ), 10, 2 );
 				add_filter( 'woocommerce_add_cart_item_data', array( $this, 'add_cart_item_data' ), 90, 3 );
 				add_action( 'woocommerce_before_calculate_totals', array( $this, 'before_calculate_totals' ) );
@@ -16,6 +34,7 @@
 				add_filter( 'woocommerce_add_to_cart_validation', array( $this, 'add_to_cart_validation' ), 10, 90 );
 				add_filter( 'woocommerce_add_to_cart_redirect', array( $this, 'add_to_cart_redirect' ) );
 				/**********************************************/
+				add_action( 'woocommerce_check_cart_items', array( $this, 'check_cart_items' ) );
 				add_action( 'woocommerce_after_checkout_validation', array( $this, 'after_checkout_validation' ) );
 				add_action( 'woocommerce_checkout_create_order_line_item', array( $this, 'checkout_create_order_line_item' ), 10, 4 );
 				add_action( 'woocommerce_order_status_changed', array( $this, 'order_status_changed' ), 10, 4 );
@@ -90,6 +109,20 @@
 				foreach ( $cart_object->cart_contents as $key => $value ) {
 					$event_id = is_array($value) && array_key_exists( 'event_id', $value ) ? $value['event_id'] : 0;
 					if ( get_post_type( $event_id ) == 'mep_events' ) {
+						/*
+						 * 'event_tp' is written alongside 'event_id' in add_cart_item_data(),
+						 * so the two normally travel together — but a cart item can reach here
+						 * with only the id (a cart persisted across an update, an "order again",
+						 * or a third-party plugin re-injecting stored item data). Reading it
+						 * blind emitted "Undefined array key event_tp" AND, far worse, passed
+						 * null into set_price() — which WooCommerce formats to '' and prices the
+						 * whole line at zero. Leave WooCommerce's own product price alone when we
+						 * have no stored event total to apply; a correct fallback price beats a
+						 * free ticket.
+						 */
+						if ( ! array_key_exists( 'event_tp', $value ) || '' === $value['event_tp'] || null === $value['event_tp'] ) {
+							continue;
+						}
 						$event_total_price = $value['event_tp'];
 						$value['data']->set_price( $event_total_price );
 						$value['data']->set_regular_price( $event_total_price );
@@ -205,31 +238,209 @@
 				$item_data[] = array( 'key' => __( 'Details Information', 'mage-eventpress' ), 'value' => ob_get_clean() );
 				return $item_data;
 			}
+			/**
+			 * Seat guard for every checkout path.
+			 *
+			 * woocommerce_check_cart_items fires on the cart page, inside
+			 * WC_Checkout::process_checkout() for the classic checkout, and inside the Store
+			 * API's CartController::validate_cart(), which converts the notices this raises
+			 * into API errors. Hooking it therefore covers block checkout and the express
+			 * payment flows too, which woocommerce_after_checkout_validation never sees.
+			 */
+			public function check_cart_items() {
+				self::validate_cart_seat_availability();
+			}
 			public function after_checkout_validation( $posted ) {
-				global $woocommerce;
-				$items = $woocommerce->cart->get_cart();
-				foreach ( $items as $item => $values ) {
-					$event_id        = is_array($values) && array_key_exists( 'event_id', $values ) ? $values['event_id'] : 0; // $values['event_id'];
-					$check_seat_plan = get_post_meta( $event_id, 'mepsp_event_seat_plan_info', true ) ? get_post_meta( $event_id, 'mepsp_event_seat_plan_info', true ) : array();
-					if ( get_post_type( $event_id ) == 'mep_events' && is_array( $check_seat_plan ) && sizeof( $check_seat_plan ) == 0 ) {
-						$total_seat = apply_filters( 'mep_event_total_seat_counts', mep_event_total_seat( $event_id, 'total' ), $event_id );
-						$total_resv = apply_filters( 'mep_event_total_resv_seat_count', mep_event_total_seat( $event_id, 'resv' ), $event_id );
-						$ticket_arr = $values['event_ticket_info'];
-						foreach ( $ticket_arr as $ticket ) {
-							$event_name        = get_the_title( $event_id );
-							$type              = $ticket['ticket_name'];
-							$event_date        = $ticket['event_date'];
-							$ticket_qty        = $ticket['ticket_qty'];
-							$event_date_txt    = get_mep_datetime( $ticket['event_date'], 'date-time-text' );
-							$total_sold        = mep_ticket_type_sold( $event_id, $type, $event_date );
-							$total_seats_count = apply_filters( 'mep_event_total_seat_count_checkout', $total_seat, $event_id, $event_date );
-							$available_seat    = (int) $total_seats_count - ( (int) $total_resv + (int) $total_sold );
+				self::validate_cart_seat_availability();
+			}
+			/**
+			 * Rejects a cart asking for more tickets than are still available.
+			 *
+			 * Quantities are summed per event + ticket type + date before anything is
+			 * compared, because the same ticket type can appear on more than one cart line.
+			 *
+			 * Each ticket type is then measured against its OWN option_qty_t capacity. The
+			 * previous implementation compared one ticket quantity against
+			 * mep_event_total_seat( $event_id, 'total' ), which is the sum of every ticket
+			 * type's capacity, so a single type could be sold well past its own limit; and it
+			 * ran that comparison after the ticket loop had closed, so only the last ticket
+			 * type in the cart was ever checked at all.
+			 *
+			 * Events running the Global Quantity option keep the event-wide measurement,
+			 * including its filters, because that is the constraint the admin configured.
+			 *
+			 * mep_temp_attendee cart holds are deliberately excluded: they are created when
+			 * the item is added to the cart, so they already contain the current visitor's
+			 * own quantities and counting them here would reject the order that created them.
+			 */
+			private static function validate_cart_seat_availability() {
+				if ( ! function_exists( 'WC' ) || is_null( WC()->cart ) ) {
+					return;
+				}
+				$requested = array();
+				foreach ( WC()->cart->get_cart() as $values ) {
+					$event_id = is_array( $values ) && array_key_exists( 'event_id', $values ) ? $values['event_id'] : 0;
+					if ( ! $event_id || get_post_type( $event_id ) !== 'mep_events' ) {
+						continue;
+					}
+					// Events with a seat plan have their own inventory, handled by that addon.
+					$seat_plan = get_post_meta( $event_id, 'mepsp_event_seat_plan_info', true );
+					if ( is_array( $seat_plan ) && sizeof( $seat_plan ) > 0 ) {
+						continue;
+					}
+					$ticket_arr = is_array( $values ) && array_key_exists( 'event_ticket_info', $values ) ? $values['event_ticket_info'] : array();
+					if ( ! is_array( $ticket_arr ) ) {
+						continue;
+					}
+					foreach ( $ticket_arr as $ticket ) {
+						if ( ! is_array( $ticket ) ) {
+							continue;
 						}
-						if ( $ticket_qty > $available_seat ) {
-							wc_add_notice( "Sorry, $type not available. Total available $type is $available_seat of $event_name on $event_date_txt but you select $ticket_qty . Please Try Again", 'error' );
+						$ticket_name = array_key_exists( 'ticket_name', $ticket ) ? $ticket['ticket_name'] : '';
+						$ticket_qty  = array_key_exists( 'ticket_qty', $ticket ) ? (int) $ticket['ticket_qty'] : 0;
+						$event_date  = array_key_exists( 'event_date', $ticket ) ? $ticket['event_date'] : '';
+						if ( ! $ticket_name || $ticket_qty < 1 ) {
+							continue;
 						}
+						$key = $event_id . '|' . $ticket_name . '|' . $event_date;
+						if ( ! array_key_exists( $key, $requested ) ) {
+							$requested[ $key ] = array(
+								'event_id'    => $event_id,
+								'ticket_name' => $ticket_name,
+								'event_date'  => $event_date,
+								'qty'         => 0,
+							);
+						}
+						$requested[ $key ]['qty'] += $ticket_qty;
 					}
 				}
+				if ( sizeof( $requested ) === 0 ) {
+					return;
+				}
+				$event_wide = array();
+				foreach ( $requested as $line ) {
+					if ( self::event_uses_global_quantity( $line['event_id'] ) ) {
+						// Global Quantity caps the event as a whole, not each ticket type.
+						$key = $line['event_id'] . '|' . $line['event_date'];
+						if ( ! array_key_exists( $key, $event_wide ) ) {
+							$event_wide[ $key ] = array(
+								'event_id'   => $line['event_id'],
+								'event_date' => $line['event_date'],
+								'qty'        => 0,
+							);
+						}
+						$event_wide[ $key ]['qty'] += $line['qty'];
+						continue;
+					}
+					$seats_left = self::ticket_type_seats_left( $line['event_id'], $line['ticket_name'], $line['event_date'] );
+					if ( is_null( $seats_left ) || $line['qty'] <= $seats_left ) {
+						continue;
+					}
+					self::add_seat_notice( $line['ticket_name'], $line['event_id'], $line['event_date'], $seats_left, $line['qty'] );
+				}
+				foreach ( $event_wide as $line ) {
+					$seats_left = self::event_seats_left( $line['event_id'], $line['event_date'] );
+					if ( is_null( $seats_left ) || $line['qty'] <= $seats_left ) {
+						continue;
+					}
+					// No ticket type: a Global Quantity event is capped as a whole.
+					self::add_seat_notice( '', $line['event_id'], $line['event_date'], $seats_left, $line['qty'] );
+				}
+			}
+			/**
+			 * Is this event capped as a whole rather than per ticket type?
+			 *
+			 * @param int $event_id Event post ID.
+			 * @return bool
+			 */
+			private static function event_uses_global_quantity( $event_id ) {
+				return get_post_meta( $event_id, 'enable_global_qty', true ) === 'on';
+			}
+			/**
+			 * Seats a single ticket type still has on a given date.
+			 *
+			 * @param int    $event_id    Event post ID.
+			 * @param string $ticket_name Ticket type name as stored on the cart line.
+			 * @param string $event_date  Event date on the cart line.
+			 * @return int|null Seats left, negative when already oversold, or null when the
+			 *                  ticket type cannot be resolved - in which case nothing is blocked.
+			 */
+			private static function ticket_type_seats_left( $event_id, $ticket_name, $event_date ) {
+				// mep_get_ticket_type_info_by_name() strips apostrophes from the stored name
+				// before comparing, so the name being looked up has to be stripped as well.
+				$lookup_name = str_replace( "'", '', (string) $ticket_name );
+				$capacity    = mep_get_ticket_type_info_by_name( $lookup_name, $event_id, 'option_qty_t' );
+				if ( $capacity === '' || is_null( $capacity ) ) {
+					return null;
+				}
+				$reserved = mep_get_ticket_type_info_by_name( $lookup_name, $event_id, 'option_rsv_t' );
+				$sold     = (int) mep_ticket_type_sold( $event_id, $ticket_name, $event_date );
+
+				return (int) $capacity - ( $sold + (int) $reserved );
+			}
+			/**
+			 * Seats the whole event still has on a given date, for Global Quantity events.
+			 *
+			 * Keeps the existing seat-count filters so the Global Quantity and seat plan
+			 * addons continue to decide the number they always have.
+			 *
+			 * @param int    $event_id   Event post ID.
+			 * @param string $event_date Event date on the cart line.
+			 * @return int|null
+			 */
+			private static function event_seats_left( $event_id, $event_date ) {
+				$total_seat = apply_filters( 'mep_event_total_seat_counts', mep_event_total_seat( $event_id, 'total' ), $event_id );
+				$total_resv = apply_filters( 'mep_event_total_resv_seat_count', mep_event_total_seat( $event_id, 'resv' ), $event_id );
+				$total_seat = apply_filters( 'mep_event_total_seat_count_checkout', $total_seat, $event_id, $event_date );
+				if ( $total_seat === '' || is_null( $total_seat ) ) {
+					return null;
+				}
+				// An empty ticket type counts every attendee on the event for that date.
+				$sold = (int) mep_ticket_type_sold( $event_id, '', $event_date );
+
+				return (int) $total_seat - ( $sold + (int) $total_resv );
+			}
+			/**
+			 * Adds the "not enough tickets" error once per cart line.
+			 *
+			 * Both hooks that call the validator can run in the same request on the classic
+			 * checkout, so an identical notice is only added the first time.
+			 *
+			 * @param string $ticket_name Ticket type, or '' when the event is capped as a whole.
+			 * @param int    $event_id    Event post ID.
+			 * @param string $event_date  Event date on the cart line.
+			 * @param int    $seats_left  Seats still available.
+			 * @param int    $requested   Seats asked for.
+			 */
+			private static function add_seat_notice( $ticket_name, $event_id, $event_date, $seats_left, $requested ) {
+				$event_name = get_the_title( $event_id );
+				$event_when = get_mep_datetime( $event_date, 'date-time-text' );
+				$seats_left = max( 0, (int) $seats_left );
+				$requested  = (int) $requested;
+				if ( $ticket_name === '' ) {
+					$notice = sprintf(
+					/* translators: 1: event name, 2: event date, 3: tickets left, 4: tickets requested. */
+						__( 'Sorry, %1$s on %2$s does not have enough tickets left. Only %3$d remaining, but you selected %4$d. Please change the quantity and try again.', 'mage-eventpress' ),
+						$event_name,
+						$event_when,
+						$seats_left,
+						$requested
+					);
+				} else {
+					$notice = sprintf(
+					/* translators: 1: ticket type, 2: event name, 3: event date, 4: tickets left, 5: tickets requested. */
+						__( 'Sorry, "%1$s" for %2$s on %3$s does not have enough tickets left. Only %4$d remaining, but you selected %5$d. Please change the quantity and try again.', 'mage-eventpress' ),
+						$ticket_name,
+						$event_name,
+						$event_when,
+						$seats_left,
+						$requested
+					);
+				}
+				if ( function_exists( 'wc_has_notice' ) && wc_has_notice( $notice, 'error' ) ) {
+					return;
+				}
+				wc_add_notice( $notice, 'error' );
 			}
 			public function add_to_cart_validation( $passed ) {
 				$wc_product_id   = isset( $_REQUEST['add-to-cart'] ) ? sanitize_text_field( $_REQUEST['add-to-cart'] ) : '';
@@ -787,15 +998,73 @@
 				$key = $event_id . '|' . $event_date;
 				return is_array( $expected ) && array_key_exists( $key, $expected ) ? (int) $expected[ $key ] : 1;
 			}
+			/**
+			 * Normalise whatever a caller passed into a plain numeric order id.
+			 *
+			 * checkout_order_processed() is reached from four places that do NOT agree on
+			 * what they pass:
+			 *   - woocommerce_checkout_order_processed          -> int order id
+			 *   - woocommerce_store_api_checkout_order_processed -> WC_Order OBJECT
+			 *   - repair_orphan_event_booking()/express_order_created_from_cart() -> int
+			 *   - a gateway handing over a JSON payload           -> string
+			 * The old inline `json_decode( $order_id )` handled only the last two. On
+			 * PHP 8 passing the Store API's WC_Order into json_decode() raises
+			 * "TypeError: json_decode(): Argument #1 ($json) must be of type string,
+			 * WC_Order given" — an uncaught fatal that killed the request before a single
+			 * attendee was created. Every block/express checkout order (_created_via =
+			 * store-api, which today is all of them on a Blocks checkout) therefore
+			 * booked and paid but produced no attendee posts, and since seats sold are
+			 * counted from attendee posts the event kept showing full availability and
+			 * the attendee report came back empty.
+			 *
+			 * @param mixed $order_id Order id, WC_Order, JSON string, or decoded payload.
+			 * @return int Order id, or 0 when it cannot be resolved.
+			 */
+			private static function resolve_order_id( $order_id ) {
+				if ( is_a( $order_id, 'WC_Order' ) ) {
+					return absint( $order_id->get_id() );
+				}
+				if ( is_numeric( $order_id ) ) {
+					return absint( $order_id );
+				}
+				if ( is_object( $order_id ) ) {
+					// Some gateways hand over an already-decoded payload object.
+					if ( method_exists( $order_id, 'get_id' ) ) {
+						return absint( $order_id->get_id() );
+					}
+					return isset( $order_id->id ) ? absint( $order_id->id ) : 0;
+				}
+				if ( is_array( $order_id ) ) {
+					return isset( $order_id['id'] ) ? absint( $order_id['id'] ) : 0;
+				}
+				if ( is_string( $order_id ) && '' !== trim( $order_id ) ) {
+					// Preserved from the original implementation: a JSON payload carrying
+					// the order id. json_decode() is only ever reached with a string now.
+					$decoded = json_decode( $order_id );
+					if ( is_object( $decoded ) && isset( $decoded->id ) ) {
+						return absint( $decoded->id );
+					}
+					if ( is_array( $decoded ) && isset( $decoded['id'] ) ) {
+						return absint( $decoded['id'] );
+					}
+				}
+
+				return 0;
+			}
+
 			public function checkout_order_processed( $order_id ) {
 				global $woocommerce;
-				$result   = ! is_numeric( $order_id ) ? json_decode( $order_id ) : [ 0 ];
-				$order_id = ! is_numeric( $order_id ) ? $result->id : $order_id;
+				$order_id = self::resolve_order_id( $order_id );
 				if ( ! $order_id ) {
 					return;
 				}
 				// Getting an instance of the order object
-				$order        = wc_get_order( $order_id );
+				$order = wc_get_order( $order_id );
+				// A deleted or non-order id would otherwise fatal on ->get_status() below,
+				// taking the whole checkout request down with it.
+				if ( ! is_a( $order, 'WC_Order' ) ) {
+					return;
+				}
 				$order_status = $order->get_status();
 				if ( $order_status != 'failed' ) {
 					$expected_attendees = self::count_expected_attendees_per_date( $order );
@@ -1163,6 +1432,13 @@
 			}
 			public function cart_item_price( $price, $cart_item, $r ) {
 				if ( is_array($cart_item) && array_key_exists( 'event_id', $cart_item ) && get_post_type( $cart_item['event_id'] ) == 'mep_events' ) {
+					// Same pairing as before_calculate_totals(): only override the displayed
+					// price when the item actually carries an event total. Without the guard
+					// this warned on 'event_tp' and printed a fabricated 0.00 that contradicted
+					// the line total WooCommerce had already calculated.
+					if ( ! array_key_exists( 'event_tp', $cart_item ) || '' === $cart_item['event_tp'] || null === $cart_item['event_tp'] ) {
+						return $price;
+					}
 					$price = wc_price( $cart_item['event_tp']);
 				}
 				return $price;
