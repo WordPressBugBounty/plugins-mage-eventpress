@@ -42,6 +42,8 @@
 				add_action( 'woocommerce_order_status_changed', array( $this, 'order_status_changed' ), 10, 4 );
 				add_action( 'woocommerce_checkout_order_processed', array( $this, 'checkout_order_processed' ), 90 );
 				add_action( 'woocommerce_store_api_checkout_order_processed', array( $this, 'checkout_order_processed' ), 90 );
+				add_action( 'woocommerce_payment_complete', array( $this, 'clear_cart_after_payment' ) );
+				add_action( 'woocommerce_thankyou', array( $this, 'clear_cart_after_payment' ) );
 				add_action( 'woocommerce_paypal_payments_woocommerce_order_created_from_cart', array( $this, 'express_order_created_from_cart' ), 10, 2 );
 				add_action( 'woocommerce_order_status_changed', array( $this, 'repair_orphan_event_booking' ), 5, 4 );
 				/**********************************************/
@@ -1266,7 +1268,6 @@
 			}
 
 			public function checkout_order_processed( $order_id ) {
-				global $woocommerce;
 				$order_id = self::resolve_order_id( $order_id );
 				if ( ! $order_id ) {
 					return;
@@ -1324,41 +1325,50 @@
 									}
 								}
 							}
-							$enable_clear_cart = mep_get_option( 'mep_clear_cart_after_checkout', 'general_setting_sec', 'enable' );
-							if ( $enable_clear_cart == 'enable' ) {
-								//   PayplugWoocommerce
-								if ( ! class_exists( 'Payplug\PayplugWoocommerce' ) ) {
-									if ( ! class_exists( 'WC_Xendit_CC' ) ) {
-										if ( ! class_exists( 'PaysonCheckout_For_WooCommerce' ) ) {
-											if ( ! class_exists( 'RP_SUB' ) ) {
-												if ( ! class_exists( 'Afterpay_Plugin' ) ) {
-													if ( ! class_exists( 'WC_Subscriptions' ) ) {
-														if ( ! is_plugin_active( 'woo-juno/main.php' ) ) {
-															if ( ! class_exists( 'WC_Saferpay' ) ) {
-																// mep_clear_cart_after_checkout
-																//
-																// WooCommerce only builds a cart for front-end requests. This method also runs
-																// from gateway webhooks (Stripe completing a payment minutes after checkout),
-																// the REST API, WP-CLI, wp-admin's Book an Event screen and the attendee repair
-																// cron - and in every one of those WC()->cart is null. Calling empty_cart() there
-																// was a fatal that killed the request immediately after the attendees had been
-																// written: the gateway received a 500 and retried, the admin save died, and on an
-																// order holding more than one event the remaining events were never processed.
-																if ( ! empty( $woocommerce ) && ! empty( $woocommerce->cart ) ) {
-																	$woocommerce->cart->empty_cart();
-																}
-															}
-														}
-													}
-												}
-											}
-										}
-									}
-								}
-							}
+							// "Clear Cart After Order" is no longer applied here: this runs before
+							// WooCommerce takes payment. See clear_cart_after_payment().
 						} // end of check post type
 					}
 					do_action( 'mep_after_event_booking', $order_id, $order->get_status() );
+				}
+			}
+			/**
+			 * "Clear Cart After Order" (mep_clear_cart_after_checkout), applied once payment is done.
+			 *
+			 * This used to run inside checkout_order_processed(), on
+			 * woocommerce_checkout_order_processed - which WooCommerce fires BEFORE it takes
+			 * payment. WC_Checkout::process_order_payment() then rebuilds the list of available
+			 * gateways against the emptied cart: a gateway whose is_available() looks at the
+			 * cart total (a minimum amount, as M-Pesa gateways enforce) dropped out, its
+			 * process_payment() was never called, and the shopper got WooCommerce's generic
+			 * "There was an error processing your order". Gateways that read the cart while
+			 * paying (WooPay) failed inside process_payment() instead. Only gateways that ignore
+			 * the cart, such as Cash on Delivery, worked. The class_exists() list that guarded the
+			 * old call was this same bug, excused one gateway at a time.
+			 *
+			 * woocommerce_payment_complete fires once the money is in, and woocommerce_thankyou
+			 * when the shopper reaches the order-received page. A failed payment keeps the cart,
+			 * so the shopper can try again.
+			 *
+			 * @param int $order_id Order id.
+			 */
+			public function clear_cart_after_payment( $order_id ) {
+				// Webhooks, the REST API, cron and wp-admin have no cart.
+				if ( ! function_exists( 'WC' ) || empty( WC()->cart ) || WC()->cart->is_empty() ) {
+					return;
+				}
+				if ( 'enable' !== mep_get_option( 'mep_clear_cart_after_checkout', 'general_setting_sec', 'enable' ) ) {
+					return;
+				}
+				$order = wc_get_order( $order_id );
+				if ( ! is_a( $order, 'WC_Order' ) || $order->has_status( 'failed' ) ) {
+					return;
+				}
+				foreach ( $order->get_items() as $item_id => $item_values ) {
+					if ( get_post_type( wc_get_order_item_meta( $item_id, 'event_id', true ) ) == 'mep_events' ) {
+						WC()->cart->empty_cart();
+						return;
+					}
 				}
 			}
 			/**
@@ -1443,21 +1453,25 @@
 				$names        = isset( $_POST['event_extra_service_name'] ) ? array_map( 'sanitize_text_field', wp_unslash( $_POST['event_extra_service_name'] ) ) : [];
 				$qty          = isset( $_POST['event_extra_service_qty'] ) ? array_map( 'sanitize_text_field', wp_unslash( $_POST['event_extra_service_qty'] ) ) : [];
 				if ( is_array( $names ) && sizeof( $names ) > 0 ) {
+					// Normalized name => name exactly as stored on the event.
 					$valid_ex_names = [];
 					if ( is_array( $ticket_types ) && sizeof( $ticket_types ) > 0 ) {
 						foreach ( $ticket_types as $t_type ) {
 							$t_name = is_array($t_type) && array_key_exists( 'option_name', $t_type ) ? $t_type['option_name'] : '';
-							$t_name = str_replace( "'", "", $t_name );
-							if ( $t_name ) {
-								$valid_ex_names[] = $t_name;
+							$t_key  = MPWEM_Functions::normalize_ex_service_name( $t_name );
+							if ( $t_key && ! isset( $valid_ex_names[ $t_key ] ) ) {
+								$valid_ex_names[ $t_key ] = $t_name;
 							}
 						}
 					}
 					foreach ( $names as $key => $name ) {
 						$current_qty = is_array($qty) && array_key_exists( $key, $qty ) ? $qty[ $key ] : 0;
 						$ex_name = explode( '_', $name )[0];
-						$ex_name = str_replace( "'", "", $ex_name );
-						if ( $name && $current_qty > 0 && in_array( $ex_name, $valid_ex_names ) ) {
+						$ex_name = MPWEM_Functions::normalize_ex_service_name( $ex_name );
+						if ( $name && $current_qty > 0 && isset( $valid_ex_names[ $ex_name ] ) ) {
+							// Keep the stored spelling so order meta and the sold-count
+							// records match what earlier bookings saved for this service.
+							$name = $valid_ex_names[ $ex_name ];
 							$ticket_info[ $key ]['service_name']  = $name;
 							$ticket_info[ $key ]['service_price'] = MPWEM_Functions::get_ex_price_by_name( $name, $post_id, $ticket_types );
 							$ticket_info[ $key ]['service_qty']   = $current_qty;

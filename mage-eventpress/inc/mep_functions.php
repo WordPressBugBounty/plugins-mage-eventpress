@@ -2,8 +2,6 @@
 	if ( ! defined( 'ABSPATH' ) ) {
 		die;
 	}
-	appsero_init_tracker_mage_eventpress();
-
 
 if ( ! function_exists( 'mep_prevent_serialized_input' ) ) {
 	function mep_prevent_serialized_input( $value ) {
@@ -2704,7 +2702,11 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 	}
 	if ( ! function_exists( 'mep_extra_service_sold' ) ) {
 		function mep_extra_service_sold( $event_id, $type, $date ) {
-			$type  = ! empty( $type ) ? html_entity_decode( $type ) : '';
+			// Sold records carry the name in whichever spelling the booking saved:
+			// HTML-encoded ("St&uuml;ck") or decoded ("Stück"). Count both.
+			$type    = ! empty( $type ) ? (string) $type : '';
+			$decoded = html_entity_decode( $type, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+			$type    = array_values( array_unique( array( $type, $decoded, htmlentities( $decoded, ENT_QUOTES | ENT_HTML401, 'UTF-8', false ) ) ) );
 			$args  = array(
 				'post_type'      => 'mep_extra_service',
 				'posts_per_page' => - 1,
@@ -2720,7 +2722,7 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 						array(
 							'key'     => 'ea_extra_service_name',
 							'value'   => $type,
-							'compare' => '='
+							'compare' => 'IN'
 						),
 						array(
 							'key'     => 'ea_extra_service_event_date',
@@ -5947,7 +5949,7 @@ die();
     }
 
     add_action( 'wp_ajax_mep_change_date_status','mep_change_date_status' );
-    add_action( 'wp_ajax_mep_change_date_status', 'mep_change_date_status');
+    add_action( 'wp_ajax_nopriv_mep_change_date_status', 'mep_change_date_status');
 function mep_change_date_status() {
 
     $post_id = isset( $_POST['post_id'] ) ? sanitize_text_field( wp_unslash( $_POST['post_id'] ) ) : '';
@@ -5968,7 +5970,7 @@ function mep_change_date_status() {
 }
 
     add_action( 'wp_ajax_mep_change_time_status','mep_change_time_status' );
-    add_action( 'wp_ajax_mep_change_time_status', 'mep_change_time_status');
+    add_action( 'wp_ajax_nopriv_mep_change_time_status', 'mep_change_time_status');
     function mep_change_time_status() {
         $event_id = isset( $_POST['post_id'] ) ? sanitize_text_field( wp_unslash( $_POST['post_id'] ) ) : '';
         if ($event_id > 0) {
@@ -6006,7 +6008,9 @@ function mep_change_date_status() {
                 $all_dates   = MPWEM_Functions::get_dates( $event_id );
                 $all_times   = MPWEM_Functions::get_times( $event_id, $all_dates, $url_date );
                 $upcoming_date                           =isset( $_POST['dates'] ) ? sanitize_text_field( wp_unslash( $_POST['dates'] ) ) : '';
-                if (MPWEM_Global_Function::check_time_exit_date($upcoming_date)) {
+                // strtotime() first: get_mep_datetime() builds a DateTime without a
+                // try/catch, and date_parse() above accepts strings DateTime rejects.
+                if (MPWEM_Global_Function::check_time_exit_date($upcoming_date) && false !== strtotime($upcoming_date)) {
                     echo get_mep_datetime($upcoming_date, 'time');
                 }
             }
