@@ -3,7 +3,7 @@
 	 * Plugin Name: Event Booking Manager for WooCommerce
 	 * Plugin URI: http://mage-people.com
 	 * Description: A Complete Event Solution for WordPress by MagePeople..
-	 * Version: 5.7.7
+	 * Version: 5.7.8
 	 * Author: MagePeople Team
 	 * Author URI: http://www.mage-people.com/
 	 * Text Domain: mage-eventpress
@@ -34,6 +34,9 @@
 	if (!defined('MPWEM_PLUGIN_VERSION')) {
 		define('MPWEM_PLUGIN_VERSION', '5.7.7');
 	}
+
+	// Legacy Appsero tracking opt-in -> Appneck consent (so old opt-ins are not asked twice).
+	require_once MPWEM_PLUGIN_DIR . '/inc/mep_appneck_consent_migration.php';
 
 	// Declare High-Performance Order Storage support. WooCommerce hides the HPOS toggle
 	// behind an incompatibility warning for every order-touching plugin that stays silent,
