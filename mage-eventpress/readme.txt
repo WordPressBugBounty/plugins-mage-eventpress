@@ -1,9 +1,9 @@
 === Event Booking Manager for WooCommerce – Sell Tickets, Event Registration, RSVP & Event Calendar ===
-Contributors: magepeopleteam, aamahin
+Contributors: magepeopleteam, aamahin, raselsha
 Tags: events, event tickets, event registration, woocommerce, booking
 Requires at least: 5.3
-Stable tag: 5.7.8
-Tested up to: 7.2
+Stable tag: 5.7.9
+Tested up to: 7.0
 WC requires at least: 3.0
 WC tested up to: 10.7
 Requires PHP: 7.4
