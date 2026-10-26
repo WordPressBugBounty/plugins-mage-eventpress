@@ -239,11 +239,12 @@
 					'year'    => sanitize_text_field( $_REQUEST['year'] ?? '' ),
 					'sort'    => sanitize_text_field( $_REQUEST['sort'] ?? 'ASC' ),
 					'show'    => intval( $_REQUEST['show'] ?? - 1 ),
+					'exclude' => sanitize_text_field( wp_unslash( $_REQUEST['exclude'] ?? '' ) ),
 				);
 				$paged  = intval( $_REQUEST['page'] ?? 1 );
 				$style  = $atts['style'];
 				$column = $style != 'grid' ? 1 : $atts['column'];
-				$loop   = MPWEM_Query::event_query( $atts['show'], $atts['sort'], $atts['cat'], $atts['org'], $atts['city'], $atts['country'], $atts['status'], '', $atts['year'], $paged );
+				$loop   = MPWEM_Query::event_query( $atts['show'], $atts['sort'], $atts['cat'], $atts['org'], $atts['city'], $atts['country'], $atts['status'], '', $atts['year'], $paged, '', $atts['exclude'] );
 				ob_start();
 				while ( $loop->have_posts() ) {
 					$loop->the_post();
@@ -278,7 +279,10 @@
 					wp_send_json_error( __( 'Invalid nonce!', 'mage-eventpress' ) ); // Prevent unauthorized access
 					wp_die();
 				}
-				$event_id              = isset( $_POST['post_id'] ) ? sanitize_text_field( wp_unslash( $_POST['post_id'] ) ) : '';
+				$event_id              = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
+				if ( ! mep_is_viewable_event( $event_id ) ) {
+					wp_die();
+				}
 				$all_dates             = MPWEM_Functions::get_dates( $event_id );
 				$date_type             = MPWEM_Global_Function::get_post_info( $event_id, 'mep_enable_recurring', 'no' );
 				$mep_show_end_datetime = MPWEM_Global_Function::get_post_info( $event_id, 'mep_show_end_datetime', 'yes' );
@@ -372,7 +376,10 @@
 					wp_send_json_error( __( 'Invalid nonce!', 'mage-eventpress' ) ); // Prevent unauthorized access
 					wp_die();
 				}
-				$event_id = isset( $_POST['post_id'] ) ? sanitize_text_field( wp_unslash( $_POST['post_id'] ) ) : '';
+				$event_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
+				if ( ! mep_is_viewable_event( $event_id ) ) {
+					wp_die();
+				}
 				$date     = isset( $_POST['dates'] ) ? sanitize_text_field( wp_unslash( $_POST['dates'] ) ) : '';
 				require MPWEM_Functions::template_path( 'layout/seat_status.php' );
 				wp_die();
