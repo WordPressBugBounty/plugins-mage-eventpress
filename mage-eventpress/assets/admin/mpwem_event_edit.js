@@ -225,6 +225,21 @@
         $modal.attr('aria-hidden', 'false').addClass('is-open');
     }
 
+    /* Scroll so $el lands centered in the viewport, instead of just under
+       the top edge - used wherever focus should land on a specific card
+       or row (ticket add/edit form, newly saved ticket). */
+    function scrollToViewportCenter($el, duration) {
+        if (!$el || !$el.length) {
+            return;
+        }
+        const offset = $el.offset();
+        if (!offset) {
+            return;
+        }
+        const target = offset.top - (window.innerHeight / 2) + ($el.outerHeight() / 2);
+        $('html, body').animate({ scrollTop: Math.max(target, 0) }, duration || 200);
+    }
+
     /* Briefly pulse an element (e.g. a button) to draw attention to it. */
     function flashAttention($el) {
         if (!$el || !$el.length) {
@@ -843,6 +858,16 @@
         // Mount into Tickets Step
         mountPanel($root, '#mpwem_ticket_pricing_settings', 'mpwem_wizard_tickets_mount');
 
+        // Move the payment-method warning/status banner out of the mounted
+        // panel and into its own standalone sidebar card, right before the
+        // "Event Mode Manual" help card, instead of leaving it stacked
+        // above the ticket editor.
+        const $paymentWarnings = $('#mpwem_wizard_tickets_mount').find('.mpwem-ticket-warnings').first();
+        const $modeHelpCardBanner = $('#mpwem_wizard_mode_help_card_banner');
+        if ($paymentWarnings.length && $modeHelpCardBanner.length && !$modeHelpCardBanner.children().length) {
+            $modeHelpCardBanner.append($paymentWarnings.detach());
+        }
+
         // Only rendered by the legacy hook when WooCommerce "Enable taxes" is on.
         mountPanel($root, '#mp_event_tax_settings', 'mpwem_wizard_tax_mount');
         const $taxMount = $('#mpwem_wizard_tax_mount');
@@ -884,6 +909,7 @@
                 
                 const $newCard = $('<div class="mpwem-card mpwem-docs-card mpwem-card--help mpwem-card--help-docs"></div>');
                 const $cardHead = $('<div class="mpwem-card__head"></div>');
+                $cardHead.append($('<span class="mpwem-section-pill"></span>').text('Docs'));
                 $cardHead.append($('<h2></h2>').text(title));
                 $cardHead.append($('<p></p>').text(desc));
                 
@@ -906,6 +932,7 @@
         initializeTicketPricingModal($root);
         initializeExtraServiceModal($root);
         initializeParticularDateModal($root);
+        bindLiveTicketPreviewQtyButtons();
 
         // Mount into Date Step
         mountPanel($root, '#mpwem_date_settings', 'mpwem_wizard_date_mount');
@@ -994,13 +1021,12 @@
             const $summaryMarkup = $(
                 '<div class="mpwem-ticket-summary" id="mpwem_ticket_summary">' +
                     '<div class="mpwem-ticket-summary__toolbar">' +
+                        '<span class="mpwem-ticket-summary__toolbar-icon" aria-hidden="true">' +
+                            '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4Z"></path><path d="M13 5v2M13 17v2M13 10.5v3"></path></svg>' +
+                        '</span>' +
                         '<div class="mpwem-ticket-summary__intro">' +
                             '<h3>Simple Ticket Type</h3>' +
                             '<p>View pricing at a glance, then open the full editor only when you need details.</p>' +
-                        '</div>' +
-                        '<div class="mpwem-ticket-summary__actions">' +
-                            '<button type="button" class="button button-secondary mpwem-ticket-summary__open" data-mpwem-ticket-modal-open="list">Show Details</button>' +
-                            '<button type="button" class="button button-primary mpwem-ticket-summary__add" data-mpwem-ticket-modal-open="new">+ Add New Ticket Type</button>' +
                         '</div>' +
                     '</div>' +
                     '<div class="mpwem-ticket-summary__list" id="mpwem_ticket_summary_list"></div>' +
@@ -1015,6 +1041,7 @@
         }
 
         return {
+            $summary: $summary,
             $summaryList: $summary.find('#mpwem_ticket_summary_list').first(),
             $modal: $root.find('#mpwem_ticket_editor_modal').first(),
             $modalMount: $root.find('#mpwem_ticket_modal_mount').first(),
@@ -1261,6 +1288,225 @@
         highlightRow($row);
     }
 
+    function renderTicketSummaryGlobalQty($root) {
+        const context = getTicketModalContext($root);
+        if (!context.$summary.length) {
+            return;
+        }
+
+        let $gq = context.$summary.find('#mpwem_ticket_summary_gq').first();
+        if (!$gq.length) {
+            $gq = $('<div class="mpwem-ticket-summary__gq" id="mpwem_ticket_summary_gq"></div>');
+            const $toolbar = context.$summary.find('.mpwem-ticket-summary__toolbar').first();
+            if ($toolbar.length) {
+                $toolbar.after($gq);
+            } else {
+                context.$summary.prepend($gq);
+            }
+        }
+
+        const $realToggle = context.$modalMount.find('input[name="enable_global_qty"]').first();
+        const $realTypeSelect = context.$modalMount.find('select[name="mep_gq_type"]').first();
+        const $realTotal = context.$modalMount.find('input[name="mep_gq_total_seat"]').first();
+        const $realReserve = context.$modalMount.find('input[name="mep_gq_total_resv_seat"]').first();
+
+        $gq.empty();
+
+        if (!$realToggle.length) {
+            return;
+        }
+
+        const enabled = $realToggle.is(':checked');
+        const gqType = ($realTypeSelect.val() || 'global').toString();
+        const isFull = gqType !== 'date_wise';
+
+        const $row = $('<div class="mpwem-ticket-summary__gq-row"></div>')
+            .append(
+                $('<div class="mpwem-ticket-summary__gq-copy"></div>')
+                    .append($('<span class="mpwem-ticket-summary__gq-title"></span>').text('Share one quantity pool across all ticket types'))
+                    .append($('<span class="mpwem-ticket-summary__gq-hint"></span>').text('Turn this on if ticket types should draw from a single shared seat count instead of their own.'))
+            );
+
+        const $toggleLabel = $('<label class="round_switch_label mpwem-ticket-summary__gq-switch"></label>');
+        const $toggleInput = $('<input type="checkbox">').prop('checked', enabled);
+        $toggleLabel.append($toggleInput).append('<span class="round_switch"></span>');
+        $row.append($toggleLabel);
+        $gq.append($row);
+
+        $toggleInput.on('change', function() {
+            $realToggle.prop('checked', $(this).is(':checked')).trigger('change');
+        });
+
+        if (!enabled) {
+            return;
+        }
+
+        const $panel = $('<div class="mpwem-ticket-summary__gq-panel"></div>');
+
+        const $pillField = $('<div class="mpwem-ticket-summary__gq-field"></div>')
+            .append($('<label class="mpwem-ticket-summary__gq-label"></label>').text('Quantity applies'));
+        const $pills = $('<div class="mpwem-ticket-summary__gq-pills"></div>');
+        const $pillFull = $('<button type="button" class="mpwem-ticket-summary__gq-pill"></button>').text('Across the whole event').toggleClass('is-active', isFull);
+        const $pillDate = $('<button type="button" class="mpwem-ticket-summary__gq-pill"></button>').text('Per scheduled date').toggleClass('is-active', !isFull);
+        $pills.append($pillFull).append($pillDate);
+        $pillField.append($pills);
+        $panel.append($pillField);
+
+        $pillFull.on('click', function() {
+            $pillFull.addClass('is-active');
+            $pillDate.removeClass('is-active');
+            $realTypeSelect.val('global').trigger('change');
+        });
+        $pillDate.on('click', function() {
+            $pillDate.addClass('is-active');
+            $pillFull.removeClass('is-active');
+            $realTypeSelect.val('date_wise').trigger('change');
+        });
+
+        if (isFull) {
+            const $grid = $('<div class="mpwem-ticket-summary__gq-grid"></div>');
+
+            const $totalGroup = $('<div class="mpwem-ticket-summary__gq-group"></div>')
+                .append($('<label class="mpwem-ticket-summary__gq-label"></label>').text('Total Qty'));
+            const $totalInput = $('<input type="number" placeholder="0">').val(($realTotal.val() || '').toString());
+            $totalGroup.append($totalInput);
+
+            const $reserveGroup = $('<div class="mpwem-ticket-summary__gq-group"></div>')
+                .append($('<label class="mpwem-ticket-summary__gq-label"></label>').text('Reserve Qty'));
+            const $reserveInput = $('<input type="number" placeholder="0">').val(($realReserve.val() || '').toString());
+            $reserveGroup.append($reserveInput);
+
+            $grid.append($totalGroup).append($reserveGroup);
+            $panel.append($grid);
+
+            $totalInput.on('input', function() {
+                $realTotal.val($(this).val());
+            }).on('change', function() {
+                renderTicketSummary($root);
+            });
+            $reserveInput.on('input', function() {
+                $realReserve.val($(this).val());
+            }).on('change', function() {
+                renderTicketSummary($root);
+            });
+        } else {
+            const $notice = $('<div class="mpwem-ticket-summary__gq-notice"></div>')
+                .append($('<span></span>').text('Quantity for each date is set in the Date & Time step.'))
+                .append(
+                    $('<button type="button" class="button"></button>')
+                        .attr('data-mpwem-open-particular-date-modal', '')
+                        .text('Open Date Table')
+                );
+            $panel.append($notice);
+        }
+
+        $gq.append($panel);
+    }
+
+    function ticketRowIsSold($row) {
+        return $row.find('.mpwem_show_hide_button').length > 0;
+    }
+
+    const TICKET_SUMMARY_EDIT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+    const TICKET_SUMMARY_DELETE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
+    const TICKET_SUMMARY_GRIP_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
+
+    function buildTicketSummaryActions($root, index, isSold, isDisabled) {
+        const $wrap = $('<div class="mpwem-ticket-summary__item-actions"></div>');
+
+        if (isSold) {
+            const $status = $('<button type="button" class="mpwem-ticket-summary__status-toggle"></button>')
+                .append('<span class="mpwem-ticket-summary__status-dot" aria-hidden="true"></span>')
+                .append($('<span></span>').text(isDisabled ? 'Inactive' : 'Active'))
+                .toggleClass('is-inactive', isDisabled)
+                .attr('title', 'Click to ' + (isDisabled ? 'activate' : 'deactivate') + ' this ticket type');
+
+            $status.on('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                const $liveRow = getTicketRows($root).eq(index);
+                const $realToggle = $liveRow.find('.mpwem_show_hide_button').first();
+                if ($realToggle.length) {
+                    $realToggle.trigger('click');
+                    storeSavedTicketSummarySnapshot($root);
+                    renderTicketSummary($root);
+                }
+            });
+
+            $wrap.append($status);
+        } else {
+            $wrap.append(
+                $('<span class="mpwem-ticket-summary__status-badge"></span>')
+                    .append('<span class="mpwem-ticket-summary__status-dot" aria-hidden="true"></span>')
+                    .append($('<span></span>').text('Active'))
+            );
+        }
+
+        const $editBtn = $('<button type="button" class="mpwem-ticket-summary__action-btn mpwem-ticket-summary__action-btn--edit" title="Edit" aria-label="Edit ticket type"></button>')
+            .append(TICKET_SUMMARY_EDIT_ICON);
+        $editBtn.on('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            openInlineTicketEdit($root, index);
+        });
+
+        const $deleteBtn = $('<button type="button" class="mpwem-ticket-summary__action-btn mpwem-ticket-summary__action-btn--delete" title="Delete" aria-label="Delete ticket type"></button>')
+            .append(TICKET_SUMMARY_DELETE_ICON);
+        $deleteBtn.on('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const $liveRow = getTicketRows($root).eq(index);
+            const $realRemove = $liveRow.find('.mpwem_item_remove').first();
+            if ($realRemove.length) {
+                $realRemove.trigger('click');
+            }
+        });
+
+        const $sortHandle = $('<span class="mpwem-ticket-summary__sort-handle" title="Drag to reorder" aria-label="Drag to reorder" role="img"></span>')
+            .append(TICKET_SUMMARY_GRIP_ICON);
+        $sortHandle.on('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+
+        $wrap.append($editBtn).append($deleteBtn).append($sortHandle);
+
+        return $wrap;
+    }
+
+    function enableTicketSummarySort($root, context) {
+        if (!context.$summaryList.length || typeof context.$summaryList.sortable !== 'function') {
+            return;
+        }
+
+        if (context.$summaryList.data('ui-sortable')) {
+            context.$summaryList.sortable('destroy');
+        }
+
+        context.$summaryList.sortable({
+            items: '> .mpwem-ticket-summary__item',
+            handle: '.mpwem-ticket-summary__sort-handle',
+            axis: 'y',
+            update: function() {
+                const $container = getTicketRowsContainer($root);
+                if (!$container.length) {
+                    return;
+                }
+
+                const $liveRows = getTicketRows($root);
+                context.$summaryList.find('.mpwem-ticket-summary__item').each(function() {
+                    const oldIndex = parseInt($(this).attr('data-ticket-row-index'), 10);
+                    if (!Number.isNaN(oldIndex) && $liveRows.eq(oldIndex).length) {
+                        $container.append($liveRows.eq(oldIndex));
+                    }
+                });
+
+                storeSavedTicketSummarySnapshot($root);
+                renderTicketSummary($root);
+            }
+        });
+    }
+
     function renderTicketSummary($root) {
         const context = getTicketModalContext($root);
         const regEnabled = isRegistrationEnabled($root);
@@ -1269,18 +1515,53 @@
             return;
         }
 
+        // The inline add/edit card lives inside the list, positioned right
+        // before the "Add New Ticket Type" button - detach it (not
+        // remove/empty) before clearing the list so an open card survives
+        // the rebuild, then reinsert it in the same spot below.
+        const $openAddCard = context.$summaryList.find('#mpwem_ticket_summary_add').detach();
+
         context.$summaryList.empty();
 
         getPanel($root, '#mpwem_ticket_pricing_settings').find('#mpwem_ticket_summary').toggle(!!regEnabled);
 
         if (!regEnabled) {
             closeTicketModal($root);
+            if ($openAddCard.length) {
+                context.$summaryList.append($openAddCard);
+            }
+            renderLiveTicketPreview($root, false, false, $());
             return;
         }
 
         const earlyBirdEnabled = isEarlyBirdEnabled($root);
 
         getPanel($root, '#mpwem_ticket_pricing_settings').find('#mpwem_ticket_summary').toggleClass('is-earlybird', earlyBirdEnabled);
+
+        renderTicketSummaryGlobalQty($root);
+
+        if (!$rows.length) {
+            // Header row only makes sense once a ticket exists under it -
+            // same pattern as renderParticularDateSummary's empty state.
+            context.$summaryList.append(
+                $('<div class="mpwem-ticket-summary__empty mpwem-ticket-summary__empty--centered"></div>')
+                    .append(
+                        $('<span class="mpwem-ticket-summary__empty-icon" aria-hidden="true"></span>')
+                            .html('<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4Z"></path><path d="M13 5v2M13 17v2M13 10.5v3"></path></svg>')
+                    )
+                    .append($('<h4></h4>').text('No ticket types yet'))
+                    .append(
+                        $('<button type="button" class="button button-primary"></button>')
+                            .attr('data-mpwem-ticket-modal-open', 'new')
+                            .html('<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Create First Ticket')
+                    )
+            );
+            if ($openAddCard.length) {
+                context.$summaryList.append($openAddCard);
+            }
+            renderLiveTicketPreview($root, regEnabled, earlyBirdEnabled, $());
+            return;
+        }
 
         const $headerRow = $('<div class="mpwem-ticket-summary__header"></div>')
             .append($('<span class="mpwem-ticket-summary__header-ticket"></span>').text('Ticket Type'))
@@ -1291,19 +1572,9 @@
             $headerRow.append($('<span class="mpwem-ticket-summary__header-earlybird"></span>').text('Sale Period'));
         }
 
-        context.$summaryList.append($headerRow);
+        $headerRow.append($('<span class="mpwem-ticket-summary__header-action"></span>').text('Action'));
 
-        if (!$rows.length) {
-            context.$summaryList.append(
-                $('<div class="mpwem-ticket-summary__empty"></div>')
-                    .append($('<h4></h4>').text('No ticket types yet'))
-                    .append($('<p></p>').text('Start with one ticket type, then open the editor whenever you need the full pricing table.'))
-                    .append($('<button type="button" class="button button-primary"></button>')
-                        .attr('data-mpwem-ticket-modal-open', 'new')
-                        .text('Create First Ticket'))
-            );
-            return;
-        }
+        context.$summaryList.append($headerRow);
 
         $rows.each(function(index) {
             const $row = $(this);
@@ -1311,17 +1582,22 @@
             const price = ticketRowPrice($row);
             const capacity = ticketSummaryQty($root, $row);
             const isDisabled = $row.hasClass('disable_row');
+            const description = ($row.find('[name="option_details_t[]"]').first().val() || '').toString().trim();
+
+            const $itemMain = $('<div class="mpwem-ticket-summary__item-main"></div>')
+                .append(
+                    $('<div class="mpwem-ticket-summary__item-head"></div>')
+                        .append($('<h4></h4>').text(name))
+                );
+
+            if (description) {
+                $itemMain.append($('<p class="mpwem-ticket-summary__item-desc"></p>').text(description));
+            }
 
             const $item = $('<article class="mpwem-ticket-summary__item"></article>')
                 .attr('data-ticket-row-index', index)
                 .toggleClass('is-disabled', isDisabled)
-                .append(
-                    $('<div class="mpwem-ticket-summary__item-main"></div>')
-                        .append(
-                            $('<div class="mpwem-ticket-summary__item-head"></div>')
-                                .append($('<h4></h4>').text(name))
-                        )
-                )
+                .append($itemMain)
                 .append(
                     $('<div class="mpwem-ticket-summary__meta"></div>')
                         .append($('<span class="mpwem-ticket-summary__price"></span>').text(price))
@@ -1352,8 +1628,1005 @@
                 );
             }
 
+            $item.append(buildTicketSummaryActions($root, index, ticketRowIsSold($row), isDisabled));
+
             context.$summaryList.append($item);
         });
+
+        // "Add New Ticket Type" renders after every row, same as
+        // "Add Schedule"/"Add Particular Date" on the Date step.
+        const $addTicketBtn = $('<button type="button" class="button button-primary mpwem-date-primary-fields__add"></button>')
+            .attr('data-mpwem-ticket-modal-open', 'new')
+            .text('Add New Ticket Type');
+        context.$summaryList.append($addTicketBtn);
+
+        // The open add/edit card, if any, goes right before that button -
+        // so it shows above "Add New Ticket Type" instead of appearing
+        // further down, after the whole summary.
+        if ($openAddCard.length) {
+            $openAddCard.insertBefore($addTicketBtn);
+        }
+
+        enableTicketSummarySort($root, context);
+        renderLiveTicketPreview($root, regEnabled, earlyBirdEnabled, $rows);
+    }
+
+    function formatLiveTicketPreviewPrice(num) {
+        if (typeof window.mpwem_price_format === 'function' && !Number.isNaN(num)) {
+            return $('<div></div>').html(window.mpwem_price_format(num)).text();
+        }
+        return '$' + num.toFixed(2);
+    }
+
+    // Qty chosen per item in the preview persists across re-renders (every
+    // ticket/extra-service edit rebuilds the whole card) so a click doesn't
+    // get wiped out by the very re-render it triggers. Keyed by a
+    // type-prefixed name since ticket and extra-service names are separate
+    // namespaces on the real frontend too.
+    function getLiveTicketPreviewQtyState($root) {
+        let state = $root.data('mpwemLivePreviewQty');
+        if (!state) {
+            state = {};
+            $root.data('mpwemLivePreviewQty', state);
+        }
+        return state;
+    }
+
+    function buildLiveTicketPreviewItem(options) {
+        const stockState = options.stockState;
+        const max = options.max;
+        const qty = options.qty;
+
+        const $item = $('<div class="mpwem-live-ticket-preview__item"></div>')
+            .attr('data-mpwem-preview-key', options.key)
+            .attr('data-mpwem-preview-max', max === Infinity ? '' : max)
+            .attr('data-mpwem-preview-price', Number.isNaN(options.priceRaw) ? '' : options.priceRaw)
+            .toggleClass('is-disabled', stockState === 'soldout');
+
+        if (stockState === 'soldout') {
+            $item.append(
+                $('<div class="mpwem-live-ticket-preview__ribbon"></div>')
+                    .append($('<span class="mpwem-live-ticket-preview__ribbon-badge is-soldout"></span>').text('Sold Out'))
+            );
+        } else if (stockState === 'low') {
+            $item.append(
+                $('<div class="mpwem-live-ticket-preview__ribbon"></div>')
+                    .append($('<span class="mpwem-live-ticket-preview__ribbon-badge"></span>').text('Only ' + options.capacityNum + ' left'))
+            );
+        }
+
+        const $nameRow = $('<div class="mpwem-live-ticket-preview__name"></div>').text(options.name);
+        if (options.earlyBird) {
+            $nameRow.append($('<span class="mpwem-live-ticket-preview__badge--earlybird"></span>').text('Early Bird'));
+        }
+
+        const $info = $('<div class="mpwem-live-ticket-preview__info"></div>').append($nameRow);
+        if (options.description) {
+            $info.append($('<p class="mpwem-live-ticket-preview__desc"></p>').text(options.description));
+        }
+
+        $item.append(
+            $('<div class="mpwem-live-ticket-preview__top"></div>')
+                .append($info)
+                .append($('<div class="mpwem-live-ticket-preview__price"></div>').text(options.priceText))
+        );
+
+        const $bottom = $('<div class="mpwem-live-ticket-preview__bottom"></div>');
+
+        if (stockState === 'available' || stockState === 'low') {
+            $bottom.append(
+                $('<div class="mpwem-live-ticket-preview__availability"></div>')
+                    .toggleClass('is-low', stockState === 'low')
+                    .append('<span class="mpwem-live-ticket-preview__availability-dot" aria-hidden="true"></span>')
+                    .append(document.createTextNode(options.capacityNum + (options.unit || ' tickets available')))
+            );
+        } else if (stockState === 'soldout') {
+            $bottom.append(
+                $('<div class="mpwem-live-ticket-preview__availability"></div>')
+                    .css('color', '#b91c1c')
+                    .text('Sold out')
+            );
+        }
+
+        if (options.showQty) {
+            $bottom.append(
+                $('<div class="mpwem-live-ticket-preview__qty"></div>')
+                    .append($('<button type="button" class="mpwem-live-ticket-preview__qty-btn mpwem-live-ticket-preview__qty-btn--dec"></button>').attr('aria-label', 'Decrease quantity').toggleClass('is-disabled', stockState === 'soldout' || qty <= 0).text('−'))
+                    .append($('<span class="mpwem-live-ticket-preview__qty-val"></span>').text(qty))
+                    .append($('<button type="button" class="mpwem-live-ticket-preview__qty-btn mpwem-live-ticket-preview__qty-btn--inc"></button>').attr('aria-label', 'Increase quantity').toggleClass('is-disabled', stockState === 'soldout' || qty >= max).text('+'))
+            );
+        }
+
+        if ($bottom.children().length) {
+            $item.append($bottom);
+        }
+        return $item;
+    }
+
+    function renderLiveTicketPreview($root, regEnabled, earlyBirdEnabled, $rows) {
+        // Shown on the Ticket & Pricing, Date & Time and Advanced steps -
+        // every instance shares the .mpwem-live-ticket-preview class (ids
+        // can't repeat per page), so build the content once and clone it
+        // into each card instead of re-deriving it per step.
+        const $cards = $root.find('.mpwem-live-ticket-preview');
+        if (!$cards.length) {
+            return;
+        }
+
+        $cards.toggle(!!regEnabled);
+        if (!regEnabled) {
+            return;
+        }
+
+        const qtyState = getLiveTicketPreviewQtyState($root);
+
+        // Mirrors templates/layout/ticket_type.php's own enable check, so a
+        // ticket hidden from the frontend is hidden here too.
+        const $visibleRows = $rows.filter(function() {
+            return !$(this).hasClass('disable_row');
+        });
+
+        const items = [];
+        let subtotal = 0;
+        let subtotalCount = 0;
+        let totalTicketQty = 0;
+
+        $visibleRows.each(function() {
+            const $row = $(this);
+            const name = ticketRowName($row);
+            const priceText = ticketRowPrice($row);
+            const priceRaw = parseFloat(($row.find('[name="option_price_t[]"]').first().val() || '').toString().trim());
+            const description = ($row.find('[name="option_details_t[]"]').first().val() || '').toString().trim();
+
+            const capacityRaw = ($row.find('[name="option_qty_t[]"]').first().val() || '').toString().trim();
+            const capacityNum = isTicketGlobalQtyEnabled($root)
+                ? parseInt((ticketGlobalTotalQty($root) || '').toString().trim(), 10)
+                : (capacityRaw === '' ? NaN : parseInt(capacityRaw, 10));
+
+            let stockState = 'unlimited';
+            if (!Number.isNaN(capacityNum)) {
+                if (capacityNum <= 0) {
+                    stockState = 'soldout';
+                } else if (capacityNum <= 10) {
+                    stockState = 'low';
+                } else {
+                    stockState = 'available';
+                }
+            }
+
+            const max = stockState === 'soldout' ? 0 : (Number.isNaN(capacityNum) ? Infinity : capacityNum);
+            const key = 'ticket:' + name;
+
+            let qty;
+            if (Object.prototype.hasOwnProperty.call(qtyState, key)) {
+                qty = Math.max(0, Math.min(max, qtyState[key]));
+            } else {
+                const defaultQtyRaw = ($row.find('[name="option_default_qty_t[]"]').first().val() || '').toString().trim();
+                qty = stockState === 'soldout' ? 0 : Math.max(0, Math.min(max, parseInt(defaultQtyRaw, 10) || 0));
+            }
+            qtyState[key] = qty;
+
+            const dates = earlyBirdEnabled ? ticketRowEarlyBirdDates($row) : { start: '', end: '' };
+
+            items.push(buildLiveTicketPreviewItem({
+                key: key,
+                name: name,
+                priceText: priceText,
+                priceRaw: priceRaw,
+                description: description,
+                stockState: stockState,
+                capacityNum: capacityNum,
+                max: max,
+                qty: qty,
+                earlyBird: !!(dates.start || dates.end),
+                showQty: true
+            }));
+
+            totalTicketQty += qty;
+
+            if (qty > 0 && !Number.isNaN(priceRaw)) {
+                subtotal += priceRaw * qty;
+                subtotalCount += qty;
+            }
+        });
+
+        // Extra Services only show once at least one ticket is selected -
+        // same rule mpwem_price_calculation() uses on the real frontend
+        // (slideDown/slideUp .mpwem_ex_service based on total_qty).
+        const extraItems = [];
+        if (totalTicketQty > 0) {
+            getSavedExtraServiceSummaryRows($root).each(function() {
+                const $row = $(this);
+                const name = extraServiceRowName($row);
+                const priceText = extraServiceRowPrice($row);
+                const priceRaw = parseFloat(($row.find('[name="option_price[]"]').first().val() || '').toString().trim());
+
+                const capacityRaw = ($row.find('[name="option_qty[]"]').first().val() || '').toString().trim();
+                const capacityNum = capacityRaw === '' ? NaN : parseInt(capacityRaw, 10);
+
+                // Matches extra_service.php's own `$ticket_qty > 0` gate -
+                // an add-on explicitly capped at 0 never shows at all.
+                if (!Number.isNaN(capacityNum) && capacityNum <= 0) {
+                    return;
+                }
+
+                let stockState = 'unlimited';
+                if (!Number.isNaN(capacityNum)) {
+                    stockState = capacityNum <= 10 ? 'low' : 'available';
+                }
+
+                const max = Number.isNaN(capacityNum) ? Infinity : capacityNum;
+                const key = 'extra:' + name;
+
+                let qty;
+                if (Object.prototype.hasOwnProperty.call(qtyState, key)) {
+                    qty = Math.max(0, Math.min(max, qtyState[key]));
+                } else {
+                    qty = 0;
+                }
+                qtyState[key] = qty;
+
+                extraItems.push(buildLiveTicketPreviewItem({
+                    key: key,
+                    name: name,
+                    priceText: priceText,
+                    priceRaw: priceRaw,
+                    description: '',
+                    stockState: stockState,
+                    capacityNum: capacityNum,
+                    max: max,
+                    qty: qty,
+                    earlyBird: false,
+                    showQty: true,
+                    unit: ' available'
+                }));
+
+                if (qty > 0 && !Number.isNaN(priceRaw)) {
+                    subtotal += priceRaw * qty;
+                    subtotalCount += qty;
+                }
+            });
+        }
+
+        const footerNodes = [];
+        if (subtotalCount > 0) {
+            footerNodes.push(
+                $('<div class="mpwem-live-ticket-preview__footer-row"></div>')
+                    .append($('<span class="mpwem-live-ticket-preview__footer-label"></span>').text('Subtotal · ' + subtotalCount + ' item' + (subtotalCount === 1 ? '' : 's')))
+                    .append($('<span class="mpwem-live-ticket-preview__footer-amount"></span>').text(formatLiveTicketPreviewPrice(subtotal)))
+            );
+            footerNodes.push(
+                $('<p class="mpwem-live-ticket-preview__footer-note"></p>').text('Click +/- to try different quantities.')
+            );
+        }
+
+        // Matches add_to_cart.php's own button exactly (label, icon, and
+        // the disabled-until-a-ticket-is-selected rule mpwem_price_calculation()
+        // enforces on the real frontend).
+        footerNodes.push(
+            $('<button type="button" class="mpwem-live-ticket-preview__register"></button>')
+                .prop('disabled', totalTicketQty <= 0)
+                .append('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>')
+                .append($('<span></span>').text('Register For This Event'))
+        );
+
+        $cards.each(function() {
+            const $body = $(this).find('.mpwem-live-ticket-preview__body').first();
+            const $footer = $(this).find('.mpwem-live-ticket-preview__footer').first();
+
+            $body.empty();
+            $footer.empty();
+
+            if (!items.length) {
+                $body.append(
+                    $('<div class="mpwem-live-ticket-preview__empty"></div>')
+                        .text('Add a ticket type to see how it looks on your event page.')
+                );
+                return;
+            }
+
+            items.forEach(function($item) {
+                $body.append($item.clone(true));
+            });
+
+            if (extraItems.length) {
+                const $extras = $('<div class="mpwem-live-ticket-preview__extras"></div>')
+                    .append($('<div class="mpwem-live-ticket-preview__extras-head"></div>').text('Extra Services'));
+                extraItems.forEach(function($item) {
+                    $extras.append($item.clone(true));
+                });
+                $body.append($extras);
+            }
+
+            footerNodes.forEach(function($node) {
+                $footer.append($node.clone(true));
+            });
+        });
+    }
+
+    function bindLiveTicketPreviewQtyButtons() {
+        if (window.mpwemLiveTicketPreviewQtyBound) {
+            return;
+        }
+
+        $(document).on('click', '.mpwem-live-ticket-preview__qty-btn', function(e) {
+            e.preventDefault();
+            const $btn = $(this);
+            if ($btn.hasClass('is-disabled')) {
+                return;
+            }
+
+            const $item = $btn.closest('.mpwem-live-ticket-preview__item');
+            const $root = $btn.closest('.mpwem-event-wizard').first();
+            const key = $item.attr('data-mpwem-preview-key');
+            if (!key || !$root.length) {
+                return;
+            }
+
+            const maxAttr = $item.attr('data-mpwem-preview-max');
+            const max = maxAttr === '' ? Infinity : (parseInt(maxAttr, 10) || 0);
+            const delta = $btn.hasClass('mpwem-live-ticket-preview__qty-btn--inc') ? 1 : -1;
+
+            const qtyState = getLiveTicketPreviewQtyState($root);
+            const current = qtyState[key] || 0;
+            const next = Math.max(0, Math.min(max, current + delta));
+            if (next === current) {
+                return;
+            }
+
+            qtyState[key] = next;
+
+            // Full re-render keeps every preview card instance (Ticket &
+            // Pricing / Date & Time / Advanced), the subtotal, and the
+            // Extra Services visibility all in sync with the new quantity.
+            renderTicketSummary($root);
+        });
+
+        window.mpwemLiveTicketPreviewQtyBound = true;
+    }
+
+    function getLiveTicketPreviewDateLabel($root, type) {
+        const activeType = type || getActiveDateModalType($root);
+
+        if (activeType === 'no') {
+            const context = getParticularDateModalContext($root);
+            const $section = context.$modalMount.find('[data-collapse="#mep_normal_event"]').first();
+            const $scope = $section.length ? $section : context.$modalMount;
+            const startDate = ($scope.find('input[name="event_start_date_normal"]').first().val() || '').toString().trim();
+            const startTime = ($scope.find('input[name="event_start_time_normal"]').first().val() || '').toString().trim();
+            return buildScheduleDateTimeLabel(startDate, startTime) || 'No date set yet';
+        }
+
+        // Particular Dates with just one date configured: plain label, same
+        // as everywhere else. Two or more goes through the dropdown in
+        // updateLiveTicketPreviewDate instead (see getLiveTicketPreviewDateOptions).
+        const $rows = getParticularDateRows($root);
+        if (!$rows.length) {
+            return 'No date set yet';
+        }
+
+        const $first = $rows.first();
+        const startDate = ($first.find('input[name="event_more_start_date[]"]').first().val() || '').toString().trim();
+        const startTime = ($first.find('input[name="event_more_start_time[]"]').first().val() || '').toString().trim();
+        return buildScheduleDateTimeLabel(startDate, startTime) || 'No date set yet';
+    }
+
+    // Particular Dates: one option per configured date, in the same order
+    // they're listed in the Date & Time step. Unlike Repeated Event's
+    // computed occurrences, these are exact rows the admin typed in, so a
+    // flat dropdown (not a calendar) is the natural picker. Like
+    // renderParticularDateSummary's own 'yes' branch, the FIRST date lives
+    // in its own primary fields outside the rows table - missing it here
+    // was why a 2-date event only showed 1 option (the row, not the
+    // primary).
+    function getLiveTicketPreviewDateOptions($root) {
+        const context = getParticularDateModalContext($root);
+        const $modalMount = context.$modalMount.length ? context.$modalMount : getSavedDateSummaryMount($root);
+        const options = [];
+
+        const primaryDate = ($modalMount.find('input[name="event_start_date"]').first().val() || '').toString().trim();
+        const primaryTime = ($modalMount.find('input[name="event_start_time"]').first().val() || '').toString().trim();
+        if (primaryDate) {
+            options.push({
+                iso: primaryDate,
+                label: buildScheduleDateTimeLabel(primaryDate, primaryTime) || primaryDate
+            });
+        }
+
+        getParticularDateRows($root).each(function() {
+            const $row = $(this);
+            const startDate = ($row.find('input[name="event_more_start_date[]"]').first().val() || '').toString().trim();
+            const startTime = ($row.find('input[name="event_more_start_time[]"]').first().val() || '').toString().trim();
+            if (!startDate) {
+                return;
+            }
+            options.push({
+                iso: startDate,
+                label: buildScheduleDateTimeLabel(startDate, startTime) || startDate
+            });
+        });
+        return options;
+    }
+
+    // Repeated Event has many selectable occurrences (like the real
+    // frontend's own date picker for a recurring event), not one fixed
+    // date - so the preview row offers a dropdown instead of static text.
+    // Mirrors the server's own rules: step by the repeat interval between
+    // Start/End, skipping any checked off-day weekday or off-date.
+    function computeRepeatOccurrenceDates($root, limit) {
+        const $repeatSection = $root.find('[data-collapse="#mep_everyday_event"]').first();
+        if (!$repeatSection.length) {
+            return [];
+        }
+
+        const startDate = parseIsoDate(($repeatSection.find('input[name="event_start_date_everyday"]').first().val() || '').toString().trim());
+        if (!startDate) {
+            return [];
+        }
+
+        const endDate = parseIsoDate(($repeatSection.find('input[name="event_end_date_everyday"]').first().val() || '').toString().trim());
+        const interval = Math.max(1, parseInt(($repeatSection.find('input[name="mep_repeated_periods"]').first().val() || '').toString().trim(), 10) || 1);
+
+        const offDays = {};
+        $repeatSection.find('.mpwem-offday-option input[type="checkbox"]:checked').each(function() {
+            const dayIndex = parseInt(($(this).attr('data-checked') || '').toString().trim(), 10);
+            if (!Number.isNaN(dayIndex)) {
+                offDays[dayIndex] = true;
+            }
+        });
+
+        const offDates = {};
+        $repeatSection.find('input[name="mep_ticket_off_dates[]"]').each(function() {
+            const value = ($(this).val() || '').toString().trim();
+            if (value) {
+                offDates[value] = true;
+            }
+        });
+
+        // No end date configured yet: still offer a reasonable run of
+        // upcoming occurrences instead of nothing.
+        const hardStop = endDate || new Date(startDate.getFullYear() + 1, startDate.getMonth(), startDate.getDate());
+
+        const occurrences = [];
+        const cursor = new Date(startDate.getTime());
+        let guard = 0;
+
+        while (cursor <= hardStop && occurrences.length < limit && guard < 3000) {
+            guard++;
+            if (!offDays[cursor.getDay()] && !offDates[formatIsoDate(cursor)]) {
+                occurrences.push(new Date(cursor.getTime()));
+            }
+            cursor.setDate(cursor.getDate() + interval);
+        }
+
+        return occurrences;
+    }
+
+    function updateLiveTicketPreviewDate($root, type) {
+        const $labels = $root.find('.mpwem-live-ticket-preview__date-label');
+        const $selects = $root.find('.mpwem-live-ticket-preview__date-select');
+        const $pickers = $root.find('.mpwem-live-ticket-preview__date-picker');
+        if (!$labels.length && !$selects.length && !$pickers.length) {
+            return;
+        }
+
+        const activeType = type || getActiveDateModalType($root);
+
+        if (activeType === 'yes') {
+            const options = getLiveTicketPreviewDateOptions($root);
+
+            $labels.hide();
+            $pickers.hide();
+            $selects.show();
+
+            $selects.each(function() {
+                const $select = $(this);
+                const previousValue = $select.val();
+                $select.empty();
+
+                if (!options.length) {
+                    $select.append($('<option></option>').attr('value', '').text('No date set yet'));
+                    $select.val('');
+                    return;
+                }
+
+                options.forEach(function(option) {
+                    $select.append($('<option></option>').attr('value', option.iso).text(option.label));
+                });
+
+                const stillValid = previousValue && options.some(function(option) {
+                    return option.iso === previousValue;
+                });
+                $select.val(stillValid ? previousValue : options[0].iso);
+            });
+            return;
+        }
+
+        if (activeType !== 'everyday') {
+            $selects.hide();
+            $pickers.hide();
+            $labels.show().text(getLiveTicketPreviewDateLabel($root, activeType));
+            return;
+        }
+
+        const occurrences = computeRepeatOccurrenceDates($root, 60);
+
+        if (!occurrences.length) {
+            $selects.hide();
+            $pickers.hide();
+            $labels.show().text('No date set yet');
+            return;
+        }
+
+        $labels.hide();
+        $selects.hide();
+        $pickers.show();
+
+        const isoList = occurrences.map(formatIsoDate);
+
+        $pickers.each(function() {
+            const $hidden = $(this).find('input[type="hidden"]').first();
+            const $visible = $(this).find('.mpwem-live-ticket-preview__date-input').first();
+            const previousValue = $hidden.val();
+
+            const stillValid = previousValue && isoList.indexOf(previousValue) !== -1;
+            const chosenIso = stillValid ? previousValue : isoList[0];
+            const chosenDate = parseIsoDate(chosenIso);
+
+            // The popup calendar reads its allowed-dates constraint off the
+            // visible input (see openCustomCalendar), so every re-render
+            // refreshes it here even while the calendar itself is closed.
+            $visible.data('mpwemAllowedDates', isoList);
+
+            $hidden.val(chosenIso);
+            $visible.val(chosenDate ? formatVisibleDate(chosenDate) : '');
+        });
+    }
+
+    function getInlineTicketAddCard($root) {
+        const context = getTicketModalContext($root);
+        if (!context.$summary.length) {
+            return $();
+        }
+
+        let $card = $root.find('#mpwem_ticket_summary_add').first();
+        if (!$card.length) {
+            $card = $('<div class="mpwem-ticket-add" id="mpwem_ticket_summary_add"></div>');
+            const $addBtn = context.$summaryList.find('.mpwem-date-primary-fields__add[data-mpwem-ticket-modal-open="new"]').last();
+            if ($addBtn.length) {
+                $card.insertBefore($addBtn);
+            } else {
+                context.$summaryList.append($card);
+            }
+        }
+
+        return $card;
+    }
+
+    const TICKET_ROW_FIELD_NAMES = [
+        'option_name_t[]',
+        'option_price_t[]',
+        'option_qty_t[]',
+        'option_qty_t_type[]',
+        'option_details_t[]',
+        'option_default_qty_t[]',
+        'option_rsv_t[]',
+        'option_ticket_mode_t[]',
+        'option_sale_start_date[]',
+        'option_sale_start_time[]',
+        'option_sale_end_date[]',
+        'option_sale_end_time[]'
+    ];
+
+    function syncRealFieldValue($el, val) {
+        $el.val(val);
+        if ($el.is('select')) {
+            $el.find('option').each(function() {
+                if (this.value === val) {
+                    this.setAttribute('selected', 'selected');
+                } else {
+                    this.removeAttribute('selected');
+                }
+            });
+        } else {
+            $el.attr('value', val);
+        }
+    }
+
+    function captureTicketRowFieldValues($row) {
+        const values = {};
+        TICKET_ROW_FIELD_NAMES.forEach(function(name) {
+            const $field = $row.find('[name="' + name + '"]').first();
+            if ($field.length) {
+                values[name] = ($field.val() || '').toString();
+            }
+        });
+        return values;
+    }
+
+    function closeInlineTicketAdd($root, opts) {
+        opts = opts || {};
+        const $card = getInlineTicketAddCard($root);
+        const $row = $card.data('mpwemInlineAddRow');
+        const mode = $card.data('mpwemInlineAddMode') || 'add';
+        const original = $card.data('mpwemInlineAddOriginal');
+
+        if (!opts.save) {
+            if (mode === 'edit' && $row && $row.length && original) {
+                Object.keys(original).forEach(function(name) {
+                    const $field = $row.find('[name="' + name + '"]').first();
+                    if ($field.length) {
+                        syncRealFieldValue($field, original[name]);
+                    }
+                });
+            } else if ($row && $row.length && $row.closest('body').length) {
+                $row.remove();
+            }
+        }
+
+        // Remember which row to focus after the summary re-renders, before
+        // clearing the card's data - a newly saved ticket gets scrolled to
+        // and highlighted in its new spot in the list.
+        const focusRowIndex = (opts.save && mode === 'add' && $row && $row.length)
+            ? getTicketRows($root).index($row)
+            : -1;
+
+        $card.removeData('mpwemInlineAddRow mpwemInlineAddMode mpwemInlineAddOriginal').removeClass('is-open').empty();
+
+        storeSavedTicketSummarySnapshot($root);
+        renderTicketSummary($root);
+
+        if (focusRowIndex > -1) {
+            const context = getTicketModalContext($root);
+            const $newItem = context.$summaryList.find('.mpwem-ticket-summary__item[data-ticket-row-index="' + focusRowIndex + '"]').first();
+            if ($newItem.length) {
+                scrollToViewportCenter($newItem);
+                flashAttention($newItem);
+            }
+        }
+    }
+
+    function renderInlineTicketAddForm($root, $row, opts) {
+        opts = opts || {};
+        const isEdit = opts.mode === 'edit';
+        const context = getTicketModalContext($root);
+        const $card = getInlineTicketAddCard($root);
+        $card.empty().addClass('is-open');
+
+        const isHybrid = ($root.find('input[name="mep_event_type"]').val() || 'offline') === 'hybrid';
+        const globalQtyOn = context.$modalMount.find('input[name="enable_global_qty"]').first().is(':checked');
+
+        const $nameInput = $row.find('[name="option_name_t[]"]').first();
+        const $priceInput = $row.find('[name="option_price_t[]"]').first();
+        const $qtyInput = $row.find('[name="option_qty_t[]"]').first();
+        const $qtyTypeSelect = $row.find('[name="option_qty_t_type[]"]').first();
+        const $descInput = $row.find('[name="option_details_t[]"]').first();
+        const $defaultQtyInput = $row.find('[name="option_default_qty_t[]"]').first();
+        const $reserveQtyInput = $row.find('[name="option_rsv_t[]"]').first();
+        const $modeSelect = $row.find('[name="option_ticket_mode_t[]"]').first();
+        const $saleStartDate = $row.find('[name="option_sale_start_date[]"]').first();
+        const $saleStartTime = $row.find('[name="option_sale_start_time[]"]').first();
+        const $saleEndDate = $row.find('[name="option_sale_end_date[]"]').first();
+        const $saleEndTime = $row.find('[name="option_sale_end_time[]"]').first();
+
+        const headIcon = isEdit
+            ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>'
+            : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+
+        const $headTitleRow = $('<div class="mpwem-ticket-add__head-title"></div>')
+            .append($('<h3></h3>').text(isEdit ? 'Edit Ticket Type' : 'Add New Ticket Type'));
+
+        const existingName = ($nameInput.val() || '').toString().trim();
+        if (isEdit && existingName) {
+            $headTitleRow.append($('<span class="mpwem-ticket-add__head-chip"></span>').text(existingName));
+        }
+
+        $card.append(
+            $('<div class="mpwem-ticket-add__head"></div>')
+                .append($('<span class="mpwem-ticket-add__head-icon"></span>').html(headIcon))
+                .append(
+                    $('<div class="mpwem-ticket-add__head-copy"></div>')
+                        .append($headTitleRow)
+                        .append($('<p></p>').text(isEdit ? 'Update the essentials, or open More options for everything else.' : 'The essentials are up front. Everything else is one click away.'))
+                )
+        );
+
+        const $body = $('<div class="mpwem-ticket-add__body"></div>');
+
+        const $core = $('<div class="mpwem-ticket-add__core"></div>').toggleClass('mpwem-ticket-add__core--gq', globalQtyOn);
+
+        const $nameProxy = $('<input type="text" placeholder="e.g. General Admission">').val(($nameInput.val() || '').toString());
+        $core.append(
+            $('<div class="mpwem-ticket-add__group"></div>')
+                .append($('<label></label>').text('Ticket Name'))
+                .append($nameProxy)
+        );
+
+        const $priceProxy = $('<input type="text" inputmode="decimal" placeholder="0.00">').val(($priceInput.val() || '').toString());
+        $core.append(
+            $('<div class="mpwem-ticket-add__group"></div>')
+                .append($('<label></label>').text('Price'))
+                .append($priceProxy)
+        );
+
+        let $qtyProxy = null;
+        if (!globalQtyOn) {
+            $qtyProxy = $('<input type="number" placeholder="100">').val(($qtyInput.val() || '').toString());
+            $core.append(
+                $('<div class="mpwem-ticket-add__group"></div>')
+                    .append($('<label></label>').text('Capacity'))
+                    .append($qtyProxy)
+            );
+        }
+
+        const qtyTypeVal = ($qtyTypeSelect.val() || 'inputbox').toString();
+
+        const $qtyTypeProxy = $('<select class="mpwem-ticket-add__select"></select>')
+            .append($('<option value="inputbox"></option>').text('Input Box'))
+            .append($('<option value="dropdown"></option>').text('Dropdown List'))
+            .val(qtyTypeVal);
+
+        // "Quantity shown as" lands in the core grid as its own column,
+        // aligned with Ticket Name / Price / Capacity, instead of its own
+        // full-width row below.
+        $core.append(
+            $('<div class="mpwem-ticket-add__group"></div>')
+                .append($('<label></label>').text('Quantity shown as'))
+                .append($qtyTypeProxy)
+        );
+
+        $body.append($core);
+
+        if (globalQtyOn) {
+            $body.append(
+                $('<p class="mpwem-ticket-add__hint"></p>').text('Capacity is set by the shared quantity pool above, not per ticket type.')
+            );
+        }
+
+        $qtyTypeProxy.on('change', function() {
+            const val = $(this).val();
+            syncRealFieldValue($qtyTypeSelect, val);
+            $qtyTypeSelect.trigger('change');
+        });
+
+        const $moreToggle = $('<button type="button" class="mpwem-ticket-add__more-toggle" aria-expanded="false"></button>')
+            .append(
+                $('<span class="mpwem-ticket-add__more-icon" aria-hidden="true"></span>')
+                    .html('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="9" cy="7" r="2.3"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="16" cy="17" r="2.3"/></svg>')
+            )
+            .append(
+                $('<span class="mpwem-ticket-add__more-text"></span>')
+                    .append($('<span class="mpwem-ticket-add__more-label"></span>').text('More options'))
+                    .append($('<span class="mpwem-ticket-add__more-sub"></span>').text('Description, reserved & default quantity, ticket mode, sale period'))
+            )
+            .append(
+                $('<span class="mpwem-ticket-add__chev"></span>')
+                    .html('<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>')
+            );
+        $body.append($moreToggle);
+
+        const $more = $('<div class="mpwem-ticket-add__more"></div>').hide();
+
+        const $descProxy = $('<textarea rows="2" placeholder="Shown to attendees on the checkout page"></textarea>').val(($descInput.val() || '').toString());
+        $more.append(
+            $('<div class="mpwem-ticket-add__group"></div>')
+                .append($('<label></label>').text('Description'))
+                .append($descProxy)
+        );
+
+        const $defaultProxy = $('<input type="number" placeholder="1">').val(($defaultQtyInput.val() || '').toString());
+        const $reserveProxy = $('<input type="number" placeholder="0">').val(($reserveQtyInput.val() || '').toString());
+        $more.append(
+            $('<div class="mpwem-ticket-add__grid"></div>')
+                .append(
+                    $('<div class="mpwem-ticket-add__group"></div>')
+                        .append($('<label></label>').text('Default Qty'))
+                        .append($defaultProxy)
+                )
+                .append(
+                    $('<div class="mpwem-ticket-add__group"></div>')
+                        .append($('<label></label>').text('Reserve Qty'))
+                        .append($reserveProxy)
+                )
+        );
+
+        let $modeProxy = null;
+        if (isHybrid) {
+            const modeVal = ($modeSelect.val() || 'inperson').toString();
+            $modeProxy = $('<select></select>')
+                .append($('<option value="inperson"></option>').text('In Person (Physical)'))
+                .append($('<option value="online"></option>').text('Online Event'))
+                .val(modeVal);
+            $more.append(
+                $('<div class="mpwem-ticket-add__group"></div>')
+                    .append($('<label></label>').text('Ticket Mode'))
+                    .append($modeProxy)
+            );
+
+            $modeProxy.on('change', function() {
+                syncRealFieldValue($modeSelect, $(this).val());
+                $modeSelect.trigger('change');
+            });
+        }
+
+        const $saleStartDateProxy = $('<input type="date">').val(($saleStartDate.val() || '').toString());
+        const $saleStartTimeProxy = $('<input type="time">').val(($saleStartTime.val() || '').toString());
+        const $saleEndDateProxy = $('<input type="date">').val(($saleEndDate.val() || '').toString());
+        const $saleEndTimeProxy = $('<input type="time">').val(($saleEndTime.val() || '').toString());
+
+        $saleStartDateProxy.addClass('mpwem-ticket-add__date-part');
+        $saleStartTimeProxy.addClass('mpwem-ticket-add__time-part');
+        $saleEndDateProxy.addClass('mpwem-ticket-add__date-part');
+        $saleEndTimeProxy.addClass('mpwem-ticket-add__time-part');
+
+        $more.append(
+            $('<div class="mpwem-ticket-add__grid"></div>')
+                .append(
+                    $('<div class="mpwem-ticket-add__group mpwem-ticket-add__group--date"></div>')
+                        .append($('<label></label>').text('Sale Starts'))
+                        .append(
+                            $('<div class="mpwem-ticket-add__date-row"></div>')
+                                .append($saleStartDateProxy)
+                                .append($saleStartTimeProxy)
+                        )
+                )
+                .append(
+                    $('<div class="mpwem-ticket-add__group mpwem-ticket-add__group--date"></div>')
+                        .append($('<label></label>').text('Sale Ends'))
+                        .append(
+                            $('<div class="mpwem-ticket-add__date-row"></div>')
+                                .append($saleEndDateProxy)
+                                .append($saleEndTimeProxy)
+                        )
+                )
+        );
+
+        $body.append($more);
+
+        $moreToggle.on('click', function() {
+            const willOpen = !$more.is(':visible');
+            $more.slideToggle(150);
+            $moreToggle.toggleClass('is-open', willOpen).attr('aria-expanded', willOpen ? 'true' : 'false');
+        });
+
+        $card.append($body);
+
+        const $footer = $('<div class="mpwem-ticket-add__footer"></div>');
+        const $cancelBtn = $('<button type="button" class="button"></button>').text('Cancel');
+        const $saveBtn = $('<button type="button" class="button button-primary mpwem-ticket-add__save"></button>').text(isEdit ? 'Save Changes' : 'Save & Add More');
+        $footer.append($cancelBtn);
+        let $saveCloseBtn = $();
+        if (!isEdit) {
+            $saveCloseBtn = $('<button type="button" class="button button-primary mpwem-ticket-add__save-close"></button>').text('Save & Close');
+            $footer.append($saveCloseBtn);
+        }
+        $footer.append($saveBtn);
+        $card.append($footer);
+
+        $nameProxy.on('input', function() { syncRealFieldValue($nameInput, $(this).val()); setTicketAddError($nameProxy, ''); });
+        $priceProxy.on('input', function() { syncRealFieldValue($priceInput, $(this).val()); setTicketAddError($priceProxy, ''); });
+        if ($qtyProxy) {
+            $qtyProxy.on('input', function() { syncRealFieldValue($qtyInput, $(this).val()); setTicketAddError($qtyProxy, ''); });
+        }
+        $descProxy.on('input', function() { syncRealFieldValue($descInput, $(this).val()); });
+        $defaultProxy.on('input', function() { syncRealFieldValue($defaultQtyInput, $(this).val()); });
+        $reserveProxy.on('input', function() { syncRealFieldValue($reserveQtyInput, $(this).val()); });
+        $saleStartDateProxy.on('input change', function() { syncRealFieldValue($saleStartDate, $(this).val()); });
+        $saleStartTimeProxy.on('input change', function() { syncRealFieldValue($saleStartTime, $(this).val()); });
+        $saleEndDateProxy.on('input change', function() { syncRealFieldValue($saleEndDate, $(this).val()); });
+        $saleEndTimeProxy.on('input change', function() { syncRealFieldValue($saleEndTime, $(this).val()); });
+
+        $cancelBtn.on('click', function() {
+            closeInlineTicketAdd($root, { save: false });
+        });
+
+        const saveTicket = function(addMore) {
+            const name = ($nameProxy.val() || '').toString().trim();
+            const price = ($priceProxy.val() || '').toString().trim();
+
+            if (!name) {
+                setTicketAddError($nameProxy, 'Ticket name is required.');
+                $nameProxy.trigger('focus');
+                return;
+            }
+            if (!price) {
+                setTicketAddError($priceProxy, 'Price is required.');
+                $priceProxy.trigger('focus');
+                return;
+            }
+
+            syncRealFieldValue($nameInput, name);
+            syncRealFieldValue($priceInput, price);
+            closeInlineTicketAdd($root, { save: true });
+            if (addMore) {
+                window.setTimeout(function() {
+                    openInlineTicketAdd($root);
+                }, 150);
+            }
+        };
+
+        $saveBtn.on('click', function() { saveTicket(!isEdit); });
+        $saveCloseBtn.on('click', function() { saveTicket(false); });
+
+        window.setTimeout(function() {
+            $nameProxy.trigger('focus');
+        }, 0);
+    }
+
+    // Red state + inline message on one input of the inline ticket form.
+    function setTicketAddError($input, message) {
+        const $group = $input.closest('.mpwem-ticket-add__group');
+        $group.find('.mpwem-field-error-msg').remove();
+        $input.toggleClass('has-error', !!message);
+        if (message) {
+            $('<p class="mpwem-field-error-msg" role="alert"></p>').text(message).appendTo($group);
+        }
+    }
+
+    function openInlineTicketAdd($root) {
+        const $card = getInlineTicketAddCard($root);
+        if ($card.hasClass('is-open')) {
+            const wasAdding = $card.data('mpwemInlineAddMode') !== 'edit';
+            closeInlineTicketAdd($root, { save: false });
+            if (wasAdding) {
+                return;
+            }
+        }
+
+        const context = getTicketModalContext($root);
+        const $addButton = context.$modalMount.find('.mpwem_add_item').first();
+        if (!$addButton.length) {
+            return;
+        }
+
+        try {
+            $addButton.trigger('click');
+        } catch (err) {
+            /* A shared add-item handler may throw (e.g. a dependency not yet
+               loaded) after it has already appended the row; don't let that
+               stop the inline form below from rendering. */
+        }
+
+        window.setTimeout(function() {
+            const $row = getTicketRows($root).last();
+            if (!$row.length) {
+                return;
+            }
+            $card.data('mpwemInlineAddRow', $row);
+            $card.data('mpwemInlineAddMode', 'add');
+            renderInlineTicketAddForm($root, $row, { mode: 'add' });
+
+            scrollToViewportCenter($card);
+            $card.find('.mpwem-ticket-add__core .mpwem-ticket-add__group').first().find('input').trigger('focus');
+        }, 100);
+    }
+
+    function openInlineTicketEdit($root, rowIndex) {
+        const $card = getInlineTicketAddCard($root);
+        const $row = getTicketRows($root).eq(rowIndex);
+        if (!$row.length) {
+            return;
+        }
+
+        const editingThisRow = $card.hasClass('is-open')
+            && $card.data('mpwemInlineAddMode') === 'edit'
+            && $card.data('mpwemInlineAddRow')
+            && $card.data('mpwemInlineAddRow')[0] === $row[0];
+
+        if ($card.hasClass('is-open')) {
+            closeInlineTicketAdd($root, { save: false });
+            if (editingThisRow) {
+                return;
+            }
+        }
+
+        $card.data('mpwemInlineAddRow', $row);
+        $card.data('mpwemInlineAddMode', 'edit');
+        $card.data('mpwemInlineAddOriginal', captureTicketRowFieldValues($row));
+
+        renderInlineTicketAddForm($root, $row, { mode: 'edit' });
+
+        scrollToViewportCenter($card);
     }
 
     function openTicketModal($root, mode, rowIndex) {
@@ -1594,18 +2867,14 @@
         $root.on('click.mpwemTicketModal', '[data-mpwem-ticket-modal-open]', function(e) {
             e.preventDefault();
             const mode = $(this).attr('data-mpwem-ticket-modal-open') || 'list';
-            const rowIndex = parseInt($(this).attr('data-ticket-row-index'), 10);
-            openTicketModal($root, mode, Number.isNaN(rowIndex) ? null : rowIndex);
-        });
 
-        $root.on('click.mpwemTicketModal', '#mpwem_ticket_summary .mpwem-ticket-summary__item', function(e) {
-            if ($(e.target).closest('[data-mpwem-ticket-modal-open], button, a, input, select, textarea').length) {
+            if (mode === 'new') {
+                openInlineTicketAdd($root);
                 return;
             }
 
-            e.preventDefault();
             const rowIndex = parseInt($(this).attr('data-ticket-row-index'), 10);
-            openTicketModal($root, 'list', Number.isNaN(rowIndex) ? null : rowIndex);
+            openTicketModal($root, mode, Number.isNaN(rowIndex) ? null : rowIndex);
         });
 
         $root.on('click.mpwemTicketModal', '[data-mpwem-ticket-modal-close]', function(e) {
@@ -1670,6 +2939,20 @@
             e.preventDefault();
             setActiveStep($root, 'date', { pushHash: true, validate: false });
             window.setTimeout(function() {
+                // Repeated Event's real controls live inline in the Date &
+                // Time step (see initializeParticularDateModal), not inside
+                // the shared date modal - openParticularDateModal has
+                // nothing to show for this type, which is why "Open Date
+                // Table" opened an empty popup. Jump to the real section
+                // instead of opening it.
+                if (getActiveDateModalType($root) === 'everyday') {
+                    const $repeatSection = getPanel($root, '#mpwem_date_settings').find('[data-collapse="#mep_everyday_event"]').first();
+                    if ($repeatSection.length) {
+                        scrollToViewportCenter($repeatSection, 250);
+                        flashAttention($repeatSection);
+                    }
+                    return;
+                }
                 openParticularDateModal($root, 'list');
             }, 120);
         });
@@ -1698,13 +2981,12 @@
             const $summaryMarkup = $(
                 '<div class="mpwem-ticket-summary" id="mpwem_extra_service_summary">' +
                     '<div class="mpwem-ticket-summary__toolbar">' +
+                        '<span class="mpwem-ticket-summary__toolbar-icon" aria-hidden="true">' +
+                            '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-3a2 2 0 0 1-2-2V2"></path><path d="M9 18a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8.5L20 6.5V16a2 2 0 0 1-2 2Z"></path><path d="M3 7.6v12.8A1.6 1.6 0 0 0 4.6 22h9.8"></path></svg>' +
+                        '</span>' +
                         '<div class="mpwem-ticket-summary__intro">' +
                             '<h3>Simple add-on list</h3>' +
                             '<p>Review optional services at a glance, then open the full editor when you need pricing or quantity details.</p>' +
-                        '</div>' +
-                        '<div class="mpwem-ticket-summary__actions">' +
-                            '<button type="button" class="button button-secondary" data-mpwem-extra-modal-open="list">Show Details</button>' +
-                            '<button type="button" class="button button-primary" data-mpwem-extra-modal-open="new">+ Add Extra Service</button>' +
                         '</div>' +
                     '</div>' +
                     '<div class="mpwem-ticket-summary__list" id="mpwem_extra_service_summary_list"></div>' +
@@ -1716,6 +2998,7 @@
         }
 
         return {
+            $summary: $summary,
             $summaryList: $summary.find('#mpwem_extra_service_summary_list').first(),
             $modal: $root.find('#mpwem_extra_service_editor_modal').first(),
             $modalMount: $root.find('#mpwem_extra_service_modal_mount').first(),
@@ -1842,26 +3125,44 @@
             return;
         }
 
+        // The inline add/edit card lives inside the list, positioned right
+        // before the "Add New Extra Service" button - detach it (not
+        // remove/empty) before clearing the list so an open card survives
+        // the rebuild, then reinsert it in the same spot below.
+        const $openAddCard = context.$summaryList.find('#mpwem_extra_service_summary_add').detach();
+
         context.$summaryList.empty();
+
+        if (!$rows.length) {
+            // Header row only makes sense once a service exists under it -
+            // same pattern as renderTicketSummary's empty state.
+            context.$summaryList.append(
+                $('<div class="mpwem-ticket-summary__empty mpwem-ticket-summary__empty--centered"></div>')
+                    .append(
+                        $('<span class="mpwem-ticket-summary__empty-icon" aria-hidden="true"></span>')
+                            .html('<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-3a2 2 0 0 1-2-2V2"></path><path d="M9 18a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8.5L20 6.5V16a2 2 0 0 1-2 2Z"></path><path d="M3 7.6v12.8A1.6 1.6 0 0 0 4.6 22h9.8"></path></svg>')
+                    )
+                    .append($('<h4></h4>').text('No extra services yet'))
+                    .append($('<p></p>').text('Create optional add-ons like meals, merchandise, or upgrades, then manage them in the full editor.'))
+                    .append(
+                        $('<button type="button" class="button button-primary"></button>')
+                            .attr('data-mpwem-extra-modal-open', 'new')
+                            .html('<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Create First Extra Service')
+                    )
+            );
+            if ($openAddCard.length) {
+                context.$summaryList.append($openAddCard);
+            }
+            return;
+        }
 
         context.$summaryList.append(
             $('<div class="mpwem-ticket-summary__header"></div>')
                 .append($('<span class="mpwem-ticket-summary__header-ticket"></span>').text('Extra Service'))
                 .append($('<span class="mpwem-ticket-summary__header-price"></span>').text('Price'))
                 .append($('<span class="mpwem-ticket-summary__header-capacity"></span>').text('Qty'))
+                .append($('<span class="mpwem-ticket-summary__header-action"></span>').text('Action'))
         );
-
-        if (!$rows.length) {
-            context.$summaryList.append(
-                $('<div class="mpwem-ticket-summary__empty"></div>')
-                    .append($('<h4></h4>').text('No extra services yet'))
-                    .append($('<p></p>').text('Create optional add-ons like meals, merchandise, or upgrades, then manage them in the full editor.'))
-                    .append($('<button type="button" class="button button-primary"></button>')
-                        .attr('data-mpwem-extra-modal-open', 'new')
-                        .text('Create First Extra Service'))
-            );
-            return;
-        }
 
         $rows.each(function(index) {
             const $row = $(this);
@@ -1884,8 +3185,363 @@
                         $('<div class="mpwem-ticket-summary__meta mpwem-ticket-summary__meta--capacity"></div>')
                             .append($('<span class="mpwem-ticket-summary__capacity"></span>').text(extraServiceRowQty($row)))
                     )
+                    .append(buildExtraServiceSummaryActions($root, index))
             );
         });
+
+        // "Add New Extra Service" renders after every row, same as
+        // "Add New Ticket Type" on the Ticket & Pricing step.
+        const $addExtraBtn = $('<button type="button" class="button button-primary mpwem-date-primary-fields__add"></button>')
+            .attr('data-mpwem-extra-modal-open', 'new')
+            .text('Add New Extra Service');
+        context.$summaryList.append($addExtraBtn);
+
+        // The open add/edit card, if any, goes right before that button -
+        // so it shows above "Add New Extra Service" instead of appearing
+        // further down, after the whole summary.
+        if ($openAddCard.length) {
+            $openAddCard.insertBefore($addExtraBtn);
+        }
+
+        enableExtraServiceSummarySort($root, context);
+    }
+
+    function buildExtraServiceSummaryActions($root, index) {
+        const $wrap = $('<div class="mpwem-ticket-summary__item-actions"></div>');
+
+        const $editBtn = $('<button type="button" class="mpwem-ticket-summary__action-btn mpwem-ticket-summary__action-btn--edit" title="Edit" aria-label="Edit extra service"></button>')
+            .html(TICKET_SUMMARY_EDIT_ICON);
+        $editBtn.on('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            openInlineExtraServiceEdit($root, index);
+        });
+
+        const $deleteBtn = $('<button type="button" class="mpwem-ticket-summary__action-btn mpwem-ticket-summary__action-btn--delete" title="Delete" aria-label="Delete extra service"></button>')
+            .html(TICKET_SUMMARY_DELETE_ICON);
+        $deleteBtn.on('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const $liveRow = getExtraServiceRows($root).eq(index);
+            const $realRemove = $liveRow.find('.mpwem_item_remove').first();
+            if ($realRemove.length) {
+                $realRemove.trigger('click');
+            }
+        });
+
+        const $sortHandle = $('<span class="mpwem-ticket-summary__sort-handle" title="Drag to reorder" aria-label="Drag to reorder" role="img"></span>')
+            .html(TICKET_SUMMARY_GRIP_ICON);
+        $sortHandle.on('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+
+        $wrap.append($editBtn).append($deleteBtn).append($sortHandle);
+
+        return $wrap;
+    }
+
+    function enableExtraServiceSummarySort($root, context) {
+        if (!context.$summaryList.length || typeof context.$summaryList.sortable !== 'function') {
+            return;
+        }
+
+        if (context.$summaryList.data('ui-sortable')) {
+            context.$summaryList.sortable('destroy');
+        }
+
+        context.$summaryList.sortable({
+            items: '> .mpwem-ticket-summary__item',
+            handle: '.mpwem-ticket-summary__sort-handle',
+            axis: 'y',
+            update: function() {
+                const $container = getExtraServiceRowsContainer($root);
+                if (!$container.length) {
+                    return;
+                }
+
+                const $liveRows = getExtraServiceRows($root);
+                context.$summaryList.find('.mpwem-ticket-summary__item').each(function() {
+                    const oldIndex = parseInt($(this).attr('data-extra-service-row-index'), 10);
+                    if (!Number.isNaN(oldIndex) && $liveRows.eq(oldIndex).length) {
+                        $container.append($liveRows.eq(oldIndex));
+                    }
+                });
+
+                storeSavedExtraServiceSummarySnapshot($root);
+                renderExtraServiceSummary($root);
+            }
+        });
+    }
+
+    const EXTRA_SERVICE_ROW_FIELD_NAMES = [
+        'option_name[]',
+        'option_price[]',
+        'option_qty[]',
+        'option_qty_type[]'
+    ];
+
+    function captureExtraServiceRowFieldValues($row) {
+        const values = {};
+        EXTRA_SERVICE_ROW_FIELD_NAMES.forEach(function(name) {
+            const $field = $row.find('[name="' + name + '"]').first();
+            if ($field.length) {
+                values[name] = ($field.val() || '').toString();
+            }
+        });
+        return values;
+    }
+
+    function getInlineExtraServiceAddCard($root) {
+        const context = getExtraServiceModalContext($root);
+        if (!context.$summary.length) {
+            return $();
+        }
+
+        let $card = $root.find('#mpwem_extra_service_summary_add').first();
+        if (!$card.length) {
+            $card = $('<div class="mpwem-ticket-add" id="mpwem_extra_service_summary_add"></div>');
+            const $addBtn = context.$summaryList.find('.mpwem-date-primary-fields__add[data-mpwem-extra-modal-open="new"]').last();
+            if ($addBtn.length) {
+                $card.insertBefore($addBtn);
+            } else {
+                context.$summaryList.append($card);
+            }
+        }
+
+        return $card;
+    }
+
+    function closeInlineExtraServiceAdd($root, opts) {
+        opts = opts || {};
+        const $card = getInlineExtraServiceAddCard($root);
+        const $row = $card.data('mpwemInlineAddRow');
+        const mode = $card.data('mpwemInlineAddMode') || 'add';
+        const original = $card.data('mpwemInlineAddOriginal');
+
+        if (!opts.save) {
+            if (mode === 'edit' && $row && $row.length && original) {
+                Object.keys(original).forEach(function(name) {
+                    const $field = $row.find('[name="' + name + '"]').first();
+                    if ($field.length) {
+                        syncRealFieldValue($field, original[name]);
+                    }
+                });
+            } else if ($row && $row.length && $row.closest('body').length) {
+                $row.remove();
+            }
+        }
+
+        $card.removeData('mpwemInlineAddRow mpwemInlineAddMode mpwemInlineAddOriginal').removeClass('is-open').empty();
+
+        storeSavedExtraServiceSummarySnapshot($root);
+        renderExtraServiceSummary($root);
+    }
+
+    function renderInlineExtraServiceAddForm($root, $row, opts) {
+        opts = opts || {};
+        const isEdit = opts.mode === 'edit';
+        const $card = getInlineExtraServiceAddCard($root);
+        $card.empty().addClass('is-open');
+
+        const $nameInput = $row.find('[name="option_name[]"]').first();
+        const $priceInput = $row.find('[name="option_price[]"]').first();
+        const $qtyInput = $row.find('[name="option_qty[]"]').first();
+        const $qtyTypeSelect = $row.find('[name="option_qty_type[]"]').first();
+
+        const headIcon = isEdit
+            ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>'
+            : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+
+        const $headTitleRow = $('<div class="mpwem-ticket-add__head-title"></div>')
+            .append($('<h3></h3>').text(isEdit ? 'Edit Extra Service' : 'Add Extra Service'));
+
+        const existingName = ($nameInput.val() || '').toString().trim();
+        if (isEdit && existingName) {
+            $headTitleRow.append($('<span class="mpwem-ticket-add__head-chip"></span>').text(existingName));
+        }
+
+        $card.append(
+            $('<div class="mpwem-ticket-add__head"></div>')
+                .append($('<span class="mpwem-ticket-add__head-icon"></span>').html(headIcon))
+                .append(
+                    $('<div class="mpwem-ticket-add__head-copy"></div>')
+                        .append($headTitleRow)
+                        .append($('<p></p>').text(isEdit ? 'Update the price, quantity, or how it’s shown.' : 'Optional add-ons like meals, merchandise, or upgrades.'))
+                )
+        );
+
+        const $body = $('<div class="mpwem-ticket-add__body"></div>');
+        const $core = $('<div class="mpwem-ticket-add__core"></div>');
+
+        const $nameProxy = $('<input type="text" placeholder="e.g. T-Shirt">').val(($nameInput.val() || '').toString());
+        $core.append(
+            $('<div class="mpwem-ticket-add__group"></div>')
+                .append($('<label></label>').text('Service Name'))
+                .append($nameProxy)
+        );
+
+        const $priceProxy = $('<input type="text" inputmode="decimal" placeholder="0.00">').val(($priceInput.val() || '').toString());
+        $core.append(
+            $('<div class="mpwem-ticket-add__group"></div>')
+                .append($('<label></label>').text('Price'))
+                .append($priceProxy)
+        );
+
+        const $qtyProxy = $('<input type="number" placeholder="100">').val(($qtyInput.val() || '').toString());
+        $core.append(
+            $('<div class="mpwem-ticket-add__group"></div>')
+                .append($('<label></label>').text('Available Qty'))
+                .append($qtyProxy)
+        );
+
+        $body.append($core);
+
+        const qtyTypeVal = ($qtyTypeSelect.val() || 'inputbox').toString();
+
+        const $qtyIndicator = $('<div class="mpwem-ticket-add__pill-indicator"></div>');
+        const $pillInput = $('<button type="button" class="mpwem-ticket-add__pill"></button>')
+            .html('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="10" rx="2.5"/><path d="M7 12h6"/></svg><span>Input Box</span>')
+            .toggleClass('is-active', qtyTypeVal === 'inputbox');
+        const $pillDropdown = $('<button type="button" class="mpwem-ticket-add__pill"></button>')
+            .html('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="10" rx="2.5"/><path d="M15 10l2 2-2 2"/></svg><span>Dropdown List</span>')
+            .toggleClass('is-active', qtyTypeVal === 'dropdown');
+
+        function updateExtraQtyIndicator(type) {
+            $qtyIndicator.css('left', type === 'dropdown' ? 'calc(50% + 1px)' : '3px');
+        }
+        updateExtraQtyIndicator(qtyTypeVal);
+
+        $body.append(
+            $('<div class="mpwem-ticket-add__field"></div>')
+                .append($('<label></label>').text('Quantity shown as'))
+                .append(
+                    $('<div class="mpwem-ticket-add__pills"></div>').append($qtyIndicator).append($pillInput).append($pillDropdown)
+                )
+        );
+
+        $pillInput.on('click', function() {
+            syncRealFieldValue($qtyTypeSelect, 'inputbox');
+            $qtyTypeSelect.trigger('change');
+            $pillInput.addClass('is-active');
+            $pillDropdown.removeClass('is-active');
+            updateExtraQtyIndicator('inputbox');
+        });
+        $pillDropdown.on('click', function() {
+            syncRealFieldValue($qtyTypeSelect, 'dropdown');
+            $qtyTypeSelect.trigger('change');
+            $pillDropdown.addClass('is-active');
+            $pillInput.removeClass('is-active');
+            updateExtraQtyIndicator('dropdown');
+        });
+
+        $card.append($body);
+
+        const $footer = $('<div class="mpwem-ticket-add__footer"></div>');
+        const $cancelBtn = $('<button type="button" class="button"></button>').text('Cancel');
+        const $saveBtn = $('<button type="button" class="button button-primary mpwem-ticket-add__save"></button>').text(isEdit ? 'Save Changes' : 'Save & Add More');
+        $footer.append($cancelBtn);
+        let $saveCloseBtn = $();
+        if (!isEdit) {
+            $saveCloseBtn = $('<button type="button" class="button button-primary mpwem-ticket-add__save-close"></button>').text('Save & Close');
+            $footer.append($saveCloseBtn);
+        }
+        $footer.append($saveBtn);
+        $card.append($footer);
+
+        $nameProxy.on('input', function() { syncRealFieldValue($nameInput, $(this).val()); $nameProxy.removeClass('has-error'); });
+        $priceProxy.on('input', function() { syncRealFieldValue($priceInput, $(this).val()); });
+        $qtyProxy.on('input', function() { syncRealFieldValue($qtyInput, $(this).val()); });
+
+        $cancelBtn.on('click', function() {
+            closeInlineExtraServiceAdd($root, { save: false });
+        });
+
+        const saveExtraService = function(addMore) {
+            const name = ($nameProxy.val() || '').toString().trim();
+            if (!name) {
+                $nameProxy.addClass('has-error').trigger('focus');
+                return;
+            }
+
+            syncRealFieldValue($nameInput, name);
+            syncRealFieldValue($priceInput, ($priceProxy.val() || '').toString());
+            syncRealFieldValue($qtyInput, ($qtyProxy.val() || '').toString());
+            closeInlineExtraServiceAdd($root, { save: true });
+            if (addMore) {
+                window.setTimeout(function() {
+                    openInlineExtraServiceAdd($root);
+                }, 150);
+            }
+        };
+
+        $saveBtn.on('click', function() { saveExtraService(!isEdit); });
+        $saveCloseBtn.on('click', function() { saveExtraService(false); });
+
+        window.setTimeout(function() {
+            $nameProxy.trigger('focus');
+        }, 0);
+    }
+
+    function openInlineExtraServiceAdd($root) {
+        const $card = getInlineExtraServiceAddCard($root);
+        if ($card.hasClass('is-open')) {
+            const wasAdding = $card.data('mpwemInlineAddMode') !== 'edit';
+            closeInlineExtraServiceAdd($root, { save: false });
+            if (wasAdding) {
+                return;
+            }
+        }
+
+        const context = getExtraServiceModalContext($root);
+        const $addButton = context.$modalMount.find('.mpwem_add_item').first();
+        if (!$addButton.length) {
+            return;
+        }
+
+        try {
+            $addButton.trigger('click');
+        } catch (err) {
+            /* A shared add-item handler may throw (e.g. a dependency not yet
+               loaded) after it has already appended the row; don't let that
+               stop the inline form below from rendering. */
+        }
+
+        window.setTimeout(function() {
+            const $row = getExtraServiceRows($root).last();
+            if (!$row.length) {
+                return;
+            }
+            $card.data('mpwemInlineAddRow', $row);
+            $card.data('mpwemInlineAddMode', 'add');
+            renderInlineExtraServiceAddForm($root, $row, { mode: 'add' });
+        }, 100);
+    }
+
+    function openInlineExtraServiceEdit($root, rowIndex) {
+        const $card = getInlineExtraServiceAddCard($root);
+        const $row = getExtraServiceRows($root).eq(rowIndex);
+        if (!$row.length) {
+            return;
+        }
+
+        const editingThisRow = $card.hasClass('is-open')
+            && $card.data('mpwemInlineAddMode') === 'edit'
+            && $card.data('mpwemInlineAddRow')
+            && $card.data('mpwemInlineAddRow')[0] === $row[0];
+
+        if ($card.hasClass('is-open')) {
+            closeInlineExtraServiceAdd($root, { save: false });
+            if (editingThisRow) {
+                return;
+            }
+        }
+
+        $card.data('mpwemInlineAddRow', $row);
+        $card.data('mpwemInlineAddMode', 'edit');
+        $card.data('mpwemInlineAddOriginal', captureExtraServiceRowFieldValues($row));
+
+        renderInlineExtraServiceAddForm($root, $row, { mode: 'edit' });
     }
 
     function openExtraServiceModal($root, mode, rowIndex) {
@@ -1987,18 +3643,14 @@
         $root.on('click.mpwemExtraModal', '[data-mpwem-extra-modal-open]', function(e) {
             e.preventDefault();
             const mode = $(this).attr('data-mpwem-extra-modal-open') || 'list';
-            const rowIndex = parseInt($(this).attr('data-extra-service-row-index'), 10);
-            openExtraServiceModal($root, mode, Number.isNaN(rowIndex) ? null : rowIndex);
-        });
 
-        $root.on('click.mpwemExtraModal', '#mpwem_extra_service_summary .mpwem-ticket-summary__item', function(e) {
-            if ($(e.target).closest('[data-mpwem-extra-modal-open], button, a, input, select, textarea').length) {
+            if (mode === 'new') {
+                openInlineExtraServiceAdd($root);
                 return;
             }
 
-            e.preventDefault();
             const rowIndex = parseInt($(this).attr('data-extra-service-row-index'), 10);
-            openExtraServiceModal($root, 'list', Number.isNaN(rowIndex) ? null : rowIndex);
+            openExtraServiceModal($root, mode, Number.isNaN(rowIndex) ? null : rowIndex);
         });
 
         $root.on('click.mpwemExtraModal', '[data-mpwem-extra-modal-close]', function(e) {
@@ -2072,8 +3724,7 @@
                 eyebrow: 'Single Event',
                 summaryTitle: 'Single event schedule',
                 summaryText: 'Review the main event date and any extra dates, then open the full editor when you need to update the schedule.',
-                primaryAction: 'Open Settings',
-                secondaryAction: '+ Add Schedule',
+                secondaryAction: 'Add Schedule',
                 modalTitle: 'Manage single event schedule',
                 modalDescription: 'Edit the main event date, time, and any additional single-event dates without leaving this step.',
                 modalNewTitle: 'Add schedule',
@@ -2083,8 +3734,7 @@
                 eyebrow: 'Particular Dates',
                 summaryTitle: 'Specific event dates',
                 summaryText: 'Review particular dates at a glance, then open the full editor when you need to change time or quantity details.',
-                primaryAction: 'Show Details',
-                secondaryAction: '+ Add Particular Date',
+                secondaryAction: 'Add Particular Date',
                 modalTitle: 'Manage particular dates',
                 modalDescription: 'Edit specific event dates, times, and quantities without leaving this step.',
                 modalNewTitle: 'Add particular date',
@@ -2111,13 +3761,20 @@
 
     function getParticularDateModalContext($root) {
         const $datePanel = getPanel($root, '#mpwem_date_settings');
-        const $allSections = $root.find('[data-collapse="#mep_normal_event"], [data-collapse="#mep_particular_event"], [data-collapse="#mep_everyday_event"]');
+        /* Repeated Event ("#mep_everyday_event") is deliberately excluded here:
+           its real fields stay inline in the step (see
+           initializeParticularDateModal) instead of being relocated into the
+           modal, so it's never part of the modal-hosted "legacy mount" set. */
+        const $modalSections = $root.find('[data-collapse="#mep_normal_event"], [data-collapse="#mep_particular_event"]');
         let $summary = $datePanel.find('#mpwem_particular_date_summary').first();
 
         if ($datePanel.length && !$summary.length) {
             const $summaryMarkup = $(
                 '<div class="mpwem-ticket-summary" id="mpwem_particular_date_summary" style="display:none;">' +
                     '<div class="mpwem-ticket-summary__toolbar">' +
+                        '<span class="mpwem-ticket-summary__icon" aria-hidden="true">' +
+                            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="3"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>' +
+                        '</span>' +
                         '<div class="mpwem-ticket-summary__intro">' +
                             '<span class="mpwem-ticket-summary__eyebrow"></span>' +
                             '<h3></h3>' +
@@ -2146,7 +3803,7 @@
             $modal: $root.find('#mpwem_particular_date_modal').first(),
             $modalMount: $root.find('#mpwem_particular_date_modal_mount').first(),
             $footerStart: $root.find('#mpwem_particular_date_modal_footer_start').first(),
-            $legacyMounts: $allSections
+            $legacyMounts: $modalSections
         };
     }
 
@@ -2342,13 +3999,20 @@
         context.$summaryIntro.find('p').text(config.summaryText);
 
         context.$summaryActions.empty();
-        context.$summaryActions.append(
-            $('<button type="button" class="button button-secondary"></button>')
-                .attr('data-mpwem-date-modal-open', 'list')
-                .text(config.primaryAction)
-        );
 
-        if (config.secondaryAction) {
+        if (config.primaryAction) {
+            context.$summaryActions.append(
+                $('<button type="button" class="button button-secondary"></button>')
+                    .attr('data-mpwem-date-modal-open', 'list')
+                    .text(config.primaryAction)
+            );
+        }
+
+        // Single Event and Particular Dates have no "Open Settings"/
+        // "Show Details" button, and their "+ Add..." action renders
+        // after their own date list instead of here (see
+        // renderParticularDateSummary).
+        if (config.secondaryAction && type !== 'no' && type !== 'yes') {
             context.$summaryActions.append(
                 $('<button type="button" class="button button-primary"></button>')
                     .attr('data-mpwem-date-modal-open', 'new')
@@ -2357,13 +4021,226 @@
         }
     }
 
+    function buildDateSummaryActions($root, type, rowIndex, isPrimary) {
+        const $wrap = $('<div class="mpwem-ticket-summary__item-actions"></div>');
+
+        const $editBtn = $('<button type="button" class="mpwem-ticket-summary__action-btn mpwem-ticket-summary__action-btn--edit" title="Edit" aria-label="Edit date"></button>')
+            .html(TICKET_SUMMARY_EDIT_ICON);
+        $editBtn.on('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            openInlineDateEdit($root, type, isPrimary ? -1 : rowIndex);
+        });
+        $wrap.append($editBtn);
+
+        if (!isPrimary) {
+            const $deleteBtn = $('<button type="button" class="mpwem-ticket-summary__action-btn mpwem-ticket-summary__action-btn--delete" title="Delete" aria-label="Delete date"></button>')
+                .html(TICKET_SUMMARY_DELETE_ICON);
+            $deleteBtn.on('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                const $rows = getActiveDateModalRows($root, type);
+                const $row = $rows.eq(rowIndex);
+                const $realRemove = $row.find('.mpwem_item_remove').first();
+                if ($realRemove.length) {
+                    $realRemove.trigger('click');
+                }
+            });
+            $wrap.append($deleteBtn);
+        }
+
+        return $wrap;
+    }
+
+    // Live "Schedule Summary" sidebar card (Step 3) - keeps the full
+    // start/end date & time of every event date in sync with the real
+    // fields, instead of the static placeholder copy it used to show.
+    function updateScheduleSummaryCard($root, type, context) {
+        const $body = $root.find('#mpwem_schedule_summary_body').first();
+        if (!$body.length) {
+            return;
+        }
+
+        function fieldVal($scope, name) {
+            return ($scope.find('input[name="' + name + '"], select[name="' + name + '"]').first().val() || '').toString().trim();
+        }
+
+        $body.empty();
+
+        if (type === 'everyday') {
+            const $section = $root.find('[data-collapse="#mep_everyday_event"]').first();
+            const startLabel = buildScheduleDateTimeLabel(fieldVal($section, 'event_start_date_everyday'), fieldVal($section, 'event_start_time_everyday'));
+            const endLabel = buildScheduleDateTimeLabel(fieldVal($section, 'event_end_date_everyday'), fieldVal($section, 'event_end_time_everyday'));
+
+            if (startLabel || endLabel) {
+                appendScheduleSummaryItem($body, startLabel || 'Start not set', endLabel || 'End not set');
+            } else {
+                appendScheduleSummaryEmpty($body, 'Set a repeat range to see it here.');
+            }
+
+            // Repeat interval, weekly off days, and one-off skip dates -
+            // shown only when actually configured, as icon rows instead
+            // of a run-on sentence.
+            const $rules = $('<div class="mpwem-schedule-summary__rules"></div>');
+
+            const interval = parseInt(fieldVal($section, 'mep_repeated_periods'), 10) || 1;
+            const freqText = interval === 1 ? 'Every day' : 'Every ' + interval + ' days';
+            appendScheduleSummaryRule($rules, 'repeat', freqText);
+
+            const skippedDayNames = [];
+            $section.find('.mpwem-offday-option').each(function() {
+                const $opt = $(this);
+                if (!$opt.find('input[type="checkbox"]').is(':checked')) {
+                    return;
+                }
+                const full = $opt.data('mpwemOffDayFullLabel') || $opt.attr('title');
+                if (full) {
+                    skippedDayNames.push(full);
+                }
+            });
+            if (skippedDayNames.length) {
+                appendScheduleSummaryRule($rules, 'skip', 'Weekly off', skippedDayNames);
+            }
+
+            const offDateCount = $section.find('input[name="mep_ticket_off_dates[]"]').filter(function() {
+                return ($(this).val() || '').toString().trim() !== '';
+            }).length;
+            if (offDateCount > 0) {
+                appendScheduleSummaryRule($rules, 'calendar-off', offDateCount + (offDateCount === 1 ? ' one-off date skipped' : ' one-off dates skipped'));
+            }
+
+            $body.append($rules);
+            return;
+        }
+
+        let items;
+
+        if (type === 'no') {
+            // Single Event's fields use the "_normal" suffixed names (see
+            // getDateFieldNames/collectSingleEventSummaryItems) - not the
+            // plain event_start_date/event_start_time Particular Dates
+            // uses, which was why newly added Single Event dates never
+            // showed up here.
+            const modalContext = context || getParticularDateModalContext($root);
+            const $scope = modalContext.$modalMount && modalContext.$modalMount.length ? modalContext.$modalMount : getSavedDateSummaryMount($root);
+            items = collectSingleEventSummaryItems($scope);
+        } else {
+            const modalContext = context || getParticularDateModalContext($root);
+            const $scope = modalContext.$modalMount && modalContext.$modalMount.length ? modalContext.$modalMount : getSavedDateSummaryMount($root);
+            items = [];
+
+            const primaryDate = fieldVal($scope, 'event_start_date');
+            if (primaryDate) {
+                items.push({
+                    startLabel: buildScheduleDateTimeLabel(primaryDate, fieldVal($scope, 'event_start_time')) || 'Start not set',
+                    endLabel: buildScheduleDateTimeLabel(fieldVal($scope, 'event_end_date'), fieldVal($scope, 'event_end_time')) || 'End not set'
+                });
+            }
+
+            getParticularDateRows($root).each(function() {
+                const $row = $(this);
+                items.push({
+                    startLabel: buildScheduleDateTimeLabel(fieldVal($row, 'event_more_start_date[]'), fieldVal($row, 'event_more_start_time[]')) || 'Start not set',
+                    endLabel: buildScheduleDateTimeLabel(fieldVal($row, 'event_more_end_date[]'), fieldVal($row, 'event_more_end_time[]')) || 'End not set'
+                });
+            });
+        }
+
+        if (!items.length) {
+            appendScheduleSummaryEmpty($body, type === 'yes' ? 'Add a date to see it here.' : 'Set a start date to see it here.');
+            return;
+        }
+
+        items.forEach(function(item) {
+            appendScheduleSummaryItem($body, item.startLabel, item.endLabel);
+        });
+    }
+
+    function appendScheduleSummaryItem($body, startLabel, endLabel) {
+        $body.append(
+            $('<div class="mpwem-schedule-summary__item"></div>')
+                .append(
+                    $('<span class="mpwem-schedule-summary__item-icon" aria-hidden="true"></span>')
+                        .html('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="3"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>')
+                )
+                .append(
+                    $('<div class="mpwem-schedule-summary__item-body"></div>')
+                        .append(
+                            $('<p class="mpwem-schedule-summary__line"></p>')
+                                .append($('<span class="mpwem-schedule-summary__label"></span>').text('Start'))
+                                .append(document.createTextNode(startLabel))
+                        )
+                        .append(
+                            $('<p class="mpwem-schedule-summary__line mpwem-schedule-summary__line--muted"></p>')
+                                .append($('<span class="mpwem-schedule-summary__label"></span>').text('End'))
+                                .append(document.createTextNode(endLabel))
+                        )
+                )
+        );
+    }
+
+    function appendScheduleSummaryEmpty($body, message) {
+        $body.append($('<p class="mpwem-schedule-summary__line mpwem-schedule-summary__line--muted"></p>').text(message));
+    }
+
+    function appendScheduleSummaryRule($rules, iconKey, text, chips) {
+        const icons = {
+            repeat: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>',
+            skip: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><line x1="9" y1="14" x2="15" y2="18"></line><line x1="15" y1="14" x2="9" y2="18"></line></svg>',
+            'calendar-off': '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>'
+        };
+
+        const $row = $('<div class="mpwem-schedule-summary__rule"></div>')
+            .append($('<span class="mpwem-schedule-summary__rule-icon" aria-hidden="true"></span>').html(icons[iconKey] || ''))
+            .append($('<span class="mpwem-schedule-summary__rule-text"></span>').text(text));
+
+        if (chips && chips.length) {
+            const $chips = $('<span class="mpwem-schedule-summary__chips"></span>');
+            chips.forEach(function(label) {
+                $chips.append($('<span class="mpwem-schedule-summary__chip"></span>').text(label));
+            });
+            $row.append($chips);
+        }
+
+        $rules.append($row);
+    }
+
     function renderParticularDateSummary($root) {
         const context = getParticularDateModalContext($root);
         if (!context.$summaryList.length) {
             return;
         }
 
+        // The inline add/edit card lives inside the list, positioned right
+        // before the "+ Add Schedule"/"+ Add Particular Date" button -
+        // detach it (not remove/empty) before clearing the list so an open
+        // card survives the rebuild, then reinsert it in the same spot
+        // wherever the button ends up below.
+        const $openAddCard = context.$summaryList.find('#mpwem_particular_date_summary_add').detach();
+
         const type = getActiveDateModalType($root);
+
+        // Keeps the Live Ticket Preview card's date line in sync regardless
+        // of which branch below this runs (type switch, empty state, or a
+        // populated list), since all of them share this one entry point.
+        updateLiveTicketPreviewDate($root, type);
+        updateScheduleSummaryCard($root, type, context);
+
+        if (type === 'everyday') {
+            /* Repeated Event's real fields now live inline in the step
+               (see initializeParticularDateModal) instead of behind a
+               modal, so there's nothing left for this summary card to
+               summarize or open - hide it entirely. */
+            context.$summary.hide();
+            context.$summaryList.empty();
+            if ($openAddCard.length) {
+                context.$summaryList.append($openAddCard);
+            }
+            return;
+        }
+
+        context.$summary.show();
+
         const config = getDateModalTypeConfig(type);
         const $modalMount = context.$modalMount.length ? context.$modalMount : getSavedDateSummaryMount($root);
         renderDateModalSummaryActions($root, context, type);
@@ -2372,33 +4249,44 @@
         if (type === 'yes') {
             const $rows = getParticularDateRows($root);
 
-            context.$summaryList.append(
-                $('<div class="mpwem-ticket-summary__header"></div>')
-                    .append($('<span class="mpwem-ticket-summary__header-ticket">Start Date</span>'))
-                    .append($('<span class="mpwem-ticket-summary__header-capacity">End Date</span>'))
-            );
-
             const primaryDateVal = ($modalMount.find('input[name="event_start_date"]').first().val() || '').toString().trim();
             const primaryTimeVal = ($modalMount.find('input[name="event_start_time"]').first().val() || '').toString().trim();
             const primaryEndDateVal = ($modalMount.find('input[name="event_end_date"]').first().val() || '').toString().trim();
             const primaryEndTimeVal = ($modalMount.find('input[name="event_end_time"]').first().val() || '').toString().trim();
 
             if (!primaryDateVal && !$rows.length) {
+                // No header row here either - nothing to label yet.
                 context.$summaryList.append(
-                    $('<div class="mpwem-ticket-summary__empty"></div>')
+                    $('<div class="mpwem-ticket-summary__empty mpwem-ticket-summary__empty--centered"></div>')
+                        .append(
+                            $('<span class="mpwem-ticket-summary__empty-icon" aria-hidden="true"></span>')
+                                .html('<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="3"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>')
+                        )
                         .append($('<h4></h4>').text('No dates added yet'))
                         .append($('<p></p>').text('Add specific dates and times for this event to run on.'))
-                        .append($('<button type="button" class="button button-primary"></button>')
-                            .attr('data-mpwem-date-modal-open', 'new')
-                            .text('Create First Date'))
+                        .append(
+                            $('<button type="button" class="button button-primary"></button>')
+                                .attr('data-mpwem-date-modal-open', 'new')
+                                .html('<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Create First Date')
+                        )
                 );
+                if ($openAddCard.length) {
+                    context.$summaryList.append($openAddCard);
+                }
                 return;
             }
+
+            context.$summaryList.append(
+                $('<div class="mpwem-ticket-summary__header"></div>')
+                    .append($('<span class="mpwem-ticket-summary__header-ticket">Start Date</span>'))
+                    .append($('<span class="mpwem-ticket-summary__header-capacity">End Date</span>'))
+                    .append($('<span class="mpwem-ticket-summary__header-action">Action</span>'))
+            );
 
             if (primaryDateVal) {
                 const primaryDisplayStart = buildScheduleDateTimeLabel(primaryDateVal, primaryTimeVal) || 'Start date not set';
                 const primaryDisplayEnd = buildScheduleDateTimeLabel(primaryEndDateVal, primaryEndTimeVal) || 'End date not set';
-                
+
                 context.$summaryList.append(
                     $('<article class="mpwem-ticket-summary__item"></article>')
                         .attr('data-date-row-index', -1)
@@ -2413,6 +4301,7 @@
                             $('<div class="mpwem-ticket-summary__meta"></div>')
                                 .append($('<span class="mpwem-ticket-summary__datetime"></span>').text(primaryDisplayEnd))
                         )
+                        .append(buildDateSummaryActions($root, type, -1, true))
                 );
             }
 
@@ -2440,89 +4329,490 @@
                             $('<div class="mpwem-ticket-summary__meta"></div>')
                                 .append($('<span class="mpwem-ticket-summary__datetime"></span>').text(displayEnd))
                         )
+                        .append(buildDateSummaryActions($root, type, index, false))
                 );
             });
-            return;
-        }
 
-        const summaryItems = [];
-
-        if (type === 'no') {
-            Array.prototype.push.apply(summaryItems, collectSingleEventSummaryItems($modalMount));
-        } else if (type === 'everyday') {
-            const startDate = ($modalMount.find('input[name="event_start_date_everyday"]').first().val() || '').toString().trim();
-            const startTime = ($modalMount.find('input[name="event_start_time_everyday"]').first().val() || '').toString().trim();
-            const endDate = ($modalMount.find('input[name="event_end_date_everyday"]').first().val() || '').toString().trim();
-            const endTime = ($modalMount.find('input[name="event_end_time_everyday"]').first().val() || '').toString().trim();
-            const interval = ($modalMount.find('input[name="mep_repeated_periods"]').first().val() || '').toString().trim() || '1';
-            const offDays = ($modalMount.find('input[name="mep_ticket_offdays"]').first().val() || '').toString().trim();
-            const offDates = $modalMount.find('input[name="mep_ticket_off_dates[]"]').filter(function() {
-                return ($(this).val() || '').toString().trim() !== '';
-            }).length;
-
-            summaryItems.push({
-                title: buildScheduleRangeLabel(startDate, startTime, endDate, endTime) || 'Repeated date range not set',
-                detail: 'Repeats every ' + interval + ' day' + (interval === '1' ? '' : 's')
-            });
-            if (offDays || offDates) {
-                summaryItems.push({
-                    title: offDates ? 'Off dates configured' : 'Off days configured',
-                    detail: offDays ? offDays : (offDates ? offDates + ' off date' + (offDates > 1 ? 's' : '') + ' added' : '')
-                });
+            // "+ Add Particular Date" renders after every row, same as
+            // Single Event's "+ Add Schedule".
+            if (config.secondaryAction) {
+                const $addDateBtn = $('<button type="button" class="button button-primary mpwem-date-primary-fields__add"></button>')
+                    .attr('data-mpwem-date-modal-open', 'new')
+                    .text(config.secondaryAction);
+                context.$summaryList.append($addDateBtn);
+                if ($openAddCard.length) {
+                    $openAddCard.insertBefore($addDateBtn);
+                }
+            } else if ($openAddCard.length) {
+                context.$summaryList.append($openAddCard);
             }
-        }
 
-        if (!summaryItems.length) {
-            context.$summaryList.append(
-                $('<div class="mpwem-ticket-summary__empty"></div>')
-                    .append($('<h4></h4>').text(config.summaryTitle))
-                    .append($('<p></p>').text(config.summaryText))
-            );
             return;
         }
 
-        const $header = $('<div class="mpwem-ticket-summary__header"></div>')
-            .append($('<span class="mpwem-ticket-summary__header-ticket"></span>').text(type === 'no' ? 'Start Date' : 'Schedule'));
+        /* Only "no" (Single Event) reaches here - "yes" returned above,
+           "everyday" returned at the top of this function. The primary
+           Start/End row reads like any other summary row (Edit only, no
+           delete since it can't be removed) instead of rendering its
+           fields always-editable; its own inline edit card (opened via
+           the Edit button, same one "+ Add Schedule" opens) is the only
+           place those fields are actually editable. */
+        const items = collectSingleEventSummaryItems($modalMount);
+        const primaryItem = items.find(function(item) { return item.isPrimary; });
+        const extraItems = items.filter(function(item) {
+            return !item.isPrimary;
+        });
 
-        $header.append($('<span class="mpwem-ticket-summary__header-capacity"></span>').text(type === 'no' ? 'End Date' : 'Details'));
+        if (!primaryItem && !extraItems.length) {
+            // Without this, the step showed nothing but a bare
+            // "+ Add Schedule" button with no explanation of what was
+            // missing. Only shown when there is truly nothing yet -
+            // "+ Add Schedule" adds a row via the real add-item button
+            // (see openInlineDateAdd), which can land as an additional
+            // date even while the primary stays unset, same as
+            // Particular Dates' "Create First Date" already allows.
+            context.$summaryList.append(
+                $('<div class="mpwem-ticket-summary__empty mpwem-ticket-summary__empty--centered"></div>')
+                    .append(
+                        $('<span class="mpwem-ticket-summary__empty-icon" aria-hidden="true"></span>')
+                            .html('<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="3"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>')
+                    )
+                    .append($('<h4></h4>').text('No schedule set yet'))
+                    .append($('<p></p>').text('Add a start and end date & time so people know when this event happens.'))
+                    .append(
+                        $('<button type="button" class="button button-primary"></button>')
+                            .attr('data-mpwem-date-modal-open', 'new')
+                            .html('<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Add Schedule')
+                    )
+            );
+            if ($openAddCard.length) {
+                context.$summaryList.append($openAddCard);
+            }
+            return;
+        }
 
-        context.$summaryList.append($header);
+        // Shown by default as soon as there's a primary date and/or any
+        // extra dates - not gated behind extraItems.length, so it's visible
+        // from the very first row instead of only once a 2nd date exists.
+        context.$summaryList.append(
+            $('<div class="mpwem-ticket-summary__header"></div>')
+                .append($('<span class="mpwem-ticket-summary__header-ticket"></span>').text('Start Date'))
+                .append($('<span class="mpwem-ticket-summary__header-capacity"></span>').text('End Date'))
+                .append($('<span class="mpwem-ticket-summary__header-action"></span>').text('Action'))
+        );
 
-        summaryItems.forEach(function(item) {
-            const $item = $('<article class="mpwem-ticket-summary__item"></article>');
-
-            if (type === 'no') {
-                $item
+        if (primaryItem) {
+            context.$summaryList.append(
+                $('<article class="mpwem-ticket-summary__item"></article>')
+                    .attr('data-date-row-index', -1)
                     .append(
                         $('<div class="mpwem-ticket-summary__item-main"></div>')
                             .append(
                                 $('<div class="mpwem-ticket-summary__item-head"></div>')
-                                    .append($('<h4></h4>').text(item.startLabel))
+                                    .append($('<h4></h4>').text(primaryItem.startLabel))
                             )
                     )
                     .append(
                         $('<div class="mpwem-ticket-summary__meta"></div>')
-                            .append($('<span class="mpwem-ticket-summary__datetime"></span>').text(item.endLabel))
-                    );
-            } else {
-                $item.append(
-                    $('<div class="mpwem-ticket-summary__item-main"></div>')
-                        .append(
-                            $('<div class="mpwem-ticket-summary__item-head"></div>')
-                                .append($('<h4></h4>').text(item.title))
-                        )
-                );
+                            .append($('<span class="mpwem-ticket-summary__datetime"></span>').text(primaryItem.endLabel))
+                    )
+                    .append(buildDateSummaryActions($root, type, -1, true))
+            );
+        }
 
-                if (item.detail) {
-                    $item.append(
-                        $('<div class="mpwem-ticket-summary__meta"></div>')
-                            .append($('<span class="mpwem-ticket-summary__capacity"></span>').text(item.detail))
-                    );
+        if (extraItems.length) {
+            extraItems.forEach(function(item) {
+                context.$summaryList.append(
+                    $('<article class="mpwem-ticket-summary__item"></article>')
+                        .append(
+                            $('<div class="mpwem-ticket-summary__item-main"></div>')
+                                .append(
+                                    $('<div class="mpwem-ticket-summary__item-head"></div>')
+                                        .append($('<h4></h4>').text(item.startLabel))
+                                )
+                        )
+                        .append(
+                            $('<div class="mpwem-ticket-summary__meta"></div>')
+                                .append($('<span class="mpwem-ticket-summary__datetime"></span>').text(item.endLabel))
+                        )
+                        .append(buildDateSummaryActions($root, type, item.rowIndex, false))
+                );
+            });
+        }
+
+        // "+ Add Schedule" renders after every row (the primary one and
+        // any additional dates), not between them.
+        if (config.secondaryAction) {
+            const $addScheduleBtn = $('<button type="button" class="button button-primary mpwem-date-primary-fields__add"></button>')
+                .attr('data-mpwem-date-modal-open', 'new')
+                .text(config.secondaryAction);
+            context.$summaryList.append($addScheduleBtn);
+            if ($openAddCard.length) {
+                $openAddCard.insertBefore($addScheduleBtn);
+            }
+        } else if ($openAddCard.length) {
+            context.$summaryList.append($openAddCard);
+        }
+    }
+
+    function getDateFieldNames(type) {
+        return type === 'no'
+            ? {
+                primary: { start: 'event_start_date_normal', startTime: 'event_start_time_normal', end: 'event_end_date_normal', endTime: 'event_end_time_normal' },
+                row: { start: 'event_more_start_date_normal[]', startTime: 'event_more_start_time_normal[]', end: 'event_more_end_date_normal[]', endTime: 'event_more_end_time_normal[]' }
+            }
+            : {
+                primary: { start: 'event_start_date', startTime: 'event_start_time', end: 'event_end_date', endTime: 'event_end_time' },
+                row: { start: 'event_more_start_date[]', startTime: 'event_more_start_time[]', end: 'event_more_end_date[]', endTime: 'event_more_end_time[]' }
+            };
+    }
+
+    function buildPrimaryDateTimePill($realDateInput, $realTimeInput) {
+        const isoDate = ($realDateInput.val() || '').toString();
+        const parsedDate = parseIsoDate(isoDate);
+        const visibleDate = parsedDate ? formatVisibleDate(parsedDate) : '';
+
+        const $dateHidden = $('<input type="hidden">').val(isoDate).data('mpwemRealDate', $realDateInput);
+        const $dateVisible = $('<input type="text" class="formControl mpwem-date-input" autocomplete="off">')
+            .val(visibleDate)
+            .data('mpwemRealDate', $realDateInput)
+            .attr('placeholder', formatVisibleDate(new Date()));
+        const $dateWrap = $('<label class="mpwem-date-input-wrap"></label>')
+            .append($dateHidden, $dateVisible)
+            .append($('<span class="fas fa-times remove_icon mpwem_date_reset" aria-hidden="true" title="Clear date"></span>'));
+
+        $dateHidden.on('change', function() {
+            syncRealFieldValue($realDateInput, $(this).val());
+        });
+
+        const $timeInput = $('<input type="time" class="formControl" placeholder="Select time">').val(($realTimeInput.val() || '').toString()).data('mpwemRealTime', $realTimeInput);
+        const $timeWrap = $('<label class="mpwem-time-input-wrap"></label>')
+            .append($timeInput)
+            .append($('<span class="fas fa-times remove_icon mpwem_time_reset" aria-hidden="true" title="Clear time"></span>'));
+
+        $timeInput.on('change', function() {
+            syncRealFieldValue($realTimeInput, $(this).val());
+        });
+
+        const $pill = $('<div class="dFlex mpwem-repeat-dt-pill"></div>').append($dateWrap, $timeWrap);
+        // Wires up the same custom calendar/time-picker popups used
+        // everywhere else in the wizard (incl. the reset ✕ buttons,
+        // handled by the existing global delegated click handlers) -
+        // this proxy never holds a real field `name`, so it's never
+        // submitted; it only mirrors value changes onto the real
+        // start/end date & time inputs via the listeners above.
+        enhanceCustomCalendar($pill);
+
+        return $pill;
+    }
+
+    function getInlineDateAddCard($root) {
+        const context = getParticularDateModalContext($root);
+        if (!context.$summary.length) {
+            return $();
+        }
+
+        let $card = $root.find('#mpwem_particular_date_summary_add').first();
+        if (!$card.length) {
+            $card = $('<div class="mpwem-ticket-add" id="mpwem_particular_date_summary_add"></div>');
+            const $addBtn = context.$summaryList.find('.mpwem-date-primary-fields__add[data-mpwem-date-modal-open="new"]').last();
+            if ($addBtn.length) {
+                $card.insertBefore($addBtn);
+            } else {
+                context.$summaryList.append($card);
+            }
+        }
+
+        return $card;
+    }
+
+    function closeInlineDateAdd($root, opts) {
+        opts = opts || {};
+        const $card = getInlineDateAddCard($root);
+        const $scope = $card.data('mpwemInlineDateScope');
+        const $row = $card.data('mpwemInlineDateRow');
+        const mode = $card.data('mpwemInlineDateMode') || 'add';
+        const original = $card.data('mpwemInlineDateOriginal');
+        const fieldNames = $card.data('mpwemInlineDateFieldNames');
+
+        if (!opts.save) {
+            if (mode === 'add') {
+                if ($row && $row.length && $row.closest('body').length) {
+                    $row.remove();
+                }
+            } else if (original && fieldNames && $scope && $scope.length) {
+                Object.keys(fieldNames).forEach(function(key) {
+                    const $field = $scope.find('[name="' + fieldNames[key] + '"]').first();
+                    if ($field.length && Object.prototype.hasOwnProperty.call(original, key)) {
+                        syncRealFieldValue($field, original[key]);
+                    }
+                });
+            }
+        }
+
+        $card.removeData('mpwemInlineDateScope mpwemInlineDateRow mpwemInlineDateMode mpwemInlineDateOriginal mpwemInlineDateFieldNames').removeClass('is-open').empty();
+
+        initializeParticularDateTableDragScroll($root);
+        syncDateWiseGlobalQtyColumns($root);
+        syncParticularDateModalFooter($root);
+        storeSavedParticularDateSummarySnapshot($root);
+        renderParticularDateSummary($root);
+
+        // "+ Add Schedule" always appends a brand-new row, so after the
+        // rebuild above it's the last item in the summary list - bring it
+        // into view and give it the same soft reveal glow as the
+        // "Add Event Date" form itself, instead of leaving the user to
+        // scan the whole list for what they just saved.
+        if (opts.save && mode === 'add') {
+            const context = getParticularDateModalContext($root);
+            const $newItem = context.$summaryList.find('.mpwem-ticket-summary__item').last();
+            if ($newItem.length) {
+                scrollToViewportCenter($newItem, 300);
+                $newItem.removeClass('mpwem-date-add-reveal');
+                void $newItem[0].offsetWidth;
+                $newItem.addClass('mpwem-date-add-reveal');
+                window.setTimeout(function() {
+                    $newItem.removeClass('mpwem-date-add-reveal');
+                }, 1600);
+            }
+        }
+    }
+
+    function renderInlineDateAddForm($root, opts) {
+        const type = opts.type;
+        const mode = opts.mode;
+        const $scope = opts.scope;
+        const fieldNames = opts.fieldNames;
+        const isEdit = mode !== 'add' && !opts.firstEntry;
+        const $card = getInlineDateAddCard($root);
+        $card.empty().addClass('is-open');
+
+        const $startDateInput = $scope.find('[name="' + fieldNames.start + '"]').first();
+        const $startTimeInput = $scope.find('[name="' + fieldNames.startTime + '"]').first();
+        const $endDateInput = $scope.find('[name="' + fieldNames.end + '"]').first();
+        const $endTimeInput = $scope.find('[name="' + fieldNames.endTime + '"]').first();
+
+        const typeLabel = type === 'no' ? 'Event Date' : 'Particular Date';
+        const headIcon = isEdit
+            ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>'
+            : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+
+        $card.append(
+            $('<div class="mpwem-ticket-add__head"></div>')
+                .append($('<span class="mpwem-ticket-add__head-icon"></span>').html(headIcon))
+                .append(
+                    $('<div class="mpwem-ticket-add__head-copy"></div>')
+                        .append(
+                            $('<div class="mpwem-ticket-add__head-title"></div>')
+                                .append($('<h3></h3>').text((isEdit ? 'Edit ' : 'Add ') + typeLabel))
+                        )
+                        .append($('<p></p>').text(isEdit ? 'Update the start and end date & time.' : 'Set the start and end date & time for this schedule.'))
+                )
+        );
+
+        const $body = $('<div class="mpwem-ticket-add__body"></div>');
+
+        const $startPill = buildPrimaryDateTimePill($startDateInput, $startTimeInput);
+        const $endPill = buildPrimaryDateTimePill($endDateInput, $endTimeInput);
+        // Start time -> End date auto-open (see openEndDateAfterStartTime).
+        $startPill.find('input[type="time"]').data('mpwemEndDateInput', $endPill.find('.mpwem-date-input').first());
+
+        $body.append(
+            $('<div class="mpwem-ticket-add__grid"></div>')
+                .append(
+                    $('<div class="mpwem-ticket-add__group mpwem-ticket-add__group--date"></div>')
+                        .append($('<label></label>').text('Start Date'))
+                        .append($startPill)
+                )
+                .append(
+                    $('<div class="mpwem-ticket-add__group mpwem-ticket-add__group--date"></div>')
+                        .append($('<label></label>').text('End Date'))
+                        .append($endPill)
+                )
+        );
+
+        $card.append($body);
+
+        const $footer = $('<div class="mpwem-ticket-add__footer"></div>');
+        const $cancelBtn = $('<button type="button" class="button"></button>').text('Cancel');
+        const $saveBtn = $('<button type="button" class="button button-primary mpwem-ticket-add__save"></button>').text(isEdit ? 'Save Changes' : 'Save & Add More');
+        $footer.append($cancelBtn);
+        let $saveCloseBtn = $();
+        if (!isEdit) {
+            $saveCloseBtn = $('<button type="button" class="button button-primary mpwem-ticket-add__save-close"></button>').text('Save & Close');
+            $footer.append($saveCloseBtn);
+        }
+        $footer.append($saveBtn);
+        $card.append($footer);
+
+        $startPill.find('.mpwem-date-input-wrap input[type="hidden"]').on('change', function() {
+            $startPill.removeClass('has-error');
+        });
+        $endPill.find('.mpwem-date-input-wrap input[type="hidden"]').on('change', function() {
+            $endPill.removeClass('has-error');
+        });
+
+        $cancelBtn.on('click', function() {
+            closeInlineDateAdd($root, { save: false });
+        });
+
+        const saveDate = function(addMore) {
+            const startOk = !!($startPill.find('.mpwem-date-input-wrap input[type="hidden"]').val() || '').toString();
+            const endOk = !!($endPill.find('.mpwem-date-input-wrap input[type="hidden"]').val() || '').toString();
+            if (!startOk || !endOk) {
+                $startPill.toggleClass('has-error', !startOk);
+                $endPill.toggleClass('has-error', !endOk);
+                (startOk ? $endPill : $startPill).find('.mpwem-date-input').first().trigger('focus');
+                return;
+            }
+
+            // Same-day schedule: the end time must be after the start time.
+            const $endTime = $endPill.find('input[type="time"]').first();
+            if (getEndTimeMinimum($endTime) !== null) {
+                const endMin = timeToMinutes($endTime.val());
+                if (endMin !== null && endMin <= getEndTimeMinimum($endTime)) {
+                    $endPill.addClass('has-error');
+                    showToast('End time must be after the start time on the same day.', 'error');
+                    return;
                 }
             }
 
-            context.$summaryList.append($item);
+            closeInlineDateAdd($root, { save: true });
+            if (addMore) {
+                window.setTimeout(function() {
+                    openInlineDateAdd($root);
+                }, 200);
+            }
+        };
+
+        $saveBtn.on('click', function() { saveDate(!isEdit); });
+        $saveCloseBtn.on('click', function() { saveDate(false); });
+    }
+
+    function openInlineDateAdd($root) {
+        const $card = getInlineDateAddCard($root);
+        if ($card.hasClass('is-open')) {
+            const wasAdding = $card.data('mpwemInlineDateMode') === 'add';
+            closeInlineDateAdd($root, { save: false });
+            if (wasAdding) {
+                return;
+            }
+        }
+
+        const type = getActiveDateModalType($root);
+        if (type !== 'no' && type !== 'yes') {
+            return;
+        }
+
+        const $activeSection = getActiveDateModalSection($root, type);
+
+        // The event's main Start/End fields (event_start_date_normal etc.) are
+        // what publish requires. While they are still empty, the first schedule
+        // belongs in them - "Add" would otherwise only create an extra
+        // "more dates" row and leave the main date unset.
+        const primaryStartName = getDateFieldNames(type).primary.start;
+        const primaryStartVal = ($activeSection.find('[name="' + primaryStartName + '"]').first().val() || '').toString().trim();
+        if (!primaryStartVal) {
+            openInlineDateEdit($root, type, -1, { firstEntry: true });
+            return;
+        }
+
+        const $addButton = $activeSection.find('.mpwem_add_item, .mp_add_item').first();
+        if (!$addButton.length) {
+            return;
+        }
+
+        try {
+            $addButton.trigger('click');
+        } catch (err) {
+            /* A shared add-item handler may throw (e.g. a dependency not yet
+               loaded) after it has already appended the row; don't let that
+               stop the inline form below from rendering. */
+        }
+
+        window.setTimeout(function() {
+            enhanceDateFields($root);
+            enhanceCustomCalendar($root);
+            syncDateWiseGlobalQtyColumns($root);
+
+            const $row = getActiveDateModalRows($root, type).last();
+            if (!$row.length) {
+                return;
+            }
+
+            const fieldNames = getDateFieldNames(type).row;
+            $card.data('mpwemInlineDateScope', $row);
+            $card.data('mpwemInlineDateRow', $row);
+            $card.data('mpwemInlineDateMode', 'add');
+            $card.data('mpwemInlineDateFieldNames', fieldNames);
+            renderInlineDateAddForm($root, { mode: 'add', type: type, scope: $row, fieldNames: fieldNames });
+
+            // "+ Add Schedule" can open this card well below the fold -
+            // bring it into view and give it a soft highlight so it's
+            // obvious where the new "Add Event Date" form landed. Not
+            // flashAttention()/.mpwem-attention-highlight: that one is
+            // red, meant for validation errors, and would read as a
+            // problem here rather than a normal reveal.
+            scrollToViewportCenter($card, 300);
+            $card.removeClass('mpwem-date-add-reveal');
+            void $card[0].offsetWidth;
+            $card.addClass('mpwem-date-add-reveal');
+            window.setTimeout(function() {
+                $card.removeClass('mpwem-date-add-reveal');
+            }, 1600);
+            $card.find('.mpwem-ticket-add__group--date').first().find('.mpwem-date-input').trigger('focus');
+        }, 100);
+    }
+
+    function openInlineDateEdit($root, type, rowIndex, editOptions) {
+        const $card = getInlineDateAddCard($root);
+        const names = getDateFieldNames(type);
+        const context = getParticularDateModalContext($root);
+        const isPrimary = rowIndex === -1 || rowIndex === null || typeof rowIndex === 'undefined';
+
+        let $scope;
+        let fieldNames;
+        let $row = null;
+
+        if (isPrimary) {
+            const $activeSection = getActiveDateModalSection($root, type);
+            $scope = $activeSection.length ? $activeSection : context.$modalMount;
+            fieldNames = names.primary;
+        } else {
+            $row = getActiveDateModalRows($root, type).eq(rowIndex);
+            if (!$row.length) {
+                return;
+            }
+            $scope = $row;
+            fieldNames = names.row;
+        }
+
+        const editingSame = $card.hasClass('is-open')
+            && $card.data('mpwemInlineDateMode') !== 'add'
+            && $card.data('mpwemInlineDateScope')
+            && $card.data('mpwemInlineDateScope')[0] === $scope[0];
+
+        if ($card.hasClass('is-open')) {
+            closeInlineDateAdd($root, { save: false });
+            if (editingSame) {
+                return;
+            }
+        }
+
+        const original = {};
+        Object.keys(fieldNames).forEach(function(key) {
+            const $field = $scope.find('[name="' + fieldNames[key] + '"]').first();
+            original[key] = ($field.val() || '').toString();
         });
+
+        const mode = isPrimary ? 'edit-primary' : 'edit-row';
+        $card.data('mpwemInlineDateScope', $scope);
+        $card.data('mpwemInlineDateRow', $row);
+        $card.data('mpwemInlineDateMode', mode);
+        $card.data('mpwemInlineDateOriginal', original);
+        $card.data('mpwemInlineDateFieldNames', fieldNames);
+
+        renderInlineDateAddForm($root, { mode: mode, type: type, scope: $scope, fieldNames: fieldNames, firstEntry: !!(editOptions && editOptions.firstEntry) });
     }
 
     function openParticularDateModal($root, mode, rowIndex) {
@@ -2667,21 +4957,30 @@
 
         $root.off('.mpwemDateModal');
 
+        // Clicking anywhere on a saved ticket / extra service / schedule row
+        // opens it for editing, same as its pen icon (buttons, the drag
+        // handle and the status toggle keep their own behaviour).
+        $root.on('click.mpwemSummaryRowEdit', '.mpwem-ticket-summary__list > .mpwem-ticket-summary__item', function(e) {
+            if ($(e.target).closest('.mpwem-ticket-summary__item-actions, button, a, input, select, textarea, label').length) {
+                return;
+            }
+            $(this).find('.mpwem-ticket-summary__action-btn--edit').first().trigger('click');
+        });
+
         $root.on('click.mpwemDateModal', '[data-mpwem-date-modal-open]', function(e) {
             e.preventDefault();
             const mode = $(this).attr('data-mpwem-date-modal-open') || 'list';
-            const rowIndex = parseInt($(this).attr('data-date-row-index'), 10);
-            openParticularDateModal($root, mode, Number.isNaN(rowIndex) ? null : rowIndex);
-        });
 
-        $root.on('click.mpwemDateModal', '#mpwem_particular_date_summary .mpwem-ticket-summary__item', function(e) {
-            if ($(e.target).closest('[data-mpwem-date-modal-open], button, a, input, select, textarea').length) {
-                return;
+            if (mode === 'new') {
+                const activeType = getActiveDateModalType($root);
+                if (activeType === 'no' || activeType === 'yes') {
+                    openInlineDateAdd($root);
+                    return;
+                }
             }
 
-            e.preventDefault();
             const rowIndex = parseInt($(this).attr('data-date-row-index'), 10);
-            openParticularDateModal($root, 'list', Number.isNaN(rowIndex) ? null : rowIndex);
+            openParticularDateModal($root, mode, Number.isNaN(rowIndex) ? null : rowIndex);
         });
 
         $root.on('click.mpwemDateModal', '[data-mpwem-date-modal-close]', function(e) {
@@ -2720,6 +5019,38 @@
         $root.on('input.mpwemDateModal change.mpwemDateModal', '#mpwem_particular_date_modal_mount input', function() {
             renderParticularDateSummary($root);
         });
+
+        // Repeated Event's own date-range, interval, and skip-day fields
+        // render inline in the step (not inside the modal mount above), so
+        // they need their own listener to keep the Schedule Summary
+        // sidebar card live too.
+        $root.on(
+            'input.mpwemDateModal change.mpwemDateModal',
+            '[data-collapse="#mep_everyday_event"] input[name="event_start_date_everyday"], ' +
+            '[data-collapse="#mep_everyday_event"] input[name="event_start_time_everyday"], ' +
+            '[data-collapse="#mep_everyday_event"] input[name="event_end_date_everyday"], ' +
+            '[data-collapse="#mep_everyday_event"] input[name="event_end_time_everyday"], ' +
+            '[data-collapse="#mep_everyday_event"] input[name="mep_repeated_periods"], ' +
+            '[data-collapse="#mep_everyday_event"] .mpwem-offday-option input[type="checkbox"], ' +
+            '[data-collapse="#mep_everyday_event"] input[name="mep_ticket_off_dates[]"]',
+            function() {
+                window.setTimeout(function() {
+                    updateScheduleSummaryCard($root, 'everyday');
+                }, 20);
+            }
+        );
+
+        // Adding/removing a one-off skip date doesn't fire change on an
+        // existing field, so it needs its own click listener too.
+        $root.on(
+            'click.mpwemDateModal',
+            '[data-collapse="#mep_everyday_event"] .mpwem_add_item, [data-collapse="#mep_everyday_event"] .mp_add_item, [data-collapse="#mep_everyday_event"] .mpwem_item_remove',
+            function() {
+                window.setTimeout(function() {
+                    updateScheduleSummaryCard($root, 'everyday');
+                }, 280);
+            }
+        );
 
         $root.on('change.mpwemDateModal', 'select[name="mep_enable_recurring"]', function() {
             window.setTimeout(function() {
@@ -3569,13 +5900,35 @@
         // (Only for iframe map type — the API map has its own geocoder already)
         const $venueInput = $venue.find('#mpwem_location_venue, [name="mep_location_venue"]').first();
         const $mapDiv     = $venue.find('#show_gmap').first();
+        const $manualInputs = $venue.find(
+            '#mpwem-manual-entry-wrap [name="mep_street"], ' +
+            '#mpwem-manual-entry-wrap [name="mep_city"], ' +
+            '#mpwem-manual-entry-wrap [name="mep_state"], ' +
+            '#mpwem-manual-entry-wrap [name="mep_postcode"], ' +
+            '#mpwem-manual-entry-wrap [name="mep_country"]'
+        );
 
         if ($venueInput.length && $mapDiv.length) {
             var mapDebounceTimer = null;
 
-            $venueInput.on('input', function() {
+            var refreshMap = function() {
                 clearTimeout(mapDebounceTimer);
-                var location = $(this).val().trim();
+
+                // The venue field alone is the common case ("type a full address or
+                // place name"). The manual street/city/state/postcode/country fields
+                // are an opt-in, normally-hidden alternative — only fold them into the
+                // query while that panel is actually open, otherwise leftover saved
+                // values sitting in those hidden fields would silently corrupt an
+                // otherwise-clean venue address.
+                var venue = $venueInput.val().trim();
+                var location = venue;
+                var $manualPanel = $venue.find('#mpwem-manual-entry-wrap').first();
+                if ($manualPanel.length && $manualPanel.is(':visible')) {
+                    var extra = $manualInputs.toArray()
+                        .map(function(el) { return $(el).val().trim(); })
+                        .filter(function(part) { return part !== ''; });
+                    location = [venue].concat(extra).filter(function(part) { return part !== ''; }).join(', ');
+                }
                 if (!location) return;
 
                 mapDebounceTimer = window.setTimeout(function() {
@@ -3589,8 +5942,11 @@
                         '&t=&z=15&ie=UTF8&iwloc=&output=embed" frameborder="0" scrolling="no" ' +
                         'marginheight="0" marginwidth="0"></iframe>'
                     );
-                }, 900);
-            });
+                }, 250);
+            };
+
+            $venueInput.on('input', refreshMap);
+            $manualInputs.on('input', refreshMap);
         }
 
         $venue.data('mpwemGridEnhanced', true);
@@ -3969,7 +6325,12 @@
             || name === 'mep_conditional_parent[]'
             || name === 'mep_conditional_parent_value[]'
             || name === 'mep_conditional_child[]'
-            || /\[mep_global_single_template\]$/.test(name);
+            || /\[mep_global_single_template\]$/.test(name)
+            // Its options are (re)built after this one-time enhancement pass
+            // runs (Particular Dates' configured dates), so the custom
+            // dropdown's snapshot would go stale the moment they change -
+            // keep it a plain native <select> instead.
+            || $select.hasClass('mpwem-live-ticket-preview__date-select');
     }
 
     function normalizeCustomFormTableSelects($container) {
@@ -4353,7 +6714,9 @@
         if (mainStartDate || mainStartTime || mainEndDate || mainEndTime) {
             items.push({
                 startLabel: buildScheduleDateTimeLabel(mainStartDate, mainStartTime) || 'Start date not set',
-                endLabel: buildScheduleDateTimeLabel(mainEndDate, mainEndTime) || 'End date not set'
+                endLabel: buildScheduleDateTimeLabel(mainEndDate, mainEndTime) || 'End date not set',
+                isPrimary: true,
+                rowIndex: -1
             });
         }
 
@@ -4362,7 +6725,7 @@
             .filter(function() {
                 return $(this).closest('.mpwem_hidden_content').length === 0;
             })
-            .each(function() {
+            .each(function(rowIndex) {
                 const $row = $(this);
                 const startDate = ($row.find('input[name="event_more_start_date_normal[]"]').first().val() || '').toString().trim();
                 const startTime = ($row.find('input[name="event_more_start_time_normal[]"]').first().val() || '').toString().trim();
@@ -4375,7 +6738,9 @@
 
                 items.push({
                     startLabel: buildScheduleDateTimeLabel(startDate, startTime) || 'Start date not set',
-                    endLabel: buildScheduleDateTimeLabel(endDate, endTime) || 'End date not set'
+                    endLabel: buildScheduleDateTimeLabel(endDate, endTime) || 'End date not set',
+                    isPrimary: false,
+                    rowIndex: rowIndex
                 });
             });
 
@@ -4437,6 +6802,21 @@
 
     function getDynamicDateMinDate($input) {
         const today = getTodayDateOnly();
+        const resolved = resolveDynamicDateMinDate($input, today);
+        // Whatever rule resolved the minimum (paired start/end, previous row,
+        // a captured legacy datepicker value, or none at all), past dates are
+        // never selectable - floor every result to today.
+        return resolved && resolved > today ? resolved : today;
+    }
+
+    function resolveDynamicDateMinDate($input, today) {
+        // Proxy date fields (inline Add/Edit date forms) carry no `name` of
+        // their own - resolve the rule from the real field they mirror.
+        const $proxyInput = $input;
+        const $realDate = $input.data('mpwemRealDate');
+        if ($realDate && $realDate.length) {
+            $input = $realDate;
+        }
         // $input is the visible date field; its name lives on the hidden sibling.
         const $hidden = $input.closest('label').find('input[type="hidden"]').first();
         const fieldName = ($hidden.attr('name') || $input.attr('name') || '').toString();
@@ -4471,7 +6851,7 @@
             if (startDate) {
                 return pair.floorToday && startDate < today ? today : startDate;
             }
-            return pair.floorToday ? today : normalizeMinDate($input.data('mpwemMinDate'));
+            return pair.floorToday ? today : normalizeMinDate($proxyInput.data('mpwemMinDate'));
         }
 
         // "Add More Date" start fields: the minimum is the previous row's End
@@ -4499,10 +6879,10 @@
                     return prevEnd;
                 }
             }
-            return normalizeMinDate($input.data('mpwemMinDate'));
+            return normalizeMinDate($proxyInput.data('mpwemMinDate'));
         }
 
-        return normalizeMinDate($input.data('mpwemMinDate'));
+        return normalizeMinDate($proxyInput.data('mpwemMinDate'));
     }
 
     function ensureCustomCalendar() {
@@ -4605,7 +6985,8 @@
             const iso = formatIsoDate(date);
             const $button = $('<button type="button" class="mpwem-custom-calendar__day"></button>').text(day).attr('data-date', iso);
 
-            if (state.minDate && date < state.minDate) $button.prop('disabled', true).addClass('is-disabled');
+            const isAllowed = !state.allowedDates || !state.allowedDates.size || state.allowedDates.has(iso);
+            if ((state.minDate && date < state.minDate) || !isAllowed) $button.prop('disabled', true).addClass('is-disabled');
             if (iso === todayIso) $button.addClass('is-today');
             if (iso === selectedIso) $button.addClass('is-selected');
 
@@ -4630,10 +7011,18 @@
         const now = new Date();
         const minDate = getDynamicDateMinDate($input);
 
-        const viewDate = selected || minDate || now;
+        // Repeated Event's preview picker restricts selection to this
+        // event's actual occurrence dates (see updateLiveTicketPreviewDate),
+        // stored on the input rather than threaded through every caller.
+        const allowedList = $input.data('mpwemAllowedDates');
+        const allowedDates = Array.isArray(allowedList) ? new Set(allowedList) : null;
+        const firstAllowed = allowedDates && allowedDates.size ? parseIsoDate(allowedList[0]) : null;
+
+        const viewDate = selected || firstAllowed || minDate || now;
         $calendar.data('mpwemState', {
             $input: $input,
             minDate: minDate,
+            allowedDates: allowedDates,
             viewDate: new Date(viewDate.getFullYear(), viewDate.getMonth(), 1)
         });
 
@@ -4654,6 +7043,26 @@
         state.$input.closest('label').find('input[type="hidden"]').first().val(formatIsoDate(date)).trigger('change');
         state.$input.val(formatVisibleDate(date)).trigger('change');
         closeCustomCalendar();
+
+        // Picking a Starts/Ends date flows straight into picking its time -
+        // the matching time field sits right after the date field's own
+        // wrap, inside the same row/pill.
+        const $dateWrap = state.$input.closest('.mpwem-date-input-wrap');
+        // The time field is usually a later sibling of the date field's label,
+        // but Repeated Event's End date is wrapped in `.mep_load_every_day`
+        // (AJAX-reloaded), which puts the time label beside that wrapper instead.
+        let $timeWrap = $dateWrap.nextAll('.mpwem-time-input-wrap').first();
+        if (!$timeWrap.length) {
+            $timeWrap = $dateWrap.parent().nextAll('.mpwem-time-input-wrap').first();
+        }
+        const $timeInput = $dateWrap.length
+            ? $timeWrap.find('.mpwem-time-input.mpwem-custom-time-enabled').first()
+            : $();
+        if ($timeInput.length) {
+            window.setTimeout(function() {
+                openCustomTimePicker($timeInput);
+            }, 10);
+        }
     }
 
     function bindCustomCalendar() {
@@ -4986,6 +7395,25 @@
         $picker.find('[data-time-minute]').removeClass('is-selected').filter('[data-time-minute="' + parts.minute + '"]').addClass('is-selected');
         $picker.find('[data-time-period]').removeClass('is-selected').filter('[data-time-period="' + parts.period + '"]').addClass('is-selected');
 
+        // Same-day End time: grey out anything at/before the Start time.
+        const minM = state.minMinutes;
+        const tooEarly = function(h24, m) { return minM != null && h24 * 60 + m <= minM; };
+        $picker.find('[data-time-hour]').each(function() {
+            const h24 = fromPickerParts(parseInt($(this).data('time-hour'), 10), 59, parts.period).hour;
+            $(this).toggleClass('is-disabled', tooEarly(h24, 59));
+        });
+        $picker.find('[data-time-minute]').each(function() {
+            $(this).toggleClass('is-disabled', tooEarly(state.hour, parseInt($(this).data('time-minute'), 10)));
+        });
+        $picker.find('[data-time-period]').each(function() {
+            const h24 = fromPickerParts(11, 59, $(this).data('time-period')).hour;
+            $(this).toggleClass('is-disabled', tooEarly(h24, 59));
+        });
+        $picker.find('[data-preset]').each(function() {
+            const t = parseTimeValue($(this).data('preset'));
+            $(this).toggleClass('is-disabled', !!t && tooEarly(t.hour, t.minute));
+        });
+
         const $minutes = $picker.find('.mpwem-custom-time-picker__minutes');
         $minutes.find('[data-time-minute].is-custom').remove();
         if (parts.minute % 5 !== 0) {
@@ -4996,12 +7424,98 @@
         }
     }
 
+    function timeToMinutes(value) {
+        const parsed = parseTimeValue((value || '').toString());
+        return parsed ? parsed.hour * 60 + parsed.minute : null;
+    }
+
+    // For an End time field: the Start time (in minutes) it must be later
+    // than - only when the Start and End dates are the same day, else null.
+    function getEndTimeMinimum($timeInput) {
+        const hiddenOf = function($visible) {
+            return $visible.closest('label').find('input[type="hidden"]').first().val();
+        };
+        let startTime = '';
+        let startDate = null;
+        let endDate = null;
+
+        const $pill = $timeInput.closest('.mpwem-repeat-dt-pill');
+        const $pills = $pill.closest('.mpwem-ticket-add__grid').find('.mpwem-repeat-dt-pill');
+        if ($pill.length && $pills.length === 2 && $pills.eq(1)[0] === $pill[0]) {
+            // Inline Add/Edit date form (proxy inputs): first pill = Start.
+            const $start = $pills.eq(0);
+            startTime = $start.find('input[type="time"]').first().val();
+            startDate = parseIsoDate(hiddenOf($start.find('.mpwem-date-input').first()));
+            endDate = parseIsoDate(hiddenOf($pill.find('.mpwem-date-input').first()));
+        } else {
+            const name = ($timeInput.attr('name') || '').toString();
+            if (name.indexOf('_end_time') === -1) return null;
+            const $scope = $timeInput.closest('tr').length
+                ? $timeInput.closest('tr')
+                : $timeInput.closest('[data-collapse], .mpwem-event-wizard');
+            const find = function(n) { return $scope.find('input[name="' + n + '"]').first().val(); };
+            startTime = find(name.replace('_end_time', '_start_time'));
+            startDate = parseIsoDate(find(name.replace('_end_time', '_start_date')));
+            endDate = parseIsoDate(find(name.replace('_end_time', '_end_date')));
+        }
+
+        if (!startDate || !endDate || formatIsoDate(startDate) !== formatIsoDate(endDate)) return null;
+        return timeToMinutes(startTime);
+    }
+
     function applyCustomTimePickerValue($picker, closeAfter) {
         const state = $picker.data('mpwemState');
         if (!state || !state.$input) return;
 
+        // End time on the same day as the Start must be after the Start time.
+        if (state.minMinutes != null && state.hour * 60 + state.minute <= state.minMinutes) {
+            showToast('End time must be after the start time on the same day.', 'error');
+            return;
+        }
+
         state.$input.val(formatTimeValue(state.hour, state.minute)).trigger('change');
-        if (closeAfter) closeCustomTimePicker();
+        if (closeAfter) {
+            closeCustomTimePicker();
+            openEndDateAfterStartTime(state.$input);
+        }
+    }
+
+    // Setting a Start time flows straight into picking the matching End date
+    // (Single / Particular / Repeated and every "Add More Date" row), the same
+    // way picking a date flows into its time. Skipped when the End date is already
+    // later than the Start, so re-editing a time doesn't pop it open.
+    function openEndDateAfterStartTime($timeInput) {
+        let $endVisible = $timeInput.data('mpwemEndDateInput');
+        let startDate = null;
+        let endDate = null;
+
+        if ($endVisible && $endVisible.length) {
+            // Inline Add/Edit date form: the pill proxies mirror the real fields.
+            const $startVisible = $timeInput.closest('.mpwem-repeat-dt-pill').find('.mpwem-date-input').first();
+            startDate = parseIsoDate($startVisible.closest('label').find('input[type="hidden"]').first().val());
+            endDate = parseIsoDate($endVisible.closest('label').find('input[type="hidden"]').first().val());
+        } else {
+            const name = ($timeInput.attr('name') || '').toString();
+            if (name.indexOf('_start_time') === -1) return;
+
+            const $scope = $timeInput.closest('tr').length
+                ? $timeInput.closest('tr')
+                : $timeInput.closest('[data-collapse], .mpwem-event-wizard');
+            const $endHidden = $scope.find('input[type="hidden"][name="' + name.replace('_start_time', '_end_date') + '"]').first();
+            if (!$endHidden.length) return;
+            $endVisible = $endHidden.closest('label').find('.mpwem-date-input').first();
+            startDate = parseIsoDate($scope.find('input[name="' + name.replace('_start_time', '_start_date') + '"]').first().val());
+            endDate = parseIsoDate($endHidden.val());
+        }
+
+        if (!$endVisible.length || !$endVisible.is(':visible')) return;
+        // Repeated Event pre-fills End with the Start date, so a same-day End
+        // still counts as "not chosen yet"; only a later End is left alone.
+        if (endDate && startDate && endDate > startDate) return;
+
+        window.setTimeout(function() {
+            openCustomCalendar($endVisible);
+        }, 10);
     }
 
     function openCustomTimePicker($input) {
@@ -5013,10 +7527,20 @@
         const hour = parsed ? parsed.hour : now.getHours();
         const minute = parsed ? parsed.minute : Math.round(now.getMinutes() / 5) * 5 % 60;
 
+        const minMinutes = getEndTimeMinimum($input);
+        let startHour = hour;
+        let startMinute = minute;
+        if (minMinutes !== null && startHour * 60 + startMinute <= minMinutes) {
+            const next = Math.min(minMinutes + 1, 23 * 60 + 59);
+            startHour = Math.floor(next / 60);
+            startMinute = next % 60;
+        }
+
         $picker.data('mpwemState', {
             $input: $input,
-            hour: hour,
-            minute: minute
+            hour: startHour,
+            minute: startMinute,
+            minMinutes: minMinutes
         });
 
         renderCustomTimePicker($picker);
@@ -5066,6 +7590,7 @@
 
         $(document).on('click', '.mpwem-custom-time-picker__chip[data-time-hour]', function(e) {
             e.preventDefault();
+            if ($(this).hasClass('is-disabled')) return;
             const $picker = $('#mpwem_custom_time_picker');
             const state = $picker.data('mpwemState');
             if (!state) return;
@@ -5074,6 +7599,10 @@
             const next = fromPickerParts(parseInt($(this).data('time-hour'), 10), parts.minute, parts.period);
             state.hour = next.hour;
             state.minute = next.minute;
+            if (state.minMinutes != null && state.hour * 60 + state.minute <= state.minMinutes) {
+                // Same-day End time: nudge the minute up to just after the Start.
+                state.minute = (state.minMinutes + 1) % 60;
+            }
             $picker.data('mpwemState', state);
             renderCustomTimePicker($picker);
             applyCustomTimePickerValue($picker, false);
@@ -5081,6 +7610,7 @@
 
         $(document).on('click', '.mpwem-custom-time-picker__chip[data-time-minute]', function(e) {
             e.preventDefault();
+            if ($(this).hasClass('is-disabled')) return;
             const $picker = $('#mpwem_custom_time_picker');
             const state = $picker.data('mpwemState');
             if (!state) return;
@@ -5139,6 +7669,7 @@
 
         $(document).on('click', '.mpwem-custom-time-picker__period-btn', function(e) {
             e.preventDefault();
+            if ($(this).hasClass('is-disabled')) return;
             const $picker = $('#mpwem_custom_time_picker');
             const state = $picker.data('mpwemState');
             if (!state) return;
@@ -5154,6 +7685,7 @@
 
         $(document).on('click', '.mpwem-custom-time-picker__preset', function(e) {
             e.preventDefault();
+            if ($(this).hasClass('is-disabled')) return;
             const $picker = $('#mpwem_custom_time_picker');
             const state = $picker.data('mpwemState');
             const parsed = parseTimeValue($(this).data('preset'));
@@ -5241,8 +7773,11 @@
 
         const labels = {
             '#mep_normal_event': 'Single schedule',
-            '#mep_particular_event': 'Specific date schedule',
-            '#mep_everyday_event': 'Repeated schedule'
+            '#mep_particular_event': 'Specific date schedule'
+            /* '#mep_everyday_event' deliberately excluded: its own panel
+               head now has an icon-badge "Repeated Event" eyebrow (see
+               enhanceRepeatedScheduleLayout), so this pill said the same
+               thing a second time right above it. */
         };
 
         $.each(labels, function(selector, label) {
@@ -5259,7 +7794,15 @@
 
             $group.addClass('mpwem-offday-grid');
             $group.find('.customCheckboxLabel').addClass('mpwem-offday-option');
-            $group.find('.customCheckbox').addClass('mpwem-offday-chip');
+            $group.find('.customCheckbox').each(function() {
+                const $chip = $(this).addClass('mpwem-offday-chip');
+                const fullLabel = $.trim($chip.text());
+                if (fullLabel && !$chip.data('mpwemOffDayFullLabel')) {
+                    $chip.data('mpwemOffDayFullLabel', fullLabel);
+                    $chip.closest('.mpwem-offday-option').attr('title', fullLabel);
+                    $chip.text(fullLabel.charAt(0).toUpperCase());
+                }
+            });
             $group.find('input[type="checkbox"]').off('change.mpwemOffDays').on('change.mpwemOffDays', function() {
                 syncOffDayPickerValue($group);
             });
@@ -5289,6 +7832,30 @@
         $repeatSection.children('._layout_default_xs_mp_zero').addClass('mpwem-repeat-schedule-shell');
         $repeatSection.find('.mep-special-datetime').addClass('mpwem-repeat-special-panel');
         $repeatSection.find('#mep_disable_ticket_time').addClass('mpwem-repeat-times-panel');
+        /* These leftover "section.bg-light" headers (mismatched copy from a
+           shared template, e.g. "Configure Event Locations and Virtual
+           Venues" above the time settings) were only ever hidden while this
+           section lived inside the modal; hide them here too now that it
+           renders inline. */
+        $repeatSection.find('section.bg-light').hide();
+        $repeatSection.find('.mep-special-datetime section.bg-light').hide();
+
+        /* Repeated Event has no separate collapsed summary card (its
+           real fields render inline, see initializeParticularDateModal),
+           so its own panel head is the only header this section shows -
+           give it the same icon-badge/eyebrow look the Single Event and
+           Particular Dates summary toolbars already have. */
+        const $head = $repeatSection.find('> ._layout_default_xs_mp_zero > .mpwem-date-card__head').first();
+        if ($head.length && !$head.data('mpwemIconHeadEnhanced')) {
+            const $icon = $('<span class="mpwem-date-card__icon" aria-hidden="true"></span>')
+                .html('<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="3"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>');
+            const $eyebrow = $('<span class="mpwem-date-card__eyebrow"></span>').text('Repeated Event');
+            const $intro = $('<div class="mpwem-date-card__intro"></div>').append($eyebrow);
+
+            $head.children().appendTo($intro);
+            $head.empty().append($icon, $intro);
+            $head.data('mpwemIconHeadEnhanced', true);
+        }
 
         $repeatSection.find('> ._layout_default_xs_mp_zero > ._padding_bt').each(function() {
             const $row = $(this);
@@ -5312,6 +7879,121 @@
         });
     }
 
+    function setMpwemRowLabelText($mr, text) {
+        if (!$mr || !$mr.length) return;
+        const $tip = $mr.children('.mpwem-info-tip').first().detach();
+        $mr.empty().text(text);
+        if ($tip.length) {
+            $mr.append($tip);
+        }
+    }
+
+    function enhanceRepeatRangeLayout($panel) {
+        const $repeatSection = $panel.find('[data-collapse="#mep_everyday_event"]').first();
+        if (!$repeatSection.length || $repeatSection.data('mpwemRangeLayoutEnhanced')) {
+            return;
+        }
+
+        // Start/End: merge each row's date + time inputs into one bordered,
+        // single-line pill instead of two separate boxed inputs, and shorten
+        // the row labels to read as a sentence with the schedule below it.
+        ['start', 'end'].forEach(function(kind) {
+            const $row = $repeatSection.find('.mpwem-repeat-row--' + kind).first();
+            if (!$row.length) return;
+
+            const $fieldWrap = $row.find('> ._justify_between_align_center_wrap').first();
+            const $dFlex = $fieldWrap.find('> .dFlex, > ._dFlex').first();
+            if ($dFlex.length) {
+                $dFlex.addClass('mpwem-repeat-dt-pill');
+            }
+
+            const $mr = $fieldWrap.find('> label:first-child > ._mr').first();
+            setMpwemRowLabelText($mr, kind === 'start' ? 'Starts' : 'Ends');
+        });
+
+        const $intervalRow = $repeatSection.find('.mpwem-repeat-row--interval').first();
+        if ($intervalRow.length) {
+            const $mr = $intervalRow.find('> label._justify_between_align_center_wrap > ._mr').first();
+            setMpwemRowLabelText($mr, 'Repeat every');
+
+            const $intervalInput = $intervalRow.find('input[name="mep_repeated_periods"]').first();
+            if ($intervalInput.length && !$intervalInput.parent().hasClass('mpwem-repeat-interval-field')) {
+                // Wrap the input together with its "day(s)" suffix so the
+                // label stays a plain two-item (text, field) flex row -
+                // a bare 3rd sibling here would wrap onto its own line.
+                $intervalInput.wrap('<span class="mpwem-repeat-interval-field"></span>');
+                $intervalInput.after($('<span class="mpwem-repeat-interval-suffix"></span>').text('day(s)'));
+            }
+        }
+
+        $repeatSection.data('mpwemRangeLayoutEnhanced', true);
+    }
+
+    function buildRepeatSummaryText($repeatSection) {
+        const startDateText = $.trim($repeatSection.find('#event_start_date_everyday').val() || '');
+        const endDateText = $.trim($repeatSection.find('#event_end_date_everyday').val() || '');
+        const interval = parseInt($repeatSection.find('input[name="mep_repeated_periods"]').val(), 10) || 1;
+        const freqText = interval === 1 ? 'every day' : 'every ' + interval + ' days';
+
+        let text = 'Repeats ' + freqText;
+        if (startDateText) {
+            text += ' from ' + startDateText;
+            if (endDateText) {
+                text += ' to ' + endDateText;
+            }
+        }
+
+        const skippedDayNames = [];
+        $repeatSection.find('.mpwem-repeat-row--offdays .mpwem-offday-option').each(function() {
+            const $opt = $(this);
+            if (!$opt.find('input[type="checkbox"]').is(':checked')) return;
+            const full = $opt.data('mpwemOffDayFullLabel') || $opt.attr('title');
+            if (full) skippedDayNames.push(full);
+        });
+        if (skippedDayNames.length) {
+            text += ', skipping ' + skippedDayNames.join(', ');
+        }
+
+        return text + '.';
+    }
+
+    function refreshRepeatSummaryBanner($repeatSection) {
+        let $banner = $repeatSection.find('.mpwem-repeat-summary').first();
+        if (!$banner.length) {
+            $banner = $(
+                '<div class="mpwem-repeat-summary">' +
+                    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 3"/></svg>' +
+                    '<span class="mpwem-repeat-summary__text"></span>' +
+                '</div>'
+            );
+            const $head = $repeatSection.find('> ._layout_default_xs_mp_zero > ._bg_light_padding').first();
+            if ($head.length) {
+                $head.after($banner);
+            } else {
+                $repeatSection.find('> ._layout_default_xs_mp_zero').first().prepend($banner);
+            }
+        }
+        $banner.find('.mpwem-repeat-summary__text').text(buildRepeatSummaryText($repeatSection));
+    }
+
+    function enhanceRepeatSummary($repeatSection) {
+        refreshRepeatSummaryBanner($repeatSection);
+
+        if ($repeatSection.data('mpwemSummaryBound')) return;
+
+        $repeatSection.on(
+            'change',
+            'input[name="event_start_date_everyday"], input[name="event_end_date_everyday"], input[name="mep_repeated_periods"], .mpwem-repeat-row--offdays input[type="checkbox"]',
+            function() {
+                refreshRepeatSummaryBanner($repeatSection);
+                const $wizardRoot = $repeatSection.closest('.mpwem-event-wizard');
+                updateLiveTicketPreviewDate($wizardRoot.length ? $wizardRoot : $('.mpwem-event-wizard').first(), 'everyday');
+            }
+        );
+
+        $repeatSection.data('mpwemSummaryBound', true);
+    }
+
     function refreshRepeatedEndDateFieldUI($scope) {
         const $context = $scope && $scope.length ? $scope : $('.mpwem-event-wizard').first();
         const $repeatSection = $context.find('[data-collapse="#mep_everyday_event"]').first();
@@ -5319,7 +8001,10 @@
 
         enhanceDateFields($repeatSection);
         enhanceCustomCalendar($repeatSection);
-        enhanceRepeatedScheduleLayout($repeatSection);
+        enhanceRepeatedScheduleLayout($context);
+        enhanceRepeatRangeLayout($context);
+        enhanceRepeatSkipSection($context);
+        enhanceRepeatSummary($repeatSection);
         syncRepeatedDateConstraints($repeatSection);
     }
 
@@ -5366,6 +8051,82 @@
         });
     }
 
+    function countRepeatSkipExceptions($repeatSection) {
+        const offDaysCount = $repeatSection.find('.mpwem-repeat-row--offdays input[type="checkbox"]:checked').length;
+        const offDatesCount = $repeatSection.find('.mpwem-repeat-row--offdates .mpwem_item_insert').children().length;
+        return offDaysCount + offDatesCount;
+    }
+
+    function refreshRepeatSkipToggleCount($repeatSection) {
+        const $count = $repeatSection.find('.mpwem-repeat-skip-toggle__count');
+        if (!$count.length) return;
+        const total = countRepeatSkipExceptions($repeatSection);
+        $count.text(total ? ' · ' + total + ' skipped' : '');
+    }
+
+    function enhanceRepeatSkipSection($panel) {
+        const $repeatSection = $panel.find('[data-collapse="#mep_everyday_event"]').first();
+        if (!$repeatSection.length) return;
+
+        if ($repeatSection.data('mpwemSkipSectionEnhanced')) {
+            refreshRepeatSkipToggleCount($repeatSection);
+            return;
+        }
+
+        const $offDaysRow = $repeatSection.find('.mpwem-repeat-row--offdays').first();
+        const $offDatesRow = $repeatSection.find('.mpwem-repeat-row--offdates').first();
+        if (!$offDaysRow.length && !$offDatesRow.length) {
+            return;
+        }
+
+        setMpwemRowLabelText($offDaysRow.find('> ._justify_between_align_center_wrap > label > ._mr').first(), 'Weekly off days');
+        setMpwemRowLabelText($offDatesRow.find('.fdColumn label > span').first(), 'One-off dates');
+
+        const $anchor = $offDaysRow.length ? $offDaysRow : $offDatesRow;
+        const $toggleLeft = $('<span class="mpwem-repeat-skip-toggle__left"></span>')
+            .append(
+                $('<span class="mpwem-repeat-skip-toggle__icon"></span>')
+                    .html('<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>')
+            )
+            .append($('<span></span>').text('Skip specific days or dates'))
+            .append($('<span class="mpwem-repeat-skip-toggle__count"></span>'));
+        const $toggle = $('<button type="button" class="mpwem-ticket-add__more-toggle mpwem-repeat-skip-toggle" aria-expanded="false"></button>')
+            .append($toggleLeft)
+            .append(
+                $('<span class="mpwem-ticket-add__chev"></span>')
+                    .html('<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>')
+            );
+        const $body = $('<div class="mpwem-ticket-add__more mpwem-repeat-skip-body"></div>').hide();
+
+        $anchor.before($toggle, $body);
+        if ($offDaysRow.length) {
+            $body.append($offDaysRow.detach());
+        }
+        if ($offDatesRow.length) {
+            $body.append($offDatesRow.detach());
+        }
+
+        $toggle.on('click', function() {
+            const willOpen = !$body.is(':visible');
+            $body.slideToggle(150);
+            $toggle.toggleClass('is-open', willOpen).attr('aria-expanded', willOpen ? 'true' : 'false');
+        });
+
+        $body.on('change', 'input[type="checkbox"]', function() {
+            refreshRepeatSkipToggleCount($repeatSection);
+        });
+        const $offDatesInsert = $offDatesRow.find('.mpwem_item_insert').first();
+        if ($offDatesInsert.length && window.MutationObserver) {
+            new MutationObserver(function() {
+                refreshRepeatSkipToggleCount($repeatSection);
+            }).observe($offDatesInsert[0], { childList: true });
+        }
+
+        refreshRepeatSkipToggleCount($repeatSection);
+
+        $repeatSection.data('mpwemSkipSectionEnhanced', true);
+    }
+
     function enhanceDateStep($root) {
         const $panel = getDatePanel($root);
         if (!$panel.length) return;
@@ -5375,6 +8136,7 @@
         enhanceDateFields($panel);
         enhanceCustomCalendar($panel);
         enhanceOffDayPicker($panel);
+        enhanceRepeatSkipSection($panel);
         enhanceDateConditionalSelects($panel);
         syncRepeatedDateConstraints($panel);
         alignDateFormatTooltips($panel);
@@ -5488,13 +8250,14 @@
             $card.find('[data-tag-input]').each(function() {
                 const $input = $(this);
                 const $preview = $card.find('[data-tag-preview]').first();
+                const $suggestButtons = $card.find('[data-tag-suggest]');
 
                 if ($input.data('mpwemTagPreviewInit')) {
                     return;
                 }
 
-                const renderPreview = function() {
-                    const tags = ($input.val() || '')
+                const getTags = function() {
+                    return ($input.val() || '')
                         .toString()
                         .split(',')
                         .map(function(tag) {
@@ -5503,6 +8266,10 @@
                         .filter(function(tag, index, allTags) {
                             return tag.length && allTags.indexOf(tag) === index;
                         });
+                };
+
+                const renderPreview = function() {
+                    const tags = getTags();
 
                     $preview.empty();
 
@@ -5517,11 +8284,41 @@
                     });
                 };
 
+                const renderSuggestions = function() {
+                    const tags = getTags();
+
+                    $suggestButtons.each(function() {
+                        const $btn = $(this);
+                        const tagName = ($btn.data('tag-suggest') || '').toString();
+                        $btn.prop('hidden', tags.indexOf(tagName) !== -1);
+                    });
+                };
+
+                $suggestButtons.on('click.mpwemTagSuggest', function() {
+                    const tagName = ($(this).data('tag-suggest') || '').toString();
+
+                    if (!tagName) {
+                        return;
+                    }
+
+                    const tags = getTags();
+
+                    if (tags.indexOf(tagName) === -1) {
+                        tags.push(tagName);
+                    }
+
+                    $input.val(tags.join(', ')).trigger('input.mpwemTagPreview');
+                });
+
                 $input
-                    .on('input.mpwemTagPreview change.mpwemTagPreview blur.mpwemTagPreview', renderPreview)
+                    .on('input.mpwemTagPreview change.mpwemTagPreview blur.mpwemTagPreview', function() {
+                        renderPreview();
+                        renderSuggestions();
+                    })
                     .data('mpwemTagPreviewInit', true);
 
                 renderPreview();
+                renderSuggestions();
             });
 
             $card.find('[data-taxonomy-create-form]').each(function() {
@@ -5699,6 +8496,86 @@
         return isPublishedEvent($root) ? 'Save & Update Event' : 'Save & Publish Event';
     }
 
+    // Keeps the bottom nav bar (progress line, step badge/name, Back/Next) in
+    // sync with whichever step is active among the currently visible steps.
+    function syncWizardFooter($root, $visibleSteps, current) {
+        const total = $visibleSteps.length;
+        const $activeStep = $visibleSteps.eq(current - 1);
+        const stepName = $activeStep.find('.mpwem-step__label').text();
+        const $nextStep = $visibleSteps.eq(current);
+        const nextName = $nextStep.length ? $nextStep.find('.mpwem-step__label').text() : '';
+
+        $root.find('.mpwem-wizard-footer-progress > span').css('width', (current / total * 100) + '%');
+        $root.find('.mpwem-wizard-step-num').text(current);
+        $root.find('.mpwem-wizard-step-name').text(stepName);
+        $root.find('.mpwem-wizard-progress').text('Step ' + current + ' of ' + total);
+        $root.find('.mpwem-wizard-prev').prop('disabled', current === 1);
+        $root.find('.mpwem-wizard-next').text(
+            current === total ? finalSaveLabel($root) : (nextName ? 'Next: ' + nextName : 'Next Step')
+        );
+    }
+
+    // Quietly saves the whole wizard form in the background (no status change,
+    // no validation, no page reload) when the user moves between steps, so
+    // what was entered in the step being left is stored before the next one
+    // opens. Same server path as a Save as Draft / Update, flagged quiet.
+    // PHP drops form fields past max_input_vars (default 1000), and this form
+    // is bigger than that. Every field travels as one JSON string instead;
+    // MPWEM_Event_Edit_Page::unpack_form_payload() rebuilds $_POST from it.
+    function packFormEntries(form) {
+        const entries = [];
+        new window.FormData(form).forEach(function(value, key) {
+            if (typeof value === 'string' && key !== 'mpwem_form_json') {
+                entries.push([key, value]);
+            }
+        });
+        return JSON.stringify(entries);
+    }
+
+    let stepAutoSaveRunning = false;
+    let stepAutoSaveQueued = false;
+
+    function autoSaveEventForm($root) {
+        const form = document.getElementById('mpwem-event-edit-form');
+        if (!form || typeof window.fetch !== 'function' || typeof window.FormData !== 'function') {
+            return;
+        }
+        if (stepAutoSaveRunning) {
+            stepAutoSaveQueued = true;
+            return;
+        }
+
+        if (window.tinymce && typeof window.tinymce.triggerSave === 'function') {
+            window.tinymce.triggerSave();
+        }
+
+        $('#mpwem_post_status_action').val('');
+        $('#mpwem_quiet_save').val('1');
+        $('#mpwem_active_step').val(($root.find('.mpwem-step.is-active').data('step-key') || STEP_KEY_FALLBACK).toString());
+
+        const data = new window.FormData();
+        data.set('action', 'mpwem_event_edit_save');
+        data.set('mpwem_form_json', packFormEntries(form));
+
+        stepAutoSaveRunning = true;
+        window.fetch(form.action, {
+            method: 'POST',
+            body: data,
+            credentials: 'same-origin',
+            redirect: 'manual'
+        }).then(function() {
+            showToast('Progress saved', 'success');
+        }).catch(function() {
+            showToast('Could not save your progress. Check your connection.', 'error');
+        }).then(function() {
+            stepAutoSaveRunning = false;
+            if (stepAutoSaveQueued) {
+                stepAutoSaveQueued = false;
+                autoSaveEventForm($root);
+            }
+        });
+    }
+
     function setActiveStep($root, stepKey, options) {
         if (stepKey !== 'tickets') {
             closeTicketModal($root);
@@ -5728,6 +8605,11 @@
             if (!validateDateWiseGlobalQty($root)) {
                 return;
             }
+        }
+
+        // Leaving a step by Next / the stepper: store what was entered so far.
+        if (options && options.validate && $activeStep.length && $targetStep[0] !== $activeStep[0]) {
+            autoSaveEventForm($root);
         }
 
         $steps.removeClass('is-active is-complete');
@@ -5787,9 +8669,7 @@
         // Progress
         const $visibleSteps = $steps.filter(function() { return $(this).css('display') !== 'none'; });
         const current = $visibleSteps.index($targetStep) + 1;
-        $root.find('.mpwem-wizard-progress').text('Step ' + current + ' of ' + $visibleSteps.length);
-        $root.find('.mpwem-wizard-prev').prop('disabled', current === 1);
-        $root.find('.mpwem-wizard-next').text(current === $visibleSteps.length ? finalSaveLabel($root) : 'Next Step');
+        syncWizardFooter($root, $visibleSteps, current);
         $root.find('#mpwem_active_step').val(stepKey);
 
         if (options && options.pushHash) {
@@ -5809,7 +8689,8 @@
         if (mode === 'on') {
             $('#mpwem_wizard_ticket_details_section').show();
             $('#mpwem_wizard_ticket_details_section').find('.mpwem-ticket-settings-head').show();
-            $('#mpwem_wizard_ticket_details_section').find('.mpwem-ticket-warnings').show();
+            $('.mpwem-ticket-warnings').show();
+            $('#mpwem_wizard_payment_status_card').show();
             $('#mpwem_wizard_ticket_details_section').find('._bg_light_padding').show();
             
             // Only show extra services card if it actually has content
@@ -5830,8 +8711,9 @@
             
             // Hide the main Ticket & Pricing Settings header card
             $('#mpwem_wizard_ticket_details_section').find('.mpwem-ticket-settings-head').hide();
-            $('#mpwem_wizard_ticket_details_section').find('.mpwem-ticket-warnings').hide();
-            
+            $('.mpwem-ticket-warnings').hide();
+            $('#mpwem_wizard_payment_status_card').hide();
+
             // Hide only the ticket editor's header, not the RSVP one
             $('#mpwem_wizard_ticket_details_section').find('.mpwem-ticket-editor-section ._bg_light_padding, .mpwem-extra-service-section ._bg_light_padding').hide();
             $('#mpwem_wizard_extra_services_card').hide();
@@ -5866,7 +8748,8 @@
             $details.show();
             // Everything that belongs to selling or RSVP is irrelevant here.
             $details.find('.mpwem-ticket-settings-head').hide();
-            $details.find('.mpwem-ticket-warnings').hide();
+            $('.mpwem-ticket-warnings').hide();
+            $('#mpwem_wizard_payment_status_card').hide();
             $details.find('.mpwem-ticket-editor-section, .mpwem-extra-service-section').hide();
             $details.find('#mpwem_ticket_summary').hide();
             $details.find('.mpwem-ticket-action-bar__item, .mpwem-ticket-action-bar__divider').hide();
@@ -5882,6 +8765,8 @@
             $('#mpwem_wizard_extra_services_card').hide();
             $('#mpwem_wizard_pricing_help_card').hide();
             $('#mpwem_wizard_tickets_sidebar').show();
+            $('.mpwem-ticket-warnings').hide();
+            $('#mpwem_wizard_payment_status_card').hide();
             $('#mpwem_wizard_ticket_details_section').find('.mpwem-rsvp-settings-area').hide();
             $('#mpwem_wizard_ticket_details_section').find('.mpwem-announcement-settings-area').hide();
         }
@@ -5903,9 +8788,7 @@
         const $activeStep = $steps.filter('.is-active');
         if ($activeStep.length) {
             const current = $visibleSteps.index($activeStep) + 1;
-            $root.find('.mpwem-wizard-progress').text('Step ' + current + ' of ' + $visibleSteps.length);
-            $root.find('.mpwem-wizard-prev').prop('disabled', current === 1);
-            $root.find('.mpwem-wizard-next').text(current === $visibleSteps.length ? finalSaveLabel($root) : 'Next Step');
+            syncWizardFooter($root, $visibleSteps, current);
         }
     }
 
@@ -5981,8 +8864,11 @@
 
                     $root.find('#mpwem_featured_image_id').val(data.id || '');
                     $wrap.attr('data-has-image', data.id ? '1' : '0');
-                    $wrap.find('.mpwem-featured-image__preview').empty().append($image);
-                    $wrap.find('.mpwem-featured-remove').prop('disabled', false);
+                    $wrap.find('.mpwem-featured-image__preview').find('img').remove();
+                    $wrap.find('.mpwem-featured-image__preview').prepend($image);
+                    $wrap.find('.mpwem-featured-image__filled').show();
+                    $wrap.find('.mpwem-featured-image__dropzone').hide();
+                    setFieldError($wrap, $wrap, '');
                 });
             }
 
@@ -5995,13 +8881,9 @@
             const $wrap = $root.find('.mpwem-featured-image').first();
             $root.find('#mpwem_featured_image_id').val('');
             $wrap.attr('data-has-image', '0');
-            $wrap.find('.mpwem-featured-image__preview').empty().append(
-                $('<div />', {
-                    class: 'mpwem-featured-image__placeholder',
-                    text: 'No image selected'
-                })
-            );
-            $(this).prop('disabled', true);
+            $wrap.find('.mpwem-featured-image__preview').find('img').remove();
+            $wrap.find('.mpwem-featured-image__filled').hide();
+            $wrap.find('.mpwem-featured-image__dropzone').show();
         });
     }
 
@@ -6138,6 +9020,19 @@
         );
     }
 
+    // Toggle the red error state on a field and show/hide an inline message
+    // right below it ($anchor = element the message is inserted after).
+    function setFieldError($field, $anchor, message) {
+        $anchor = ($anchor && $anchor.length) ? $anchor : $field;
+        $anchor.siblings('.mpwem-field-error-msg[data-for="basic"]').remove();
+        $field.toggleClass('mpwem-field-error', !!message);
+        if (message) {
+            $('<p class="mpwem-field-error-msg" data-for="basic" role="alert"></p>')
+                .text(message)
+                .insertAfter($anchor);
+        }
+    }
+
     function validateBasicStep($root, options) {
         options = options || {};
         const focus = options.focus !== false;
@@ -6150,10 +9045,22 @@
             $title = $('#title');
         }
         const titleVal = $.trim(($title.val() || '').toString());
-        $title.toggleClass('mpwem-field-error', titleVal === '');
+        setFieldError($title, $title, titleVal === '' ? 'Event title is required.' : '');
         if (titleVal === '') {
             messages.push('Event title is required.');
             if (!$firstInvalid.length) $firstInvalid = $title;
+        }
+
+        // Featured image is always required.
+        const $thumbId = $root.find('#mpwem_featured_image_id').first();
+        const $thumbWrap = $root.find('.mpwem-featured-image').first();
+        if ($thumbId.length && $thumbWrap.length) {
+            const hasImage = $.trim(($thumbId.val() || '').toString()) !== '' && $thumbId.val() !== '0';
+            setFieldError($thumbWrap, $thumbWrap, hasImage ? '' : 'Featured image is required.');
+            if (!hasImage) {
+                messages.push('Featured image is required.');
+                if (!$firstInvalid.length) $firstInvalid = $thumbWrap;
+            }
         }
 
         // Event type drives the venue / virtual requirements.
@@ -6164,13 +9071,13 @@
         const $venue = $root.find('input[name="mep_location_venue"]').first();
         if (needsVenue) {
             const venueVal = $.trim(($venue.val() || '').toString());
-            $venue.toggleClass('mpwem-field-error', venueVal === '');
+            setFieldError($venue, $venue, venueVal === '' ? 'Location/Venue is required.' : '');
             if (venueVal === '') {
                 messages.push('Location/Venue is required for in-person events.');
                 if (!$firstInvalid.length) $firstInvalid = $venue;
             }
         } else {
-            $venue.removeClass('mpwem-field-error');
+            setFieldError($venue, $venue, '');
         }
 
         const $virtualSection = $('#mpev-online-event');
@@ -6274,8 +9181,11 @@
         const $rows = getTicketRows($root);
         if (!message && $rows.length === 0) {
             message = 'Please add at least one ticket type.';
+            // Same as clicking "Create First Ticket" itself - opens the
+            // inline "Add New Ticket Type" form (scrolled into view and
+            // focused), not the old ticket modal popup.
             onFix = function() {
-                openTicketModal($root, 'new');
+                openInlineTicketAdd($root);
             };
         }
 
@@ -6313,12 +9223,26 @@
             });
 
             if (message) {
+                const invalidMessage = message;
+                const invalidFieldName = $invalidField.attr('name');
                 onFix = function() {
-                    openTicketModal($root, 'edit');
+                    // Show the problem in the inline ticket form (opening it
+                    // for that row if needed) instead of the ticket modal popup.
+                    const rowIndex = getTicketRows($root).index($invalidRow);
+                    const $card = getInlineTicketAddCard($root);
+                    const openRow = $card.data('mpwemInlineAddRow');
+                    const alreadyOpen = $card.hasClass('is-open') && openRow && openRow[0] === $invalidRow[0];
+                    if (!alreadyOpen && rowIndex > -1) {
+                        openInlineTicketEdit($root, rowIndex);
+                    }
                     window.setTimeout(function() {
-                        highlightRow($invalidRow);
-                        if ($invalidField.is(':visible')) $invalidField.trigger('focus');
-                    }, 140);
+                        const $groups = $card.find('.mpwem-ticket-add__core .mpwem-ticket-add__group');
+                        const groupIndex = invalidFieldName === 'option_name_t[]' ? 0 : (invalidFieldName === 'option_price_t[]' ? 1 : 2);
+                        const $input = $groups.eq(groupIndex).find('input').first();
+                        setTicketAddError($input, invalidMessage.replace('Each ticket type needs a', 'Ticket') .replace(/\.$/, '') + ' is required.');
+                        scrollToViewportCenter($card);
+                        $input.trigger('focus');
+                    }, 160);
                 };
             }
         }
@@ -6594,6 +9518,14 @@
             findByName(mainNames.et).first(),
             'Event'
         );
+        if (error) {
+            // The event's main schedule is what the server requires (and what the
+            // front end reads first). An extra "more dates" row can't stand in
+            // for it, so send the user to fill the main slot: the fix below
+            // triggers "+ Add Schedule", which now writes into the empty main
+            // fields before it ever creates an extra row.
+            error.isMissingMainSchedule = true;
+        }
 
         // "Add More Date" rows (Single / Particular).
         if (!error && moreNames) {
@@ -6716,6 +9648,18 @@
             const $field = error.$field;
             setActiveStep($root, 'date', { pushHash: true, validate: false });
             window.setTimeout(function() {
+                // Single Event / Particular Dates with nothing scheduled yet -
+                // same fix as "Create First Date"/"+ Add Schedule" itself
+                // (openInlineDateAdd already scrolls, reveals and focuses
+                // the embedded form), not the old date modal popup.
+                // Repeated Event's fields already render inline, so this
+                // never applies there - the plain scroll/focus below
+                // already reaches them directly.
+                if (error.isMissingMainSchedule && (type === 'no' || type === 'yes')) {
+                    openInlineDateAdd($root);
+                    return;
+                }
+
                 if ($field && $field.length && !$field.is(':visible') && $field.closest('#mpwem_particular_date_modal_mount').length) {
                     openParticularDateModal($root, 'list');
                 }
@@ -6909,6 +9853,32 @@
         $form.trigger('submit');
     }
 
+    // Native submits of the wizard form (Publish / Update / Draft / mini-saves):
+    // send the fields as one JSON value (see packFormEntries) and keep the
+    // individual inputs out of the request so max_input_vars can't truncate it.
+    $(document).on('submit.mpwemPack', '#mpwem-event-edit-form', function(e) {
+        if (e.isDefaultPrevented()) return;
+        const form = this;
+        let $json = $(form).find('#mpwem_form_json');
+        if (!$json.length) {
+            $json = $('<input type="hidden" name="mpwem_form_json" id="mpwem_form_json" />').appendTo(form);
+        }
+        $json.val('');
+        $json.val(packFormEntries(form));
+
+        const muted = [];
+        $(form).find('input, select, textarea, button').each(function() {
+            if (this.name && this.name !== 'mpwem_form_json' && this.name !== 'action' && !this.disabled) {
+                this.disabled = true;
+                muted.push(this);
+            }
+        });
+        // The request body is built synchronously at submit; restore right after.
+        window.setTimeout(function() {
+            muted.forEach(function(el) { el.disabled = false; });
+        }, 0);
+    });
+
     function closeStatusActionMenus() {
         $('.mpwem-status-actions__menu-wrap').removeClass('is-open')
             .find('.mpwem-status-actions__toggle')
@@ -7057,11 +10027,21 @@
             }
         })();
 
+        // Keep the top-left heading in step with the Event Title field as it's typed.
+        $root.on('input change', 'input[name="post_title"]', function() {
+            const typed = ($(this).val() || '').toString().trim();
+            const $heading = $root.find('.mpwem-event-wizard__title h1').first();
+            if (!$heading.length) return;
+            const text = typed !== '' ? typed : 'Untitled Event';
+            $heading.text(text).attr('title', text);
+        });
+
         // Clear the required-field highlight as soon as the user fills the field.
         $root.on('input change', '.mpwem-field-error', function() {
             const value = ($(this).val() || '').toString().trim();
             if (value !== '') {
-                $(this).removeClass('mpwem-field-error');
+                $(this).removeClass('mpwem-field-error')
+                    .siblings('.mpwem-field-error-msg[data-for="basic"]').remove();
             }
         });
 
@@ -7092,6 +10072,7 @@
 
             const errorMessages = {
                 title: 'Event title is required.',
+                thumbnail: 'Featured image is required.',
                 venue: 'Location/Venue is required for in-person events.',
                 virtual: 'Virtual event details or link are required for online events.',
                 tickets: 'Please add at least one ticket type.',
@@ -7110,7 +10091,18 @@
                 related_label: 'Related Events is enabled — add a section label.',
                 related_list: 'Related Events is enabled — select at least one event.'
             };
-            const message = errorMessages[errorCode] || 'Please complete the required fields.';
+            let message = errorMessages[errorCode] || 'Please complete the required fields.';
+            if (errorCode === 'date_required') {
+                let missing = '';
+                try {
+                    missing = new URLSearchParams(window.location.search).get('mpwem_missing') || '';
+                } catch (e) {
+                    missing = '';
+                }
+                if (missing) {
+                    message += ' (not received: ' + missing.split(',').join(', ') + ')';
+                }
+            }
             window.setTimeout(function() {
                 showNotice($root, message, 'error');
                 showToast(message, 'error');
@@ -7281,6 +10273,57 @@
             window.setTimeout(function() {
                 enhanceDateStep($root);
             }, 80);
+        });
+
+        // "Use the Attendee Form fields for RSVP" is disabled when the PRO
+        // form-builder add-on isn't active - a disabled checkbox never
+        // fires its own click/change, but its <label> still does, so bind
+        // there and tell the user why nothing happened.
+        $(document).on('click', 'label[for="mep_rsvp_use_attendee_form"]', function() {
+            const $checkbox = $('#mep_rsvp_use_attendee_form');
+            if ($checkbox.length && $checkbox.data('mpwemProLocked') == '1') {
+                showToast('This is a PRO feature. Activate Event Booking Manager PRO to use it.', 'warning');
+            }
+        });
+
+        $(document).on('click', '[data-mpwem-copy-shortcode]', function(e) {
+            e.preventDefault();
+            var $btn = $(this);
+            var text = $btn.closest('.mpwem-shortcode-help__row').find('.mpwem-shortcode-help__code').text().trim();
+            if (!text) {
+                return;
+            }
+
+            // Plain synchronous execCommand copy - no Clipboard API / Promise
+            // involved, so there is nothing async that can silently fail.
+            var $temp = $('<textarea readonly></textarea>').val(text).css({
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                opacity: 0
+            }).appendTo('body');
+            $temp[0].focus();
+            $temp[0].select();
+            try {
+                document.execCommand('copy');
+            } catch (err) {
+                // Nothing else to do - the text is at least selected for a manual copy.
+            }
+            $temp.remove();
+
+            var checkIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+            var $icon = $btn.find('svg').first();
+            if (!$btn.data('mpwemCopyOriginalIcon')) {
+                $btn.data('mpwemCopyOriginalIcon', $icon.prop('outerHTML'));
+            }
+            $icon.replaceWith(checkIcon);
+            $btn.addClass('is-copied');
+            window.clearTimeout($btn.data('mpwemCopyResetTimer'));
+            var resetTimer = window.setTimeout(function() {
+                $btn.removeClass('is-copied');
+                $btn.find('svg').first().replaceWith($btn.data('mpwemCopyOriginalIcon'));
+            }, 1500);
+            $btn.data('mpwemCopyResetTimer', resetTimer);
         });
 
         // Add Premium Toaster Notification on form submit
