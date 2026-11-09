@@ -132,6 +132,7 @@ if ( ! function_exists( 'mep_cal_enqueue_assets' ) ) {
 				'noEvents'        => __( 'No events to display', 'mage-eventpress' ),
 				'allDay'          => __( 'All Day', 'mage-eventpress' ),
 				'soldOut'         => __( 'Sold Out', 'mage-eventpress' ),
+				'cancelled'       => __( 'Cancelled', 'mage-eventpress' ),
 				'available'       => __( 'Available', 'mage-eventpress' ),
 				'total'           => __( 'Total', 'mage-eventpress' ),
 				'sold'            => __( 'Sold', 'mage-eventpress' ),
@@ -165,6 +166,7 @@ if ( ! function_exists( 'mep_cal_enqueue_assets' ) ) {
 				'endDate'         => __( 'End Date', 'mage-eventpress' ),
 				'resetFilters'    => __( 'Reset Filters', 'mage-eventpress' ),
 				'loadingSeats'    => __( 'Loading seat details...', 'mage-eventpress' ),
+				'unlimited'       => __( 'Unlimited', 'mage-eventpress' ),
 			),
 		) );
 
@@ -1128,6 +1130,7 @@ if ( ! class_exists( 'MPWEM_Calendar_Ajax' ) ) {
 					'soldSeats'      => $stock_info['sold'],
 					'reservedSeats'  => $stock_info['reserved'],
 					'ticketTypes'    => $stock_info['ticket_types'],
+					'unlimitedSeats' => $stock_info['unlimited'],
 					'stockLoaded'    => 'yes',
 					'minPriceHtml'   => $show_price === 'yes' && function_exists( 'wc_price' ) ? $this->normalize_text_value( wc_price( $min_price ) ) . MPWEM_Global_Function::price_suffix( $event_id, $min_price, true ) : '',
 				)
@@ -1147,6 +1150,16 @@ if ( ! class_exists( 'MPWEM_Calendar_Ajax' ) ) {
 			$total_sold      = 0;
 			$total_reserved  = 0;
 			$ticket_details  = array();
+			$unlimited_seats = false;
+
+			// A cancelled event shows neither seats nor price, so it can never read as
+			// sold out or on sale; the calendar script marks it as cancelled instead.
+			// A password protected event keeps those figures behind its password.
+			$is_cancelled = MPWEM_Global_Function::is_cancelled_event( $event_id );
+			if ( $is_cancelled || post_password_required( $event_id ) ) {
+				$show_stock = 'no';
+				$show_price = 'no';
+			}
 
 			if ( $show_stock === 'yes' ) {
 				$stock_info      = $this->get_stock_info( $event_id, $start_dt );
@@ -1155,6 +1168,7 @@ if ( ! class_exists( 'MPWEM_Calendar_Ajax' ) ) {
 				$total_sold      = $stock_info['sold'];
 				$total_reserved  = $stock_info['reserved'];
 				$ticket_details  = $stock_info['ticket_types'];
+				$unlimited_seats = $stock_info['unlimited'];
 			} elseif ( $show_price === 'yes' ) {
 				$ticket_details = $this->get_ticket_price_info( $event_id );
 			}
@@ -1167,6 +1181,11 @@ if ( ! class_exists( 'MPWEM_Calendar_Ajax' ) ) {
 					$bg_color   = $low_stock_color;
 					$text_color = '#333333';
 				}
+			}
+
+			if ( $is_cancelled ) {
+				$bg_color   = '#6b7280';
+				$text_color = '#ffffff';
 			}
 
 			$bg_color = apply_filters( 'mep_calendar_event_color', $bg_color, $event_id, $available_seats, $total_seats );
@@ -1206,6 +1225,7 @@ if ( ! class_exists( 'MPWEM_Calendar_Ajax' ) ) {
 				'borderColor'     => $bg_color,
 				'textColor'       => $text_color,
 				'allDay'          => $all_day,
+				'classNames'      => $is_cancelled ? array( 'mep-cal-cancelled-event' ) : array(),
 				'extendedProps'   => array(
 					'eventId'                => $event_id,
 					'eventType'              => $event_type,
@@ -1225,6 +1245,7 @@ if ( ! class_exists( 'MPWEM_Calendar_Ajax' ) ) {
 					'soldSeats'              => $total_sold,
 					'reservedSeats'          => $total_reserved,
 					'ticketTypes'            => $ticket_details,
+					'unlimitedSeats'         => $unlimited_seats,
 					'stockLoaded'            => $show_stock === 'yes' ? 'no' : 'yes',
 					'eventDate'              => $this->normalize_stock_date( $start_dt ),
 					'showStock'              => $show_stock,
@@ -1234,6 +1255,7 @@ if ( ! class_exists( 'MPWEM_Calendar_Ajax' ) ) {
 					'hideTime'               => $hide_time,
 					'isExpired'              => $is_expired,
 					'expiredBadge'           => $is_expired,
+					'isCancelled'            => $is_cancelled,
 				),
 			);
 		}
@@ -1568,6 +1590,9 @@ if ( ! class_exists( 'MPWEM_Calendar_Ajax' ) ) {
 				'sold'         => 0,
 				'reserved'     => 0,
 				'ticket_types' => array(),
+				// An unlimited ticket type is on sale: the totals hold
+				// MPWEM_Functions::UNLIMITED_TICKET_QTY and are shown as "Unlimited".
+				'unlimited'    => false,
 			);
 
 			$event_date = $this->normalize_stock_date( $date );
@@ -1589,7 +1614,8 @@ if ( ! class_exists( 'MPWEM_Calendar_Ajax' ) ) {
 				}
 
 				$name  = isset( $ticket['option_name_t'] ) ? $ticket['option_name_t'] : '';
-				$qty   = isset( $ticket['option_qty_t'] ) ? intval( $ticket['option_qty_t'] ) : 0;
+				$is_unlimited = MPWEM_Functions::is_unlimited_ticket_on_event( $event_id, $ticket );
+				$qty   = $is_unlimited ? MPWEM_Functions::UNLIMITED_TICKET_QTY : ( isset( $ticket['option_qty_t'] ) ? intval( $ticket['option_qty_t'] ) : 0 );
 				$rsv   = isset( $ticket['option_rsv_t'] ) ? intval( $ticket['option_rsv_t'] ) : 0;
 				$price = isset( $ticket['option_price_t'] ) ? $ticket['option_price_t'] : 0;
 
@@ -1624,6 +1650,9 @@ if ( ! class_exists( 'MPWEM_Calendar_Ajax' ) ) {
 				$total_ticket   += $qty;
 				$total_reserved += $rsv;
 				$total_sold     += $sold;
+				if ( $is_unlimited ) {
+					$result['unlimited'] = true;
+				}
 
 				$result['ticket_types'][] = array(
 					'name'      => $name,
@@ -1631,6 +1660,7 @@ if ( ! class_exists( 'MPWEM_Calendar_Ajax' ) ) {
 					'sold'      => $sold,
 					'reserved'  => $rsv,
 					'available' => $available,
+					'unlimited' => $is_unlimited,
 					'price'     => $price,
 					'priceHtml' => ( function_exists( 'wc_price' ) ? $this->normalize_text_value( wc_price( $price ) ) : $this->normalize_text_value( $price ) ) . MPWEM_Global_Function::price_suffix( $event_id, $price, true ),
 				);

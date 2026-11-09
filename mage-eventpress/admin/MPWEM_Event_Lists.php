@@ -143,6 +143,11 @@
                                         <span><?php esc_html_e( 'Expired', 'mage-eventpress' ); ?></span>
                                         <span class="stat-number">(<?php echo esc_html( $event_status_count['expire_count'] ); ?>)</span>
                                     </div>
+                                    <div class="stat-item mpwem_filter_by_active_status mpwem_filter_cancelled" data-by-filter="cancelled">
+                                        <span class="dashicons dashicons-dismiss" aria-hidden="true"></span>
+                                        <span><?php esc_html_e( 'Cancelled', 'mage-eventpress' ); ?></span>
+                                        <span class="stat-number">(<?php echo esc_html( $event_status_count['cancelled_count'] ); ?>)</span>
+                                    </div>
                                     <div class="stat-item mpwem_filter_by_status" data-by-filter="trash">
                                         <span><?php esc_html_e( 'Trash', 'mage-eventpress' ); ?></span>
                                         <span class="stat-number" id="mpwem_trash_count">(<?php echo esc_html( $post_counts['trash'] ); ?>)</span>
@@ -434,6 +439,16 @@
 						'type'    => 'DATETIME',
 					);
 				}
+				// A cancelled event is not "active", whatever its dates; it has its own chip.
+				if ( $active_status === 'active' ) {
+					$meta_query[] = mpwem_not_cancelled_meta_clause();
+				} elseif ( $active_status === 'cancelled' ) {
+					$meta_query[] = array(
+						'key'     => 'mep_event_cancelled',
+						'value'   => 'yes',
+						'compare' => '=',
+					);
+				}
 				if ( ! empty( $meta_query ) ) {
 					$meta_query['relation'] = 'AND';
 					$args['meta_query']     = $meta_query;
@@ -464,7 +479,8 @@
 				if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'mep_nonce' ) ) {
 					wp_send_json_error( array( 'message' => 'Security check failed' ) );
 				}
-				if ( ! current_user_can( 'edit_posts' ) ) {
+				// Site-wide revenue and registration totals: not for every role that can write posts.
+				if ( ! current_user_can( MPWEM_Global_Function::get_shop_manager_capability() ) ) {
 					wp_send_json_error( array( 'message' => 'Permission denied' ) );
 				}
 				// Total registrations = paid attendees/tickets across BOTH WooCommerce and
@@ -507,6 +523,10 @@
 				}
 				$post_id     = (int) sanitize_text_field( wp_unslash( $_GET['post_id'] ) );
 				$post        = get_post( $post_id );
+				// The copy takes every meta row of the source, so the nonce alone is not enough.
+				if ( ! $post || 'mep_events' !== $post->post_type || ! current_user_can( 'edit_post', $post_id ) ) {
+					wp_die( esc_html__( 'You are not allowed to duplicate this event.', 'mage-eventpress' ), '', array( 'response' => 403 ) );
+				}
 				$new_post    = array(
 					'post_title'   => $post->post_title . ' (Copy)',
 					'post_content' => $post->post_content,
@@ -519,6 +539,8 @@
 					wp_die( 'Failed to duplicate post.' );
 				}
 				$meta = get_post_meta( $post_id );
+				// A copy is usually made to reschedule, so it starts out not cancelled.
+				unset( $meta['mep_event_cancelled'], $meta['mep_event_cancel_message'], $meta['mep_event_cancelled_at'], $meta['mep_event_cancel_jobs'], $meta['mep_event_cancel_notified'], $meta['mep_event_cancel_email_subject'], $meta['mep_event_cancel_email_body'] );
 				foreach ( $meta as $key => $values ) {
 					foreach ( $values as $value ) {
 						add_post_meta( $new_post_id, $key, maybe_unserialize( $value ) );
@@ -665,6 +687,11 @@
 									$ticket_r_qty     = is_array($ticket_type) && array_key_exists( 'option_rsv_t', $ticket_type ) ? $ticket_type['option_rsv_t'] : 0;
 								    $total_sold       = mep_get_ticket_type_seat_count( $event_id, $ticket_name, $date, $ticket_qty, $ticket_r_qty );
 									$available_ticket = (int) $ticket_qty - ( (int) $total_sold + (int) $ticket_r_qty );
+									// No seat limit: show "Unlimited" rather than a capacity that does not apply.
+									if ( MPWEM_Functions::is_unlimited_ticket_on_event( $event_id, $ticket_type ) ) {
+										$ticket_qty       = __( 'Unlimited', 'mage-eventpress' );
+										$available_ticket = __( 'Unlimited', 'mage-eventpress' );
+									}
 									?>
                                     <tr>
                                         <th><?php echo esc_html( $ticket_name ); ?></th>
@@ -712,11 +739,24 @@
 		);
 		$active = new WP_Query( array_merge( $base, array(
 			'meta_query' => array(
+				'relation' => 'AND',
 				array(
 					'key'     => 'event_end_datetime',
 					'value'   => $now,
 					'compare' => '>=',
 					'type'    => 'DATETIME',
+				),
+				mpwem_not_cancelled_meta_clause(),
+			),
+		) ) );
+		// Cancelled events of every live status (a cancelled draft is still cancelled).
+		$cancelled = new WP_Query( array_merge( $base, array(
+			'post_status' => array( 'publish', 'draft', 'private' ),
+			'meta_query'  => array(
+				array(
+					'key'     => 'mep_event_cancelled',
+					'value'   => 'yes',
+					'compare' => '=',
 				),
 			),
 		) ) );
@@ -731,8 +771,26 @@
 			),
 		) ) );
 		return array(
-			'active_count' => (int) $active->found_posts,
-			'expire_count' => (int) $expire->found_posts,
+			'active_count'    => (int) $active->found_posts,
+			'expire_count'    => (int) $expire->found_posts,
+			'cancelled_count' => (int) $cancelled->found_posts,
+		);
+	}
+	/**
+	 * meta_query clause matching events that are not cancelled (flag missing or not 'yes').
+	 */
+	function mpwem_not_cancelled_meta_clause() {
+		return array(
+			'relation' => 'OR',
+			array(
+				'key'     => 'mep_event_cancelled',
+				'compare' => 'NOT EXISTS',
+			),
+			array(
+				'key'     => 'mep_event_cancelled',
+				'value'   => 'yes',
+				'compare' => '!=',
+			),
 		);
 	}
 	function get_active_expire_upcoming_count( $events ) {
@@ -978,11 +1036,18 @@
 				if ( $time_remaining === 'Expired!' ) {
 					$event_status_class = 'status-expired';
 				}
+				// A cancelled event has no countdown worth showing; the column says so instead.
+				$is_cancelled = 'yes' === get_post_meta( $id, 'mep_event_cancelled', true );
+				if ( $is_cancelled ) {
+					$time_remaining     = __( 'Cancelled', 'mage-eventpress' );
+					$event_status_class = 'status-cancelled';
+				}
 				$ticket_type_count = 0;
 				$qe_start_value    = $has_valid_start ? date( 'Y-m-d\TH:i', $start_ts ) : '';
 				$qe_end_value      = $has_valid_end ? date( 'Y-m-d\TH:i', $end_ts ) : '';
 				?>
-                <tr class="mpwem_event_list_card"
+                <tr class="mpwem_event_list_card<?php echo $is_cancelled ? ' is-cancelled' : ''; ?>"
+                    data-event-cancelled="<?php echo $is_cancelled ? 'yes' : 'no'; ?>"
                     data-event-status="<?php echo esc_attr( $status ); ?>"
                     data-event-active-status="<?php echo esc_attr( $event_status ); ?>"
                     data-filter-by-category="<?php echo esc_attr( $event_category ); ?>"
@@ -1023,6 +1088,11 @@
 								<?php } else { ?>
                                     <div class="event-status-inline">
                                         <div class="status-draft-inline"><?php esc_html_e( 'Trash', 'mage-eventpress' ); ?></div>
+                                    </div>
+								<?php } ?>
+								<?php if ( $is_cancelled ) { ?>
+                                    <div class="status-cancelled-inline" title="<?php esc_attr_e( 'Booking is closed. Restore it from the event\'s Event Status card.', 'mage-eventpress' ); ?>">
+                                        <span class="dashicons dashicons-dismiss" aria-hidden="true"></span><?php esc_html_e( 'Cancelled', 'mage-eventpress' ); ?>
                                     </div>
 								<?php } ?>
                             </div>
@@ -1088,7 +1158,7 @@
                         </div>
                     </td>
                     <td class="mpwem_event_list_capacity">
-                        <div class="mpwem_event_list_capacity-number"><?php echo esc_html( $total_sold ); ?>/<?php echo esc_html( $total_ticket ); ?></div>
+                        <div class="mpwem_event_list_capacity-number"><?php echo esc_html( $total_sold ); ?>/<?php if ( MPWEM_Functions::has_unlimited_capacity( $id ) ) { ?><span title="<?php esc_attr_e( 'Unlimited', 'mage-eventpress' ); ?>" aria-label="<?php esc_attr_e( 'Unlimited', 'mage-eventpress' ); ?>">&infin;</span><?php } else { echo esc_html( $total_ticket ); } ?></div>
                         <div class="mpwem_event_list_capacity-bar">
                             <div class="mpwem_event_list_capacity-fill <?php echo esc_attr( $full_class ); ?>" style="width: 100%"></div>
                         </div>

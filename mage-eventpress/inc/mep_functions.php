@@ -2879,7 +2879,8 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 			if ( is_array( $mep_event_ticket_type ) && sizeof( $mep_event_ticket_type ) > 0 ) {
 				foreach ( $mep_event_ticket_type as $field ) {
 					if ( $type == 'total' ) {
-						$total_name = is_array($field) && array_key_exists( 'option_qty_t', $field ) ? (int) $field['option_qty_t'] : 0;
+						// An unlimited ticket type counts as MPWEM_Functions::UNLIMITED_TICKET_QTY.
+						$total_name = MPWEM_Functions::get_ticket_capacity( $field );
 					} elseif ( $type == 'resv' ) {
 						$total_name = is_array($field) && array_key_exists( 'option_rsv_t', $field ) ? (int) $field['option_rsv_t'] : 0;
 					}
@@ -3572,10 +3573,96 @@ die();
 		function mep_get_events_custom_meta_for_api( $object ) {
 			$post_id                          = $object['id'];
 			$post_meta                        = get_post_meta( $post_id );
+			if ( ! current_user_can( 'edit_post', $post_id ) ) {
+				$post_meta = mep_rest_public_event_meta( $post_meta, $post_id );
+			}
 			$post_image                       = get_post_thumbnail_id( $post_id );
 			$image_src                        = wp_get_attachment_image_src( $post_image, 'full' );
 			$post_meta["event_feature_image"] = is_array( $image_src ) ? $image_src[0] : '';
 			return $post_meta;
+		}
+	}
+	if ( ! function_exists( 'mep_rest_public_event_meta' ) ) {
+		/**
+		 * Event meta for the REST "event_informations" field as seen by visitors who
+		 * cannot edit the event: only what the public event page itself shows.
+		 *
+		 * An allowlist, because the field used to return every stored value to anyone,
+		 * including virtual-event join details meant for buyers, the organizer's enquiry
+		 * email and the text of customer emails, and any key added later would have
+		 * joined them. A site whose integration reads another key can add it through the
+		 * mep_rest_public_event_meta_keys filter.
+		 *
+		 * @param array $meta     get_post_meta() of the event.
+		 * @param int   $event_id Event id.
+		 * @return array
+		 */
+		function mep_rest_public_event_meta( $meta, $event_id ) {
+			// Core REST blanks a protected post's content; this field follows it.
+			if ( post_password_required( $event_id ) ) {
+				return array();
+			}
+			$public = array(
+				'event_start_date', 'event_start_time', 'event_start_datetime',
+				'event_end_date', 'event_end_time', 'event_end_datetime',
+				'event_expire_datetime', 'event_upcoming_datetime',
+				'mep_enable_recurring', 'mep_event_more_date', 'mep_event_no_date',
+				'mep_show_end_datetime', 'mep_time_zone_display',
+				'mep_location_venue', 'location_name', 'mep_org_address', 'mep_street',
+				'mep_city', 'mep_state', 'mep_postcode', 'mep_country',
+				'latitude', 'longitude', 'mep_sgm',
+				'mep_event_type', 'mep_reg_status', 'mep_available_seat',
+				'mep_event_cancelled', 'mep_event_cancel_message',
+				'mep_announcement_title', 'mep_announcement_text',
+				'mep_event_faq', 'mep_faq_description', 'mep_event_day',
+				'mep_event_speakers_list', 'mep_speaker_title',
+				'mep_gallery_images', 'mep_list_thumbnail',
+				'mep_rt_event_status', 'mep_rt_event_attandence_mode',
+			);
+			// The event page keeps the ticket panel from visitors outside a member-only
+			// event's roles, so its prices stay out of this field for them too.
+			if ( MPWEM_Global_Function::user_can_register_for_event( $event_id ) ) {
+				$public[] = 'mep_event_ticket_type';
+				$public[] = 'mep_events_extra_prices';
+			}
+			$public = (array) apply_filters( 'mep_rest_public_event_meta_keys', $public, $event_id );
+			return array_intersect_key( (array) $meta, array_flip( $public ) );
+		}
+	}
+	if ( ! function_exists( 'mep_user_can_view_attendee_page' ) ) {
+		/**
+		 * Who may open an attendee's ticket detail page (the page QR codes link to):
+		 * the buyer, an administrator or the QR check-in role. Same rule as
+		 * templates/single-mep_events_attendees.php.
+		 *
+		 * @param int $attendee_id Attendee post id.
+		 * @return bool
+		 */
+		function mep_user_can_view_attendee_page( $attendee_id ) {
+			if ( ! is_user_logged_in() ) {
+				return false;
+			}
+			$user    = wp_get_current_user();
+			$owner   = (string) get_post_meta( $attendee_id, 'ea_user_id', true );
+			$qr_role = mep_get_option( 'mep_qr_user_role', 'qr_general_attendee_sec', 'administrator' );
+			return ( '' !== $owner && (int) $owner === (int) $user->ID )
+				|| in_array( 'administrator', (array) $user->roles, true )
+				|| in_array( $qr_role, (array) $user->roles, true );
+		}
+	}
+	add_filter( 'redirect_canonical', 'mep_attendee_page_canonical_redirect', 10, 2 );
+	if ( ! function_exists( 'mep_attendee_page_canonical_redirect' ) ) {
+		/**
+		 * WordPress redirects /?p=ID to the pretty permalink, whose slug is the
+		 * attendee's name, before the page's own access check runs. Anyone counting
+		 * ids could read attendee names from those redirects, so the canonical
+		 * redirect only happens for people allowed to see the page.
+		 */
+		function mep_attendee_page_canonical_redirect( $redirect_url, $requested_url ) {
+			if ( $redirect_url && is_singular( 'mep_events_attendees' ) && ! mep_user_can_view_attendee_page( get_queried_object_id() ) ) {
+				return false;
+			}
+			return $redirect_url;
 		}
 	}
 	if ( ! function_exists( 'mep_elementor_get_tax_term' ) ) {
@@ -6471,7 +6558,8 @@ die();
 		 *
 		 * The public AJAX endpoints take an event id from the request; without this
 		 * they answered for drafts, private events and posts of any other type.
-		 * Editors previewing an unpublished event still get an answer.
+		 * Editors previewing an unpublished event still get an answer. A password
+		 * protected event answers only once the visitor has entered its password.
 		 *
 		 * @param mixed $event_id Event post id.
 		 * @return bool
@@ -6481,10 +6569,34 @@ die();
 			if ( ! $event_id || 'mep_events' !== get_post_type( $event_id ) ) {
 				return false;
 			}
+			if ( post_password_required( $event_id ) ) {
+				return false;
+			}
 			if ( 'publish' === get_post_status( $event_id ) ) {
 				return true;
 			}
 			return current_user_can( 'read_post', $event_id );
+		}
+	}
+
+	if ( ! function_exists( 'mep_filter_public_related_events' ) ) {
+		/**
+		 * Related events an event page may show to anyone.
+		 *
+		 * The related list is stored as chosen in the editor, and a chosen event can
+		 * later be drafted, made private, trashed or given a password.
+		 *
+		 * @param mixed $event_ids Related event ids.
+		 * @return array
+		 */
+		function mep_filter_public_related_events( $event_ids ) {
+			return array_filter( (array) $event_ids, static function ( $event_id ) {
+				$event_id = absint( $event_id );
+				return $event_id
+					&& 'mep_events' === get_post_type( $event_id )
+					&& 'publish' === get_post_status( $event_id )
+					&& ! post_password_required( $event_id );
+			} );
 		}
 	}
 

@@ -10,6 +10,7 @@
 		class MPWEM_Dependencies {
 			public function __construct() {
 				add_action( 'init', array( $this, 'language_load' ) );
+				add_filter( 'gettext_mage-eventpress', array( $this, 'legacy_view_more_dates_label' ), 10, 2 );
 				$this->load_file();
 				add_action( 'admin_enqueue_scripts', array( $this, 'admin_enqueue' ), 90 );
 				add_action( 'wp_enqueue_scripts', array( $this, 'frontend_enqueue' ), 90 );
@@ -20,6 +21,24 @@
 			public function language_load(): void {
 				$plugin_dir = basename( dirname( __DIR__ ) ) . "/languages/";
 				load_plugin_textdomain( 'mage-eventpress', false, $plugin_dir );
+			}
+			/**
+			 * Translates the old "View More Date" label the same way as "View More Dates".
+			 *
+			 * The label was renamed to "View More Dates" in July 2026 and the language files only
+			 * carry the new string, so theme overrides of templates/layout/date_list.php copied
+			 * before the rename kept showing English. Locales without a translation are unchanged.
+			 *
+			 * @param string $translation Translated text.
+			 * @param string $text        Original text.
+			 * @return string
+			 */
+			public function legacy_view_more_dates_label( $translation, $text ) {
+				if ( 'View More Date' !== $text || $translation !== $text ) {
+					return $translation;
+				}
+				$current = __( 'View More Dates', 'mage-eventpress' );
+				return 'View More Dates' === $current ? $translation : $current;
 			}
 			private function load_file(): void {
 				require_once MPWEM_PLUGIN_DIR . '/inc/MPWEM_Global_Function.php';
@@ -35,6 +54,7 @@
 				require_once MPWEM_PLUGIN_DIR . '/inc/MPWEM_Hooks.php';
 				require_once MPWEM_PLUGIN_DIR . '/inc/MPWEM_Shortcodes.php';
 				require_once MPWEM_PLUGIN_DIR . '/inc/MPWEM_Event_List.php';
+				require_once MPWEM_PLUGIN_DIR . '/inc/MPWEM_Event_Cancellation.php';
 				if ( MPWEM_Global_Function::has_woocommerce() ) {
 					require_once MPWEM_PLUGIN_DIR . '/inc/MPWEM_Woocommerce.php';
 					require_once MPWEM_PLUGIN_DIR . '/inc/MPWEM_My_Account_Dashboard.php';
@@ -559,7 +579,9 @@
 					return;
 				}
 				$event_id = $post->ID;
-				if ( ! $event_id || get_post_type( $event_id ) !== 'mep_events' ) {
+				// The schema carries the venue and ticket price, which the page itself
+				// keeps behind the password form.
+				if ( ! $event_id || get_post_type( $event_id ) !== 'mep_events' || post_password_required( $event_id ) ) {
 					return;
 				}
 				$rt_status = get_post_meta( $event_id, 'mep_rich_text_status', true ) ? get_post_meta( $event_id, 'mep_rich_text_status', true ) : 'enable';

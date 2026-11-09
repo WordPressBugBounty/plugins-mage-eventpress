@@ -563,6 +563,9 @@
                         info.el.title = mepCalendar.i18n.expired + ': ' + info.event.title;
                     }
                 }
+                if (props.isCancelled) {
+                    info.el.title = (mepCalendar.i18n.cancelled || 'Cancelled') + ': ' + info.event.title;
+                }
 
                 styleCalendarEventCard(info, explicitEventColor);
                 stabilizeMonthGridEvent(info);
@@ -643,6 +646,9 @@
                 }
                 
                 // Title
+                if (props.isCancelled) {
+                    html += '<span class="mep-cal-event-cancelled-tag">' + escapeHtml(mepCalendar.i18n.cancelled || 'Cancelled') + '</span> ';
+                }
                 html += '<span class="mep-cal-event-title">' + escapeHtml(arg.event.title) + '</span>';
 
                 // Badge
@@ -989,7 +995,9 @@
         if (props.eventMode === 'online') {
             html += '<span class="mep-cal-tooltip-badge mep-cal-badge-virtual">' + mepCalendar.i18n.virtual + '</span>';
         }
-        if (props.regStatus === 'on' && props.totalSeats > 0 && props.availableSeats <= 0) {
+        if (props.isCancelled) {
+            html += '<span class="mep-cal-tooltip-badge mep-cal-badge-cancelled">' + escapeHtml(mepCalendar.i18n.cancelled || 'Cancelled') + '</span>';
+        } else if (props.regStatus === 'on' && props.totalSeats > 0 && props.availableSeats <= 0) {
             html += '<span class="mep-cal-tooltip-badge mep-cal-badge-soldout">' + mepCalendar.i18n.soldOut + '</span>';
         }
         html += '</div>';
@@ -1062,10 +1070,14 @@
             stockClass = 'mep-cal-stock-low';
         }
 
+        // An unlimited ticket type leaves no total: say so instead of counting down
+        // from the placeholder seat number the totals carry.
+        var unlimitedText = (mepCalendar.i18n && mepCalendar.i18n.unlimited) ? mepCalendar.i18n.unlimited : 'Unlimited';
+
         html += '<div class="mep-cal-tooltip-stock-header">';
         html += '<span>' + mepCalendar.i18n.seats + '</span>';
         html += '<span class="mep-cal-tooltip-stock-summary ' + stockClass + '">';
-        html += props.availableSeats + ' / ' + props.totalSeats + ' ' + mepCalendar.i18n.available;
+        html += props.unlimitedSeats ? escapeHtml(unlimitedText) : props.availableSeats + ' / ' + props.totalSeats + ' ' + mepCalendar.i18n.available;
         html += '</span>';
         html += '</div>';
 
@@ -1078,7 +1090,9 @@
             barColor = settings.mep_cal_low_stock_color || '#ffc107';
         }
 
-        html += '<div class="mep-cal-stock-bar"><div class="mep-cal-stock-bar-fill" style="width:' + fillPercent + '%;background:' + barColor + ';"></div></div>';
+        if (!props.unlimitedSeats) {
+            html += '<div class="mep-cal-stock-bar"><div class="mep-cal-stock-bar-fill" style="width:' + fillPercent + '%;background:' + barColor + ';"></div></div>';
+        }
 
         // Ticket type breakdown
         if (props.ticketTypes && props.ticketTypes.length > 0) {
@@ -1087,7 +1101,7 @@
                 var t = props.ticketTypes[i];
                 html += '<div class="mep-cal-ticket-row">';
                 html += '<span class="ticket-name">' + escapeHtml(t.name) + '</span>';
-                html += '<span class="ticket-avail">' + t.available + '/' + t.total;
+                html += '<span class="ticket-avail">' + (t.unlimited ? escapeHtml(unlimitedText) : t.available + '/' + t.total);
                 if (props.showPrice === 'yes' && t.priceHtml) {
                     html += ' (' + escapeHtml(t.priceHtml) + ')';
                 }
@@ -1229,6 +1243,7 @@
             soldSeats: parseInt(stockData.soldSeats, 10) || 0,
             reservedSeats: parseInt(stockData.reservedSeats, 10) || 0,
             ticketTypes: Array.isArray(stockData.ticketTypes) ? stockData.ticketTypes : [],
+            unlimitedSeats: !!stockData.unlimitedSeats,
             stockLoaded: stockData.stockLoaded || 'yes'
         };
 
@@ -1263,7 +1278,7 @@
     }
 
     function applyStockStylesToEvent(event, props) {
-        if (!event || !props || props.isExpired || props.showStock !== 'yes' || props.regStatus !== 'on') {
+        if (!event || !props || props.isExpired || props.isCancelled || props.showStock !== 'yes' || props.regStatus !== 'on') {
             return;
         }
 
@@ -1304,7 +1319,8 @@
         }
 
         var props = info.event.extendedProps || {};
-        if (props.isExpired) {
+        // Expired and cancelled events keep their flat grey instead of the soft palette.
+        if (props.isExpired || props.isCancelled) {
             return;
         }
 
