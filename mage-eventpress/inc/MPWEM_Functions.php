@@ -18,6 +18,22 @@
 			 * is_unlimited_ticket() or has_unlimited_capacity() and say "Unlimited".
 			 */
 			const UNLIMITED_TICKET_QTY = 1000000;
+			/**
+			 * Version of the date, time and capacity filters below.
+			 *
+			 * An add-on that reshapes an event's schedule or seat counts checks this before
+			 * relying on them, so it can say so instead of saving rules an older free
+			 * plugin would silently ignore:
+			 *
+			 *   mpwem_repeated_event_dates  ( string[] $dates, int $event_id, string $context )
+			 *   mpwem_repeated_event_times  ( array $times, int $event_id, string $date, string $context )
+			 *   mpwem_event_date_rows       ( array $rows, int $event_id, string $context )
+			 *   mpwem_ticket_capacity       ( int $capacity, int $event_id, array $ticket_type, string $date )
+			 *
+			 * $context is 'bookable' (what the booking form may sell), 'all' (admin
+			 * statistics, which must keep listing past and closed dates) or 'calendar'.
+			 */
+			const SCHEDULE_FILTERS_VERSION = 1;
 			public function __construct() { }
 			/**
 			 * The event date the visitor asked for, as a normalised Y-m-d[ H:i] string.
@@ -72,6 +88,75 @@
 					return $theme_template_path;
 				}
 				return $default_dir . $file_name;
+			}
+			/**
+			 * Block theme footer rendered by template_header() for template_footer(); null while
+			 * the theme's own header.php/footer.php are in use.
+			 *
+			 * @var string|null
+			 */
+			private static $block_footer_html = null;
+			/**
+			 * Opens a plugin page template (speaker, event category/tag, events archive) with the
+			 * theme's header. Pair every call with template_footer().
+			 *
+			 * On a block theme get_header() and get_footer() load WordPress's bare fallback
+			 * (theme-compat: the site title, tagline and a rule) instead of the theme's header and
+			 * footer. Block themes therefore get their header and footer template parts inside the
+			 * document shell core uses for block templates, as single-events.php does. The footer is
+			 * rendered here, before wp_head(), so the layout CSS its blocks generate is printed in
+			 * <head> like on any other page.
+			 */
+			public static function template_header(): void {
+				self::$block_footer_html = null;
+				if ( function_exists( 'wp_is_block_theme' ) && wp_is_block_theme() && function_exists( 'block_header_area' ) ) {
+					ob_start();
+					block_header_area();
+					$header_html = trim( (string) ob_get_clean() );
+					if ( '' !== $header_html ) {
+						$footer_html = '';
+						if ( function_exists( 'block_footer_area' ) ) {
+							ob_start();
+							block_footer_area();
+							$footer_html = trim( (string) ob_get_clean() );
+						}
+						self::$block_footer_html = $footer_html;
+						?><!DOCTYPE html>
+<html <?php language_attributes(); ?>>
+<head>
+	<meta charset="<?php bloginfo( 'charset' ); ?>">
+	<?php wp_head(); ?>
+</head>
+<body <?php body_class(); ?>>
+<?php wp_body_open(); ?>
+<div class="wp-site-blocks">
+<header class="wp-block-template-part site-header"><?php echo $header_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- rendered block markup. ?></header>
+						<?php
+						return;
+					}
+				}
+				get_header();
+			}
+			/**
+			 * Closes a template opened with template_header(): the block theme's footer and the
+			 * document shell, or the theme's footer.php.
+			 */
+			public static function template_footer(): void {
+				if ( null === self::$block_footer_html ) {
+					get_footer();
+					return;
+				}
+				$footer_html             = self::$block_footer_html;
+				self::$block_footer_html = null;
+				if ( '' !== $footer_html ) {
+					echo '<footer class="wp-block-template-part mep-site-footer">' . $footer_html . '</footer>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- rendered block markup.
+				}
+				?>
+</div>
+<?php wp_footer(); ?>
+</body>
+</html>
+				<?php
 			}
 			public static function get_details_template_name($post_id) {
 				$global_template   = MPWEM_Global_Function::get_settings( 'single_event_setting_sec', 'mep_global_single_template', 'default-theme.php' );
@@ -148,14 +233,26 @@
 			/**
 			 * Seats a ticket type can sell in total, before sales and reservations.
 			 *
-			 * @param array $ticket_type One row of the mep_event_ticket_type meta.
+			 * Given the event and the occurrence, the result passes through the
+			 * mpwem_ticket_capacity filter so an add-on can give one date or time slot a
+			 * different seat count. Without them it is the configured capacity, exactly
+			 * as every existing caller has always received it. An unlimited ticket type
+			 * is never filtered.
+			 *
+			 * @param array  $ticket_type One row of the mep_event_ticket_type meta.
+			 * @param int    $event_id    Optional event post ID.
+			 * @param string $date        Optional occurrence ('Y-m-d' or 'Y-m-d H:i').
 			 * @return int UNLIMITED_TICKET_QTY for an unlimited ticket type.
 			 */
-			public static function get_ticket_capacity( $ticket_type ) {
+			public static function get_ticket_capacity( $ticket_type, $event_id = 0, $date = '' ) {
 				if ( self::is_unlimited_ticket( $ticket_type ) ) {
 					return self::UNLIMITED_TICKET_QTY;
 				}
-				return is_array( $ticket_type ) && array_key_exists( 'option_qty_t', $ticket_type ) ? (int) $ticket_type['option_qty_t'] : 0;
+				$capacity = is_array( $ticket_type ) && array_key_exists( 'option_qty_t', $ticket_type ) ? (int) $ticket_type['option_qty_t'] : 0;
+				if ( $event_id ) {
+					$capacity = (int) apply_filters( 'mpwem_ticket_capacity', $capacity, (int) $event_id, is_array( $ticket_type ) ? $ticket_type : [], (string) $date );
+				}
+				return $capacity;
 			}
 			/**
 			 * Whether Global Quantity caps this event as a whole.
@@ -220,7 +317,7 @@
 				$ticket_types = MPWEM_Global_Function::get_post_info( $event_id, 'mep_event_ticket_type', [] );
 				if ( is_array( $ticket_types ) && count( $ticket_types ) > 0 ) {
 					foreach ( $ticket_types as $ticket_type ) {
-						$total_ticket += self::get_ticket_capacity( $ticket_type );
+						$total_ticket += self::get_ticket_capacity( $ticket_type, $event_id, $date );
 					}
 				}
 				return max( apply_filters( 'mpwem_event_total_seat_counts', $total_ticket, $event_id, $date ), 0 );
@@ -254,7 +351,7 @@
 					$filter_args['post_id']    = $event_id;
 					$filter_args['event_date'] = date('Y-m-d H:i', strtotime($date));
 					$filter_args['ea_ticket_type'] = $ticket_name;
-					$ticket_qty       = self::get_ticket_capacity( $ticket_type );
+					$ticket_qty       = self::get_ticket_capacity( $ticket_type, $event_id, $filter_args['event_date'] );
 					$ticket_r_qty     = is_array($ticket_type) && array_key_exists( 'option_rsv_t', $ticket_type ) ? $ticket_type['option_rsv_t'] : 0;
 					$total_sold       = MPWEM_Query::attendee_query( $filter_args )->post_count;
 		 			$temp_count 	  = mep_temp_attendee_count( $event_id, $ticket_name, $date );
@@ -445,7 +542,40 @@
 				);
 			}
 			//==========================//
+			/**
+			 * The event's upcoming datetime, saved to event_upcoming_datetime.
+			 *
+			 * The event lists select and sort on that meta, so whatever this returns decides
+			 * whether the event is listed. Only call it with the bookable date list
+			 * (get_dates(), the default). To show a date taken from any other list, such as
+			 * get_all_dates() in an admin picker, use calculate_upcoming_date_time(), which
+			 * does not save.
+			 */
 			public static function get_upcoming_date_time( $event_id, $all_dates = [], $all_times = [] ) {
+				$up_coming_date = self::calculate_upcoming_date_time( $event_id, $all_dates, $all_times );
+				// Deduplicate: only write postmeta once per event per request to prevent
+				// N write queries when this function is called inside a list-rendering loop.
+				static $mep_updated_upcoming = array();
+				if ( ! isset( $mep_updated_upcoming[ $event_id ] ) ) {
+					update_post_meta( $event_id, 'event_upcoming_datetime', $up_coming_date );
+					$mep_updated_upcoming[ $event_id ] = true;
+				}
+				return $up_coming_date;
+			}
+			/**
+			 * Same value as get_upcoming_date_time(), without saving it.
+			 *
+			 * Given get_all_dates(), the first date is the event's first date ever, which is
+			 * usually past. Saving that made a recurring event with dates still to come drop
+			 * out of every event list. That happened whenever an admin opened a screen that
+			 * labels events this way, such as the PRO Attendee List picker.
+			 *
+			 * @param int   $event_id  Event post ID.
+			 * @param array $all_dates Date list to take the first date from; get_dates() when empty.
+			 * @param array $all_times Time slots for that list; get_times() when empty.
+			 * @return string 'Y-m-d H:i', 'Y-m-d' or '' when the list is empty.
+			 */
+			public static function calculate_upcoming_date_time( $event_id, $all_dates = [], $all_times = [] ) {
 				$up_coming_date='';
 				$date_type   = MPWEM_Global_Function::get_post_info( $event_id, 'mep_enable_recurring', 'no' );
 				$event_expire_on_old   = mep_get_option( 'mep_event_expire_on_datetimes', 'general_setting_sec', 'event_start_datetime' );
@@ -474,15 +604,78 @@
 				 // "Event End Time" mode show the wrong (too-early) expiry for such events.
 				 $event_expire_on_date = $event_expire_on;
 				 $up_coming_date = $date_type == 'no' ? get_post_meta( $event_id, $event_expire_on_date, true ) : $up_coming_date;
-
-				 // Deduplicate: only write postmeta once per event per request to prevent
-				 // N write queries when this function is called inside a list-rendering loop.
-				 static $mep_updated_upcoming = array();
-				 if ( ! isset( $mep_updated_upcoming[ $event_id ] ) ) {
-				 	update_post_meta( $event_id, 'event_upcoming_datetime', $up_coming_date );
-				 	$mep_updated_upcoming[ $event_id ] = true;
-				 }
 				 return $up_coming_date;
+			}
+			/**
+			 * Pass a repeated event's day list through mpwem_repeated_event_dates.
+			 *
+			 * Receives the 'Y-m-d' days left after off days, off dates and special dates
+			 * were applied, before sorting and the expiry check, so a day an add-on opens
+			 * is sorted, de-duplicated and expired exactly like any other.
+			 *
+			 * @param string[] $dates    Candidate days.
+			 * @param int      $event_id Event post ID.
+			 * @param string   $context  'bookable', 'all' or 'calendar'.
+			 * @return string[]
+			 */
+			public static function filter_repeated_dates( $dates, $event_id, $context ) {
+				if ( ! has_filter( 'mpwem_repeated_event_dates' ) ) {
+					return $dates;
+				}
+				$filtered = apply_filters( 'mpwem_repeated_event_dates', $dates, (int) $event_id, (string) $context );
+				return is_array( $filtered ) ? array_values( array_filter( $filtered, 'is_string' ) ) : $dates;
+			}
+			/**
+			 * Pass a single or particular event's date rows through mpwem_event_date_rows.
+			 *
+			 * Each row is [ 'time' => start, 'end' => end ] as get_dates() builds it. The
+			 * result is re-indexed, because callers read the first row with current().
+			 *
+			 * @param array  $rows     Date rows.
+			 * @param int    $event_id Event post ID.
+			 * @param string $context  'bookable', 'all' or 'calendar'.
+			 * @return array
+			 */
+			public static function filter_date_rows( $rows, $event_id, $context ) {
+				if ( ! has_filter( 'mpwem_event_date_rows' ) ) {
+					return $rows;
+				}
+				$filtered = apply_filters( 'mpwem_event_date_rows', $rows, (int) $event_id, (string) $context );
+				return is_array( $filtered ) ? array_values( $filtered ) : $rows;
+			}
+			/**
+			 * Pass a repeated event's time slots for one day through mpwem_repeated_event_times.
+			 *
+			 * For the 'bookable' context the expiry check is repeated on the result, so a
+			 * slot an add-on adds is held to the same booking cut-off (buffer time
+			 * included) as the configured ones. Slots that survived the check before the
+			 * filter survive it again.
+			 *
+			 * @param array  $times    Slots as [ 'start' => [ 'label', 'time' ], 'end' => ... ].
+			 * @param int    $event_id Event post ID.
+			 * @param string $date     Day ('Y-m-d').
+			 * @param string $context  'bookable' or 'all'.
+			 * @return array
+			 */
+			private static function filter_repeated_times( $times, $event_id, $date, $context ) {
+				if ( ! has_filter( 'mpwem_repeated_event_times' ) ) {
+					return $times;
+				}
+				$filtered = apply_filters( 'mpwem_repeated_event_times', $times, (int) $event_id, (string) $date, (string) $context );
+				if ( ! is_array( $filtered ) ) {
+					return $times;
+				}
+				if ( 'bookable' === $context ) {
+					$buffer_time = MPWEM_Global_Function::get_post_info( $event_id, 'mep_buffer_time', 0 ) * 60;
+					$now         = strtotime( current_time( 'Y-m-d H:i:s' ) );
+					foreach ( $filtered as $key => $time ) {
+						$start = is_array( $time ) && isset( $time['start']['time'] ) ? (string) $time['start']['time'] : '';
+						if ( '' !== $start && strtotime( $date . ' ' . $start ) - $buffer_time <= $now ) {
+							unset( $filtered[ $key ] );
+						}
+					}
+				}
+				return array_values( $filtered );
 			}
 			public static function get_all_dates( $event_id ) {
 				$all_dates = [];
@@ -521,6 +714,7 @@
 					if ( count( $all_dates ) >1) {
 						usort( $all_dates, "MPWEM_Global_Function::sort_date_array" );
 					}
+					$all_dates = self::filter_date_rows( $all_dates, $event_id, 'all' );
 				} else {
 					$start_date = MPWEM_Global_Function::get_post_info( $event_id, 'event_start_date' );
 					$end_date   = MPWEM_Global_Function::get_post_info( $event_id, 'event_end_date' );
@@ -553,6 +747,7 @@
 							}
 						}
 					}
+					$all_dates = self::filter_repeated_dates( $all_dates, $event_id, 'all' );
 					usort( $all_dates, "MPWEM_Global_Function::sort_date" );
 					$all_date  = array_unique( $all_dates );
 					$all_dates = [];
@@ -616,6 +811,7 @@
 							$times[0]['end']['time']  = date( 'H:i', strtotime( $end_time ) );
 						}
 					}
+					$times = self::filter_repeated_times( $times, $event_id, date( 'Y-m-d', strtotime( $date ) ), 'all' );
 				}
 				return $times;
 			}
@@ -694,6 +890,7 @@
 							usort( $all_dates, "MPWEM_Global_Function::sort_date_array" );
 						}
 					}
+					$all_dates = self::filter_date_rows( $all_dates, $event_id, 'bookable' );
 				} else {
 					$start_date = MPWEM_Global_Function::get_post_info( $event_id, 'event_start_date' );
 					$end_date   = MPWEM_Global_Function::get_post_info( $event_id, 'event_end_date' );
@@ -726,6 +923,7 @@
 							}
 						}
 					}
+					$all_dates = self::filter_repeated_dates( $all_dates, $event_id, 'bookable' );
 					usort( $all_dates, "MPWEM_Global_Function::sort_date" );
 					$all_date  = array_unique( $all_dates );
 					$all_dates = [];
@@ -840,10 +1038,149 @@
 									}
 								}
 							}
+							$times = self::filter_repeated_times( $times, $event_id, $date, 'bookable' );
 						}
 					}
 				}
 				return $times;
+			}
+			/**
+			 * End date-time of the occurrence that starts at $start.
+			 *
+			 * Single and particular-date events read the get_dates() row that starts at $start
+			 * (its own 'occurrence_end' first, so a multi-date course summary does not leak in).
+			 * Repeated events read the get_times() slot that starts at $start; a slot that ends
+			 * before it starts runs past midnight and ends the next day.
+			 *
+			 * @param int    $event_id  Event ID.
+			 * @param string $start     Occurrence start ('Y-m-d H:i').
+			 * @param array  $all_dates Optional get_dates() result, to save a lookup.
+			 * @return string End as 'Y-m-d H:i', or '' when the occurrence has no end time.
+			 */
+			public static function get_occurrence_end( $event_id, $start, $all_dates = [] ): string {
+				$start_ts = $start ? strtotime( $start ) : false;
+				if ( ! $start_ts ) {
+					return '';
+				}
+				$all_dates = ( is_array( $all_dates ) && count( $all_dates ) > 0 ) ? $all_dates : self::get_dates( $event_id );
+				$date_type = MPWEM_Global_Function::get_post_info( $event_id, 'mep_enable_recurring', 'no' );
+				$repeated  = ! ( $date_type == 'no' || $date_type == 'yes' );
+				$end       = '';
+				if ( ! $repeated ) {
+					foreach ( (array) $all_dates as $row ) {
+						if ( is_array( $row ) && ! empty( $row['time'] ) && strtotime( $row['time'] ) === $start_ts ) {
+							$end = ! empty( $row['occurrence_end'] ) ? $row['occurrence_end'] : ( $row['end'] ?? '' );
+							break;
+						}
+					}
+					if ( ! $end ) {
+						// Past or expired occurrence: get_dates() no longer lists it.
+						$event_start = MPWEM_Global_Function::get_post_info( $event_id, 'event_start_datetime' );
+						if ( $event_start && strtotime( $event_start ) === $start_ts ) {
+							$end = MPWEM_Global_Function::get_post_info( $event_id, 'event_end_datetime' );
+						}
+					}
+				} else {
+					$start_hm = gmdate( 'H:i', $start_ts );
+					foreach ( self::get_times( $event_id, $all_dates, $start ) as $time ) {
+						$slot_start = is_array( $time ) && ! empty( $time['start']['time'] ) ? $time['start']['time'] : '';
+						$slot_end   = is_array( $time ) && ! empty( $time['end']['time'] ) ? $time['end']['time'] : '';
+						if ( $slot_start && $slot_end && gmdate( 'H:i', strtotime( $slot_start ) ) === $start_hm ) {
+							$end = gmdate( 'Y-m-d', $start_ts ) . ' ' . $slot_end;
+							break;
+						}
+					}
+				}
+				// A date-only end means no end time was saved.
+				$end_ts = is_string( $end ) && false !== strpos( $end, ':' ) ? strtotime( $end ) : false;
+				if ( ! $end_ts || $end_ts === $start_ts ) {
+					return '';
+				}
+				if ( $end_ts < $start_ts ) {
+					if ( ! $repeated ) {
+						return '';
+					}
+					$end_ts = strtotime( '+1 day', $end_ts );
+				}
+				return gmdate( 'Y-m-d H:i', $end_ts );
+			}
+			/**
+			 * The occurrence an "Add to Calendar" button saves, with its own end.
+			 *
+			 * For a Single Event the upcoming date is the expiry, which is the last session's
+			 * end when Event Expiry Time is the end time. Calendars then got an entry at the
+			 * end of the course. For single and particular events the upcoming date is
+			 * therefore only used when it is one of the date rows (a date picked with ?date=);
+			 * otherwise the next date row is used. The end is that row's own end, not the
+			 * whole-course span get_dates() keeps in a Single Event's first row.
+			 *
+			 * @param int    $event_id      Event ID.
+			 * @param array  $all_dates     Optional get_dates() result, to save a lookup.
+			 * @param string $upcoming_date The upcoming or requested date the page shows.
+			 * @return array{start: string, end: string} 'Y-m-d H:i' in site time; '' when unknown.
+			 */
+			public static function get_calendar_occurrence( $event_id, $all_dates = [], $upcoming_date = '' ): array {
+				$all_dates = ( is_array( $all_dates ) && count( $all_dates ) > 0 ) ? $all_dates : self::get_dates( $event_id );
+				$date_type = MPWEM_Global_Function::get_post_info( $event_id, 'mep_enable_recurring', 'no' );
+				$start     = (string) $upcoming_date;
+				if ( $date_type == 'no' || $date_type == 'yes' ) {
+					$start    = '';
+					$wanted   = $upcoming_date ? strtotime( $upcoming_date ) : false;
+					foreach ( (array) $all_dates as $row ) {
+						$row_start = is_array( $row ) && ! empty( $row['time'] ) ? (string) $row['time'] : '';
+						if ( '' === $row_start ) {
+							continue;
+						}
+						if ( '' === $start ) {
+							$start = $row_start;
+						}
+						if ( $wanted && strtotime( $row_start ) === $wanted ) {
+							$start = $row_start;
+							break;
+						}
+					}
+				} elseif ( '' === $start ) {
+					// Callers such as the Elementor widget pass no date: take the next one.
+					$start = (string) self::calculate_upcoming_date_time( $event_id, $all_dates );
+				}
+				$start = mep_calendar_occurrence_start( $event_id, $start );
+				if ( '' === $start ) {
+					return [ 'start' => '', 'end' => '' ];
+				}
+				$end = self::get_occurrence_end( $event_id, $start, $all_dates );
+				return [ 'start' => $start, 'end' => $end ?: mep_get_event_occurrence_end( $event_id, $start ) ];
+			}
+			/**
+			 * Every occurrence an "Add to Calendar" button should save.
+			 *
+			 * A Single Event with "Add More Date" rows is one booking for all of its sessions
+			 * (a weekend course, a 5-week class), so every listed session is returned, each
+			 * with its own end. Particular-date and repeated events sell each date on its own,
+			 * so they keep the one occurrence get_calendar_occurrence() picks.
+			 *
+			 * @param int    $event_id      Event ID.
+			 * @param array  $all_dates     Optional get_dates() result, to save a lookup.
+			 * @param string $upcoming_date The upcoming or requested date the page shows.
+			 * @return array<int, array{start: string, end: string}> In date order; empty when there is no usable date.
+			 */
+			public static function get_calendar_occurrences( $event_id, $all_dates = [], $upcoming_date = '' ): array {
+				$all_dates = ( is_array( $all_dates ) && count( $all_dates ) > 0 ) ? $all_dates : self::get_dates( $event_id );
+				$sessions  = [];
+				if ( 'no' === MPWEM_Global_Function::get_post_info( $event_id, 'mep_enable_recurring', 'no' ) ) {
+					foreach ( (array) $all_dates as $row ) {
+						$start = is_array( $row ) && ! empty( $row['time'] ) ? mep_calendar_occurrence_start( $event_id, $row['time'] ) : '';
+						if ( '' !== $start && ! isset( $sessions[ $start ] ) ) {
+							$end                = self::get_occurrence_end( $event_id, $start, $all_dates );
+							$sessions[ $start ] = [ 'start' => $start, 'end' => $end ?: mep_get_event_occurrence_end( $event_id, $start ) ];
+						}
+					}
+				}
+				if ( count( $sessions ) > 1 ) {
+					ksort( $sessions );
+					return array_values( $sessions );
+				}
+				$occurrence = self::get_calendar_occurrence( $event_id, $all_dates, $upcoming_date );
+				return $occurrence['start'] ? [ $occurrence ] : [];
 			}
 			/**
 			 * Turn a midnight occurrence into the show it really names.

@@ -86,14 +86,29 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 		return mb_ereg_replace( '[^[:alnum:][:space:]]+', '', $value );
 	}
 	if ( ! function_exists( 'mep_temp_attendee_create_for_cart_ticket_array' ) ) {
-		function mep_temp_attendee_create_for_cart_ticket_array( $event_id, $ticket_type ) {
+		/**
+		 * Hold the seats of one cart line: one temporary attendee per ticket row.
+		 *
+		 * @param int    $event_id      Event post ID.
+		 * @param array  $ticket_type   Ticket rows (ticket_name, ticket_qty, event_date).
+		 * @param string $session_key   Optional WooCommerce session the line belongs to.
+		 * @param string $cart_item_key Optional cart item key of the line.
+		 */
+		function mep_temp_attendee_create_for_cart_ticket_array( $event_id, $ticket_type, $session_key = '', $cart_item_key = '' ) {
 			foreach ( $ticket_type as $ticket ) {
-				mep_temp_attendee_create_for_cart( $event_id, $ticket['ticket_name'], $ticket['ticket_qty'], $ticket['event_date'] );
+				mep_temp_attendee_create_for_cart( $event_id, $ticket['ticket_name'], $ticket['ticket_qty'], $ticket['event_date'], $session_key, $cart_item_key );
 			}
 		}
 	}
 	if ( ! function_exists( 'mep_temp_attendee_create_for_cart' ) ) {
-		function mep_temp_attendee_create_for_cart( $event_id, $ticket_type, $ticket_qty, $event_date ) {
+		/**
+		 * Hold seats for one ticket row of a cart line.
+		 *
+		 * The session and cart item key, when given, tie the hold to the cart line
+		 * that owns it, so removing that line releases exactly its own seats and
+		 * never another customer's identical booking.
+		 */
+		function mep_temp_attendee_create_for_cart( $event_id, $ticket_type, $ticket_qty, $event_date, $session_key = '', $cart_item_key = '' ) {
 			$new_post = array(
 				'post_title'    => 'Temp User For' . get_the_title( $event_id ) . '_' . $event_date,
 				'post_content'  => '',
@@ -110,6 +125,82 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 			update_post_meta( $pid, 'ticket_qty', $ticket_qty );
 			update_post_meta( $pid, 'event_date', $event_date );
 			update_post_meta( $pid, 'added_time', $current_time );
+			if ( '' !== (string) $session_key ) {
+				update_post_meta( $pid, 'mep_cart_session', (string) $session_key );
+			}
+			if ( '' !== (string) $cart_item_key ) {
+				update_post_meta( $pid, 'mep_cart_item_key', (string) $cart_item_key );
+			}
+		}
+	}
+	if ( ! function_exists( 'mep_temp_attendee_release_for_cart_item' ) ) {
+		/**
+		 * Release the seats one cart line holds, when that line leaves the cart.
+		 *
+		 * Holds made by this version carry the session and cart item key, so only that
+		 * line's own holds go. A hold made before (no session recorded) is matched by
+		 * event, ticket, quantity and date instead, one per ticket row, oldest first;
+		 * those all expire within the Cart Hold Time anyway.
+		 *
+		 * @param string $cart_item_key Cart item key of the line.
+		 * @param string $session_key   WooCommerce session the line belongs to.
+		 * @param array  $cart_item     The cart line (event_id, event_ticket_info).
+		 * @return int Holds released.
+		 */
+		function mep_temp_attendee_release_for_cart_item( $cart_item_key, $session_key, $cart_item = array() ) {
+			$released = 0;
+			if ( '' !== (string) $cart_item_key && '' !== (string) $session_key ) {
+				$own = get_posts(
+					array(
+						'post_type'      => 'mep_temp_attendee',
+						'post_status'    => 'any',
+						'posts_per_page' => -1,
+						'fields'         => 'ids',
+						'no_found_rows'  => true,
+						'meta_query'     => array(
+							array( 'key' => 'mep_cart_item_key', 'value' => (string) $cart_item_key ),
+							array( 'key' => 'mep_cart_session', 'value' => (string) $session_key ),
+						),
+					)
+				);
+				foreach ( $own as $hold_id ) {
+					if ( wp_delete_post( $hold_id, true ) ) {
+						$released++;
+					}
+				}
+				if ( $released > 0 ) {
+					return $released;
+				}
+			}
+			$event_id = is_array( $cart_item ) && ! empty( $cart_item['event_id'] ) ? (int) $cart_item['event_id'] : 0;
+			$tickets  = is_array( $cart_item ) && ! empty( $cart_item['event_ticket_info'] ) && is_array( $cart_item['event_ticket_info'] ) ? $cart_item['event_ticket_info'] : array();
+			foreach ( $tickets as $ticket ) {
+				if ( ! $event_id || ! is_array( $ticket ) || empty( $ticket['ticket_name'] ) ) {
+					continue;
+				}
+				$legacy = get_posts(
+					array(
+						'post_type'      => 'mep_temp_attendee',
+						'post_status'    => 'any',
+						'posts_per_page' => 1,
+						'orderby'        => 'date',
+						'order'          => 'ASC',
+						'fields'         => 'ids',
+						'no_found_rows'  => true,
+						'meta_query'     => array(
+							array( 'key' => 'event_id', 'value' => $event_id ),
+							array( 'key' => 'ticket_type', 'value' => $ticket['ticket_name'] ),
+							array( 'key' => 'ticket_qty', 'value' => isset( $ticket['ticket_qty'] ) ? $ticket['ticket_qty'] : '' ),
+							array( 'key' => 'event_date', 'value' => isset( $ticket['event_date'] ) ? $ticket['event_date'] : '' ),
+							array( 'key' => 'mep_cart_session', 'compare' => 'NOT EXISTS' ),
+						),
+					)
+				);
+				if ( $legacy && wp_delete_post( $legacy[0], true ) ) {
+					$released++;
+				}
+			}
+			return $released;
 		}
 	}
 	if ( ! function_exists( 'mep_temp_attendee_delete_for_cart' ) ) {
@@ -148,27 +239,40 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 		}
 	}
 	if ( ! function_exists( 'mep_temp_attendee_auto_delete_for_cart' ) ) {
+		/**
+		 * Release seat holds older than the Cart Hold Time.
+		 *
+		 * Only the expired holds are removed. This used to also call empty_cart() on
+		 * whoever happened to load the page when any hold expired - usually a
+		 * different visitor from the one who held the seats - wiping that visitor's
+		 * whole cart and their saved cart. The cart line itself stays: the seat check
+		 * at checkout (MPWEM_Woocommerce::check_cart_items()) still refuses it if the
+		 * seats have been sold in the meantime.
+		 *
+		 * Only expired holds are fetched, so the check stays cheap on every page view.
+		 */
 		function mep_temp_attendee_auto_delete_for_cart() {
-			global $woocommerce;
 			$cart_clear_time     = mep_get_option( 'mep_ticket_expire_time_on_cart', 'general_setting_sec', 10 );
 			$cart_clear_time_sec = ! empty( $cart_clear_time ) || $cart_clear_time > 0 ? $cart_clear_time * 60 : 600;
-			$args                = array(
-				'post_type'      => array( 'mep_temp_attendee' ),
-				'posts_per_page' => - 1,
+			$cutoff              = date( 'Y-m-d H:i:s', strtotime( current_time( 'Y-m-d H:i:s' ) ) - (int) $cart_clear_time_sec );
+			$expired             = get_posts(
+				array(
+					'post_type'      => 'mep_temp_attendee',
+					'post_status'    => 'any',
+					'posts_per_page' => -1,
+					'fields'         => 'ids',
+					'no_found_rows'  => true,
+					'date_query'     => array(
+						array(
+							'column'    => 'post_date',
+							'before'    => $cutoff,
+							'inclusive' => false,
+						),
+					),
+				)
 			);
-			$loop                = new WP_Query( $args );
-			if ( $loop->post_count > 0 ) {
-				foreach ( $loop->posts as $ticket ) {
-					$post_id   = $ticket->ID;
-					$post_date = get_the_date( 'Y-m-d H:i:s', $post_id );
-					$time_diff = mep_diff_two_datetime( $post_date, current_time( 'Y-m-d H:i:s' ) );
-					if ( $time_diff > $cart_clear_time_sec ) {
-						wp_delete_post( $post_id, true );
-							if ( ! empty( $woocommerce ) && ! empty( $woocommerce->cart ) ) {
-							$woocommerce->cart->empty_cart();
-						}
-					}
-				}
+			foreach ( $expired as $post_id ) {
+				wp_delete_post( $post_id, true );
 			}
 		}
 	}
@@ -838,25 +942,45 @@ if ( ! function_exists( 'mep_add_show_sku_post_id_in_event_list_dashboard' ) ) {
 	}
 
 	
-	if ( ! function_exists( 'mep_resolve_confirmation_email_body' ) ) {
+	if ( ! function_exists( 'mep_get_event_confirmation_email_body' ) ) {
 		/**
-		 * Resolve the confirmation body without changing delivery eligibility.
+		 * The event's own "Use Event-Specific Email Message" body, or '' when it has none.
 		 *
 		 * Existing events created before the status meta was introduced keep using
-		 * their non-empty event body. An explicit off always falls back to global.
+		 * their non-empty event body. An explicit off means no event body.
 		 *
-		 * @param int    $event_id         Event post ID.
-		 * @param string $global_email_text Global confirmation body.
+		 * Callers that need to know whether the event overrides the global body must
+		 * use this, not mep_resolve_confirmation_email_body( $event_id, '' ): that one
+		 * falls back to the preset template and so is never empty.
+		 *
+		 * @param int $event_id Event post ID.
 		 * @return string
 		 */
-		function mep_resolve_confirmation_email_body( $event_id, $global_email_text = '' ) {
+		function mep_get_event_confirmation_email_body( $event_id ) {
 			$event_email_text = get_post_meta( $event_id, 'mep_event_cc_email_text', true );
 			$event_email_text = is_string( $event_email_text ) ? $event_email_text : '';
 			$has_status       = metadata_exists( 'post', $event_id, 'mep_event_cc_email_status' );
 			$status           = $has_status ? get_post_meta( $event_id, 'mep_event_cc_email_status', true ) : '';
 			$use_event_body   = $has_status ? 'on' === $status : '' !== trim( $event_email_text );
 
-			if ( $use_event_body && '' !== trim( $event_email_text ) ) {
+			return ( $use_event_body && '' !== trim( $event_email_text ) ) ? $event_email_text : '';
+		}
+	}
+
+	if ( ! function_exists( 'mep_resolve_confirmation_email_body' ) ) {
+		/**
+		 * Resolve the confirmation body without changing delivery eligibility.
+		 *
+		 * The event's own body wins (see mep_get_event_confirmation_email_body()),
+		 * then the global body, then the preset template.
+		 *
+		 * @param int    $event_id         Event post ID.
+		 * @param string $global_email_text Global confirmation body.
+		 * @return string
+		 */
+		function mep_resolve_confirmation_email_body( $event_id, $global_email_text = '' ) {
+			$event_email_text = mep_get_event_confirmation_email_body( $event_id );
+			if ( '' !== $event_email_text ) {
 				return $event_email_text;
 			}
 
@@ -4107,8 +4231,14 @@ die();
 		 * Signed download URL of an .ics file for one occurrence, served by this site
 		 * (Apple Calendar, Outlook and any other calendar app). Works with plain and
 		 * pretty permalinks.
+		 *
+		 * @param int    $event_id     Event post ID.
+		 * @param string $start        Occurrence start.
+		 * @param bool   $with_virtual Include the join link; only for bookings allowed to see it.
+		 * @param bool   $all_sessions One file with every session of a multi-date Single Event
+		 *                             (see MPWEM_Functions::get_calendar_occurrences()).
 		 */
-		function mep_get_event_ics_url( $event_id, $start, $with_virtual = false ) {
+		function mep_get_event_ics_url( $event_id, $start, $with_virtual = false, $all_sessions = false ) {
 			$start = mep_calendar_occurrence_start( $event_id, $start );
 			if ( (int) $event_id <= 0 || '' === $start ) {
 				return '';
@@ -4120,28 +4250,99 @@ die();
 			if ( $with_virtual ) {
 				$args['v'] = 1;
 			}
-			$args['key'] = mep_event_ics_signature( $args['mep_ics'], $args['start'], $with_virtual );
+			if ( $all_sessions ) {
+				$args['all'] = 1;
+			}
+			// The all-sessions flag is signed too; links signed before it existed stay valid.
+			$args['key'] = mep_event_ics_signature( $args['mep_ics'], $args['start'] . ( $all_sessions ? '|all' : '' ), $with_virtual );
 
 			return add_query_arg( $args, home_url( '/' ) );
+		}
+	}
+
+	if ( ! function_exists( 'mep_get_event_calendar_links' ) ) {
+		/**
+		 * Google, Yahoo and Outlook.com "add event" URLs for one occurrence, with the
+		 * times in UTC so the entry lands at the right hour in any calendar time zone.
+		 * Each of these services adds a single event per link.
+		 *
+		 * @param int    $event_id     Event post ID.
+		 * @param string $start        Occurrence start.
+		 * @param bool   $with_virtual Include the join link; only for bookings allowed to see it.
+		 * @return array{google?: string, yahoo?: string, outlook?: string} Empty when the event or start is unusable.
+		 */
+		function mep_get_event_calendar_links( $event_id, $start, $with_virtual = false ) {
+			$data = mep_get_calendar_event_data( $event_id, $start, $with_virtual );
+			if ( empty( $data ) ) {
+				return array();
+			}
+			// esc_url() strips encoded line breaks, so the lines are joined by spaces.
+			$details = implode( ' ', $data['description'] );
+			$iso     = static function ( $date_time ) {
+				return get_gmt_from_date( $date_time . ':00', 'Y-m-d\TH:i:s\Z' );
+			};
+
+			return array(
+				'google'  => 'https://calendar.google.com/calendar/render?' . http_build_query( array(
+					'action'   => 'TEMPLATE',
+					'text'     => $data['title'],
+					'dates'    => $data['start_utc'] . '/' . $data['end_utc'],
+					'details'  => $details,
+					'location' => $data['location'],
+				), '', '&', PHP_QUERY_RFC3986 ),
+				'yahoo'   => 'https://calendar.yahoo.com/?' . http_build_query( array(
+					'v'      => '60',
+					'view'   => 'd',
+					'type'   => '20',
+					'title'  => $data['title'],
+					'st'     => $data['start_utc'],
+					'et'     => $data['end_utc'],
+					'desc'   => $details,
+					'in_loc' => $data['location'],
+				), '', '&', PHP_QUERY_RFC3986 ),
+				'outlook' => 'https://outlook.live.com/owa/?' . http_build_query( array(
+					'path'     => '/calendar/action/compose',
+					'rru'      => 'addevent',
+					'startdt'  => $iso( $data['start'] ),
+					'enddt'    => $iso( $data['end'] ),
+					'subject'  => $data['title'],
+					'body'     => $details,
+					'location' => $data['location'],
+				), '', '&', PHP_QUERY_RFC3986 ),
+			);
+		}
+	}
+
+	if ( ! function_exists( 'mep_get_event_google_subscribe_url' ) ) {
+		/**
+		 * One-click Google Calendar link for every session of a multi-date Single Event.
+		 *
+		 * Google's "add event" link holds one event, and its repeat option gives every date
+		 * the first session's length. Subscribing to the all-sessions .ics instead adds a
+		 * small calendar, named after the event, with each session at its own time.
+		 * Google refreshes subscribed calendars on its own schedule.
+		 *
+		 * @param int    $event_id Event post ID.
+		 * @param string $start    First session start (signs the feed link).
+		 * @return string '' when the event or start is unusable.
+		 */
+		function mep_get_event_google_subscribe_url( $event_id, $start ) {
+			$feed = mep_get_event_ics_url( $event_id, $start, false, true );
+			if ( '' === $feed ) {
+				return '';
+			}
+			$feed = preg_replace( '#^https?://#i', 'webcal://', add_query_arg( 'feed', 1, $feed ) );
+
+			return 'https://calendar.google.com/calendar/r?cid=' . rawurlencode( $feed );
 		}
 	}
 
 	if ( ! function_exists( 'mep_get_event_google_calendar_url' ) ) {
 		/** Google Calendar "add event" URL for one occurrence, with the times in UTC. */
 		function mep_get_event_google_calendar_url( $event_id, $start, $with_virtual = false ) {
-			$data = mep_get_calendar_event_data( $event_id, $start, $with_virtual );
-			if ( empty( $data ) ) {
-				return '';
-			}
+			$links = mep_get_event_calendar_links( $event_id, $start, $with_virtual );
 
-			return 'https://calendar.google.com/calendar/render?' . http_build_query( array(
-				'action'   => 'TEMPLATE',
-				'text'     => $data['title'],
-				'dates'    => $data['start_utc'] . '/' . $data['end_utc'],
-				// esc_url() strips encoded line breaks, so the lines are joined by spaces.
-				'details'  => implode( ' ', $data['description'] ),
-				'location' => $data['location'],
-			), '', '&', PHP_QUERY_RFC3986 );
+			return isset( $links['google'] ) ? $links['google'] : '';
 		}
 	}
 
@@ -4197,6 +4398,59 @@ die();
 		}
 	}
 
+	if ( ! function_exists( 'mep_get_event_ics_content' ) ) {
+		/**
+		 * iCalendar file with one VEVENT per occurrence start.
+		 *
+		 * @param int      $event_id      Event post ID.
+		 * @param string[] $starts        Occurrence starts.
+		 * @param bool     $with_virtual  Include the join link; only for bookings allowed to see it.
+		 * @param string   $calendar_name Name for a subscribed calendar (Google "all dates" link);
+		 *                                '' for a plain download.
+		 * @return string '' when none of the starts is usable.
+		 */
+		function mep_get_event_ics_content( $event_id, $starts, $with_virtual = false, $calendar_name = '' ) {
+			$entries = array();
+			foreach ( (array) $starts as $session_start ) {
+				$data = mep_get_calendar_event_data( $event_id, $session_start, $with_virtual );
+				if ( ! empty( $data ) ) {
+					$entries[] = $data;
+				}
+			}
+			if ( empty( $entries ) ) {
+				return '';
+			}
+			$host  = wp_parse_url( home_url(), PHP_URL_HOST );
+			$stamp = gmdate( 'Ymd\THis\Z' );
+			$ics   = mep_ics_line( 'BEGIN:VCALENDAR' )
+				. mep_ics_line( 'VERSION:2.0' )
+				. mep_ics_line( 'PRODID:-//' . mep_ics_text( get_bloginfo( 'name' ) ) . '//Event Booking Manager//EN' )
+				. mep_ics_line( 'CALSCALE:GREGORIAN' )
+				. mep_ics_line( 'METHOD:PUBLISH' );
+			if ( '' !== $calendar_name ) {
+				// Subscribed calendars show this name instead of the feed URL.
+				$ics .= mep_ics_line( 'X-WR-CALNAME:' . mep_ics_text( $calendar_name ) )
+					. mep_ics_line( 'REFRESH-INTERVAL;VALUE=DURATION:PT12H' )
+					. mep_ics_line( 'X-PUBLISHED-TTL:PT12H' );
+			}
+			foreach ( $entries as $data ) {
+				// Same UID as the one-session link for that start, so importing both updates rather than duplicates.
+				$ics .= mep_ics_line( 'BEGIN:VEVENT' )
+					. mep_ics_line( 'UID:mep-' . (int) $event_id . '-' . date( 'YmdHi', strtotime( $data['start'] ) ) . '@' . $host )
+					. mep_ics_line( 'DTSTAMP:' . $stamp )
+					. mep_ics_line( 'DTSTART:' . $data['start_utc'] )
+					. mep_ics_line( 'DTEND:' . $data['end_utc'] )
+					. mep_ics_line( 'SUMMARY:' . mep_ics_text( $data['title'] ) )
+					. mep_ics_line( 'DESCRIPTION:' . mep_ics_text( implode( "\n\n", $data['description'] ) ) )
+					. ( '' !== $data['location'] ? mep_ics_line( 'LOCATION:' . mep_ics_text( $data['location'] ) ) : '' )
+					. mep_ics_line( 'URL:' . esc_url_raw( $data['url'] ) )
+					. mep_ics_line( 'END:VEVENT' );
+			}
+
+			return $ics . mep_ics_line( 'END:VCALENDAR' );
+		}
+	}
+
 	add_action( 'template_redirect', 'mep_maybe_serve_event_ics', 1 );
 	if ( ! function_exists( 'mep_maybe_serve_event_ics' ) ) {
 		/** Serves the .ics file behind mep_get_event_ics_url(). */
@@ -4207,35 +4461,30 @@ die();
 			$event_id     = absint( $_GET['mep_ics'] );
 			$start        = preg_replace( '/[^0-9]/', '', (string) wp_unslash( $_GET['start'] ) );
 			$with_virtual = ! empty( $_GET['v'] );
+			$all_sessions = ! empty( $_GET['all'] );
 			$key          = (string) wp_unslash( $_GET['key'] );
 			$start_dt     = 12 === strlen( $start ) ? DateTime::createFromFormat( 'YmdHi', $start ) : false;
-			if ( ! $start_dt || ! hash_equals( mep_event_ics_signature( $event_id, $start, $with_virtual ), $key ) ) {
+			if ( ! $start_dt || ! hash_equals( mep_event_ics_signature( $event_id, $start . ( $all_sessions ? '|all' : '' ), $with_virtual ), $key ) ) {
 				wp_die( esc_html__( 'This calendar link is not valid.', 'mage-eventpress' ), '', array( 'response' => 403 ) );
 			}
 			// The signature proves the link came from one of this site's emails, so a
 			// private event still works; a deleted one does not.
-			$event = get_post( $event_id );
-			$data  = $event && ! in_array( $event->post_status, array( 'trash', 'auto-draft' ), true ) ? mep_get_calendar_event_data( $event_id, $start_dt->format( 'Y-m-d H:i' ), $with_virtual ) : array();
-			if ( empty( $data ) ) {
+			$event  = get_post( $event_id );
+			$usable = $event && ! in_array( $event->post_status, array( 'trash', 'auto-draft' ), true );
+			$starts = array( $start_dt->format( 'Y-m-d H:i' ) );
+			if ( $usable && $all_sessions && class_exists( 'MPWEM_Functions' ) ) {
+				// Every session of a multi-date Single Event, read now so later edits are honoured.
+				$sessions = wp_list_pluck( MPWEM_Functions::get_calendar_occurrences( $event_id ), 'start' );
+				if ( count( $sessions ) > 1 ) {
+					$starts = $sessions;
+				}
+			}
+			// feed=1 (Google "all dates" subscription) only names the calendar, so it is not signed.
+			$calendar_name = $usable && $all_sessions && ! empty( $_GET['feed'] ) ? html_entity_decode( get_the_title( $event ), ENT_QUOTES, 'UTF-8' ) : '';
+			$ics           = $usable ? mep_get_event_ics_content( $event_id, $starts, $with_virtual, $calendar_name ) : '';
+			if ( '' === $ics ) {
 				wp_die( esc_html__( 'This event is no longer available.', 'mage-eventpress' ), '', array( 'response' => 404 ) );
 			}
-			$host = wp_parse_url( home_url(), PHP_URL_HOST );
-			$ics  = mep_ics_line( 'BEGIN:VCALENDAR' )
-				. mep_ics_line( 'VERSION:2.0' )
-				. mep_ics_line( 'PRODID:-//' . mep_ics_text( get_bloginfo( 'name' ) ) . '//Event Booking Manager//EN' )
-				. mep_ics_line( 'CALSCALE:GREGORIAN' )
-				. mep_ics_line( 'METHOD:PUBLISH' )
-				. mep_ics_line( 'BEGIN:VEVENT' )
-				. mep_ics_line( 'UID:mep-' . $event_id . '-' . $start . '@' . $host )
-				. mep_ics_line( 'DTSTAMP:' . gmdate( 'Ymd\THis\Z' ) )
-				. mep_ics_line( 'DTSTART:' . $data['start_utc'] )
-				. mep_ics_line( 'DTEND:' . $data['end_utc'] )
-				. mep_ics_line( 'SUMMARY:' . mep_ics_text( $data['title'] ) )
-				. mep_ics_line( 'DESCRIPTION:' . mep_ics_text( implode( "\n\n", $data['description'] ) ) )
-				. ( '' !== $data['location'] ? mep_ics_line( 'LOCATION:' . mep_ics_text( $data['location'] ) ) : '' )
-				. mep_ics_line( 'URL:' . esc_url_raw( $data['url'] ) )
-				. mep_ics_line( 'END:VEVENT' )
-				. mep_ics_line( 'END:VCALENDAR' );
 			$filename = sanitize_file_name( ( $event->post_name ? $event->post_name : 'event' ) . '-' . $start_dt->format( 'Y-m-d' ) . '.ics' );
 			nocache_headers();
 			header( 'Content-Type: text/calendar; charset=utf-8' );

@@ -341,7 +341,8 @@
                                                 ?>
                                             <label>
                                                 <input type="hidden" name="event_more_end_date_normal[]" value=""/>
-                                                <input type="text" value="" class="formControl " placeholder="<?php echo esc_attr( $now ); ?>" />
+                                                <?php // Same date picker as the start date; picking a start date re-renders this cell. ?>
+                                                <input type="text" value="" class="formControl <?php echo esc_attr( $mep_hide_old_date == 'yes' ? 'new-date_type' : 'new-date_type-new' ); ?>" placeholder="<?php echo esc_attr( $now ); ?>" />
                                                 <span class="fas fa-times remove_icon mpwem_date_reset" title="<?php esc_attr_e( 'Remove Image', 'mage-eventpress' ); ?>"></span>
                                             </label>
                                         </td>
@@ -618,7 +619,8 @@
                                             <?php //self::date_item( 'event_more_end_date[]', '' ); ?>
                                             <label>
                                                 <input type="hidden" name="event_more_end_date[]" value=""/>
-                                                <input type="text" value="" class="formControl " placeholder="<?php echo esc_attr( $now ); ?>" />
+                                                <?php // Same date picker as the start date; picking a start date re-renders this cell. ?>
+                                                <input type="text" value="" class="formControl <?php echo esc_attr( $mep_hide_old_date == 'yes' ? 'new-particular-date_type' : 'new-date_type-new' ); ?>" placeholder="<?php echo esc_attr( $now ); ?>" />
                                                 <span class="fas fa-times remove_icon mpwem_date_reset" title="<?php esc_attr_e( 'Remove Image', 'mage-eventpress' ); ?>"></span>
                                             </label>
                                         </td>
@@ -1177,11 +1179,14 @@
 				$display             = is_array($event_infos) && array_key_exists( 'mep_enable_custom_dt_format', $event_infos ) ? $event_infos['mep_enable_custom_dt_format'] : 'off';
 				$checked             = $display == 'off' ? '' : 'checked';
 				$active              = $display == 'off' ? '' : 'mActive';
-				$date_formats        = is_array($event_infos) && array_key_exists( 'mep_event_date_format', $event_infos ) ? $event_infos['mep_event_date_format'] : '';
-				$custom_date_formats = is_array($event_infos) && array_key_exists( 'mep_event_custom_date_format', $event_infos ) ? $event_infos['mep_event_custom_date_format'] : '';
+				// Formats come straight from post meta: $event_infos is stripslashed, which
+				// turned H\H i\m\i\n into "HH imin" so no option matched and the next save
+				// wiped the format.
+				$date_formats        = $event_id ? sanitize_text_field( (string) get_post_meta( $event_id, 'mep_event_date_format', true ) ) : '';
+				$custom_date_formats = $event_id ? sanitize_text_field( (string) get_post_meta( $event_id, 'mep_event_custom_date_format', true ) ) : '';
 				$date_format_lists   = MPWEM_Global_Function::date_format_list();
-				$time_formats        = is_array($event_infos) && array_key_exists( 'mep_event_time_format', $event_infos ) ? $event_infos['mep_event_time_format'] : '';
-				$custom_time_formats = is_array($event_infos) && array_key_exists( 'mep_custom_event_time_format', $event_infos ) ? $event_infos['mep_custom_event_time_format'] : '';
+				$time_formats        = $event_id ? sanitize_text_field( (string) get_post_meta( $event_id, 'mep_event_time_format', true ) ) : '';
+				$custom_time_formats = $event_id ? sanitize_text_field( (string) get_post_meta( $event_id, 'mep_custom_event_time_format', true ) ) : '';
 				$time_format_lists   = MPWEM_Global_Function::time_format_list();
 				$buffer_time         = MPWEM_Global_Function::get_post_info( $event_id, 'mep_buffer_time', 0 );
 				?>
